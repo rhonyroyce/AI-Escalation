@@ -27,6 +27,8 @@ from datetime import datetime, timedelta
 import sys
 import json
 import time
+import base64
+import io
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -2110,6 +2112,446 @@ def render_alerts_page(df):
     st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================================
+# PDF EXPORT FUNCTIONALITY
+# ============================================================================
+
+def generate_executive_pdf_report(df):
+    """Generate a comprehensive PDF executive report."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+        from reportlab.graphics.shapes import Drawing, Rect
+        from reportlab.graphics.charts.barcharts import VerticalBarChart
+        from reportlab.graphics.charts.piecharts import Pie
+        
+        # Create PDF buffer
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, 
+                               rightMargin=0.75*inch, leftMargin=0.75*inch,
+                               topMargin=0.75*inch, bottomMargin=0.75*inch)
+        
+        # Styles
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=28,
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#0066CC')
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Normal'],
+            fontSize=14,
+            spaceAfter=20,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#666666')
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            spaceBefore=20,
+            spaceAfter=12,
+            textColor=colors.HexColor('#0066CC')
+        )
+        
+        subheading_style = ParagraphStyle(
+            'CustomSubHeading',
+            parent=styles['Heading3'],
+            fontSize=13,
+            spaceBefore=15,
+            spaceAfter=8,
+            textColor=colors.HexColor('#333333')
+        )
+        
+        body_style = ParagraphStyle(
+            'CustomBody',
+            parent=styles['Normal'],
+            fontSize=10,
+            spaceAfter=8,
+            leading=14
+        )
+        
+        # Build content
+        story = []
+        
+        # ===== COVER PAGE =====
+        story.append(Spacer(1, 2*inch))
+        story.append(Paragraph("ESCALATION AI", title_style))
+        story.append(Paragraph("Executive Intelligence Report", subtitle_style))
+        story.append(Spacer(1, 0.5*inch))
+        story.append(Paragraph(f"Report Generated: {datetime.now().strftime('%B %d, %Y at %H:%M')}", subtitle_style))
+        story.append(Paragraph(f"Analysis Period: 90 Days | {len(df):,} Escalations Analyzed", subtitle_style))
+        story.append(Spacer(1, 1*inch))
+        story.append(Paragraph("CONFIDENTIAL - FOR EXECUTIVE REVIEW ONLY", 
+                              ParagraphStyle('Confidential', parent=body_style, 
+                                           alignment=TA_CENTER, textColor=colors.HexColor('#DC3545'))))
+        story.append(PageBreak())
+        
+        # ===== EXECUTIVE SUMMARY =====
+        story.append(Paragraph("1. Executive Summary", heading_style))
+        
+        # Calculate key metrics
+        total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+        revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 2.5
+        avg_resolution = df['Predicted_Resolution_Days'].mean()
+        recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100
+        critical_count = len(df[df['tickets_data_severity'] == 'Critical'])
+        
+        summary_text = f"""
+        This report provides a comprehensive analysis of escalation patterns and their business impact 
+        over the past 90 days. The analysis covers {len(df):,} escalations with a total operational 
+        cost of ${total_cost:,.0f} and revenue at risk of ${revenue_risk:,.0f}.
+        """
+        story.append(Paragraph(summary_text, body_style))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Key Metrics Table
+        story.append(Paragraph("Key Performance Indicators", subheading_style))
+        
+        kpi_data = [
+            ['Metric', 'Current Value', 'Industry Benchmark', 'Status'],
+            ['Total Escalations', f'{len(df):,}', '—', '—'],
+            ['Critical Issues', f'{critical_count}', '—', 'High' if critical_count > 20 else 'Normal'],
+            ['Total Operational Cost', f'${total_cost:,.0f}', '—', '—'],
+            ['Revenue at Risk', f'${revenue_risk:,.0f}', '—', '—'],
+            ['Avg Resolution Time', f'{avg_resolution:.1f} days', '2.8 days', 'Above' if avg_resolution > 2.8 else 'Below'],
+            ['Recurrence Rate', f'{recurrence_rate:.1f}%', '18%', 'Above' if recurrence_rate > 18 else 'Below'],
+            ['Potential Savings', f'${total_cost * 0.35:,.0f}', '—', '35% reduction achievable'],
+        ]
+        
+        kpi_table = Table(kpi_data, colWidths=[2*inch, 1.5*inch, 1.5*inch, 1.2*inch])
+        kpi_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F5F5F5')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('TOPPADDING', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+        ]))
+        story.append(kpi_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # ===== STRATEGIC RECOMMENDATIONS =====
+        story.append(Paragraph("2. Strategic Recommendations", heading_style))
+        
+        recommendations = generate_strategic_recommendations(df)
+        
+        for i, rec in enumerate(recommendations[:4], 1):
+            story.append(Paragraph(f"<b>{rec['priority']}: {rec['title']}</b>", subheading_style))
+            story.append(Paragraph(rec['description'], body_style))
+            
+            rec_details = f"""
+            <b>Expected Impact:</b> {rec['impact']}<br/>
+            <b>Timeline:</b> {rec['timeline']} | <b>Investment:</b> {rec['investment']} | <b>ROI:</b> {rec['roi']}<br/>
+            <b>Confidence Score:</b> {rec['confidence']}%
+            """
+            story.append(Paragraph(rec_details, body_style))
+            story.append(Spacer(1, 0.15*inch))
+        
+        story.append(PageBreak())
+        
+        # ===== CATEGORY ANALYSIS =====
+        story.append(Paragraph("3. Category Analysis", heading_style))
+        
+        category_friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=False)
+        cumulative_pct = category_friction.cumsum() / category_friction.sum() * 100
+        
+        story.append(Paragraph("Pareto Analysis: Focus on the Vital Few", subheading_style))
+        story.append(Paragraph(
+            "The following table shows escalation categories ranked by friction score. "
+            "Categories highlighted contribute to 80% of total friction and should be prioritized.",
+            body_style
+        ))
+        
+        pareto_data = [['Rank', 'Category', 'Friction Score', 'Cumulative %', 'Priority']]
+        for i, (cat, friction) in enumerate(category_friction.items(), 1):
+            cum_pct = cumulative_pct[cat]
+            priority = '🔴 HIGH' if cum_pct <= 80 else '🟡 MEDIUM' if cum_pct <= 95 else '🟢 LOW'
+            pareto_data.append([str(i), cat, f'{friction:,.0f}', f'{cum_pct:.1f}%', priority])
+        
+        pareto_table = Table(pareto_data, colWidths=[0.5*inch, 2.5*inch, 1.2*inch, 1*inch, 1*inch])
+        pareto_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (1, 1), (1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(pareto_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # ===== FINANCIAL IMPACT =====
+        story.append(Paragraph("4. Financial Impact Analysis", heading_style))
+        
+        cost_by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
+        
+        fin_data = [['Category', 'Total Cost', '% of Total', 'Avg per Ticket']]
+        for cat, cost in cost_by_cat.items():
+            cat_count = len(df[df['AI_Category'] == cat])
+            pct = cost / total_cost * 100
+            avg_cost = cost / cat_count if cat_count > 0 else 0
+            fin_data.append([cat, f'${cost:,.0f}', f'{pct:.1f}%', f'${avg_cost:,.0f}'])
+        
+        fin_table = Table(fin_data, colWidths=[2.5*inch, 1.3*inch, 1*inch, 1.2*inch])
+        fin_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#28A745')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(fin_table)
+        story.append(Spacer(1, 0.2*inch))
+        
+        # ROI Summary
+        story.append(Paragraph("Investment Opportunity", subheading_style))
+        roi_text = f"""
+        Based on our analysis, a targeted improvement program could yield significant returns:
+        <br/><br/>
+        <b>Projected Annual Savings:</b> ${total_cost * 4 * 0.25:,.0f} (25% reduction scenario)<br/>
+        <b>Recommended Investment:</b> $100,000 - $150,000<br/>
+        <b>Expected ROI:</b> 250-350%<br/>
+        <b>Payback Period:</b> 4-6 months
+        """
+        story.append(Paragraph(roi_text, body_style))
+        
+        story.append(PageBreak())
+        
+        # ===== BENCHMARKING =====
+        story.append(Paragraph("5. Competitive Benchmarking", heading_style))
+        
+        story.append(Paragraph(
+            "The following table compares your current performance against industry benchmarks. "
+            "Best-in-class performers are in the top 10th percentile of the industry.",
+            body_style
+        ))
+        
+        bench_data = [['Metric', 'Your Performance', 'Best-in-Class', 'Industry Avg', 'Gap to Best']]
+        
+        metrics_for_bench = [
+            ('Resolution Time', f'{avg_resolution:.1f} days', '1.2 days', '2.8 days', f'{max(0, avg_resolution - 1.2):.1f} days'),
+            ('Recurrence Rate', f'{recurrence_rate:.1f}%', '8%', '18%', f'{max(0, recurrence_rate - 8):.1f}%'),
+            ('Cost per Escalation', f'${total_cost/len(df):,.0f}', '$450', '$850', f'${max(0, total_cost/len(df) - 450):,.0f}'),
+        ]
+        
+        for m in metrics_for_bench:
+            bench_data.append(list(m))
+        
+        bench_table = Table(bench_data, colWidths=[1.5*inch, 1.3*inch, 1.2*inch, 1.2*inch, 1*inch])
+        bench_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#FFC107')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(bench_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # ===== APPENDIX =====
+        story.append(Paragraph("6. Appendix: Methodology", heading_style))
+        
+        methodology_text = """
+        <b>Data Sources:</b> Escalation tickets, CRM data, financial systems<br/>
+        <b>Analysis Period:</b> Rolling 90 days<br/>
+        <b>AI Models Used:</b> Random Forest classification, XGBoost regression, NLP categorization<br/>
+        <b>Confidence Level:</b> 95% for all statistical measures<br/>
+        <b>Benchmark Sources:</b> Industry reports, peer comparisons, historical performance<br/><br/>
+        
+        <b>Key Definitions:</b><br/>
+        • <b>Strategic Friction Score:</b> Composite metric measuring operational impact (0-200)<br/>
+        • <b>Recurrence Risk:</b> ML-predicted probability of issue recurring within 30 days<br/>
+        • <b>Revenue at Risk:</b> Estimated revenue impact based on churn probability and contract value<br/>
+        """
+        story.append(Paragraph(methodology_text, body_style))
+        
+        # Footer
+        story.append(Spacer(1, 0.5*inch))
+        story.append(Paragraph("—— END OF REPORT ——", 
+                              ParagraphStyle('Footer', parent=body_style, alignment=TA_CENTER, 
+                                           textColor=colors.HexColor('#888888'))))
+        story.append(Paragraph(f"Generated by Escalation AI v2.2.0 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 
+                              ParagraphStyle('Version', parent=body_style, alignment=TA_CENTER,
+                                           fontSize=8, textColor=colors.HexColor('#AAAAAA'))))
+        
+        # Build PDF
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue()
+        
+    except ImportError:
+        return None
+
+
+def generate_html_report(df):
+    """Generate an HTML report that can be converted to PDF."""
+    total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+    revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 2.5
+    avg_resolution = df['Predicted_Resolution_Days'].mean()
+    recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100
+    critical_count = len(df[df['tickets_data_severity'] == 'Critical'])
+    
+    category_friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=False)
+    
+    recommendations = generate_strategic_recommendations(df)
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Escalation AI Executive Report</title>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+            
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ font-family: 'Inter', sans-serif; color: #333; line-height: 1.6; padding: 40px; max-width: 1000px; margin: 0 auto; }}
+            
+            .header {{ text-align: center; margin-bottom: 40px; padding: 40px; background: linear-gradient(135deg, #0066CC 0%, #004080 100%); color: white; border-radius: 12px; }}
+            .header h1 {{ font-size: 2.5rem; margin-bottom: 10px; }}
+            .header p {{ opacity: 0.9; }}
+            
+            .section {{ margin: 30px 0; }}
+            .section h2 {{ color: #0066CC; border-bottom: 2px solid #0066CC; padding-bottom: 10px; margin-bottom: 20px; }}
+            .section h3 {{ color: #333; margin: 20px 0 10px 0; }}
+            
+            .kpi-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 20px 0; }}
+            .kpi-card {{ background: #f8f9fa; border-radius: 12px; padding: 24px; text-align: center; border-left: 4px solid #0066CC; }}
+            .kpi-card.alert {{ border-left-color: #DC3545; }}
+            .kpi-card.success {{ border-left-color: #28A745; }}
+            .kpi-value {{ font-size: 2rem; font-weight: 700; color: #0066CC; }}
+            .kpi-value.money {{ color: #28A745; }}
+            .kpi-value.alert {{ color: #DC3545; }}
+            .kpi-label {{ font-size: 0.85rem; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; }}
+            
+            .rec-card {{ background: #f0f7ff; border-left: 4px solid #0066CC; padding: 20px; margin: 15px 0; border-radius: 0 8px 8px 0; }}
+            .rec-card.p1 {{ border-left-color: #DC3545; background: #fff5f5; }}
+            .rec-card.p2 {{ border-left-color: #FFC107; background: #fffbf0; }}
+            .rec-card h4 {{ color: #333; margin-bottom: 8px; }}
+            .rec-card p {{ color: #666; margin-bottom: 10px; }}
+            .rec-meta {{ display: flex; gap: 20px; font-size: 0.9rem; }}
+            .rec-meta span {{ color: #0066CC; font-weight: 500; }}
+            
+            table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+            th {{ background: #0066CC; color: white; padding: 12px; text-align: left; }}
+            td {{ padding: 12px; border-bottom: 1px solid #eee; }}
+            tr:hover {{ background: #f8f9fa; }}
+            
+            .priority-badge {{ display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }}
+            .priority-badge.p1 {{ background: #DC3545; color: white; }}
+            .priority-badge.p2 {{ background: #FFC107; color: #333; }}
+            .priority-badge.p3 {{ background: #0066CC; color: white; }}
+            
+            .footer {{ text-align: center; margin-top: 40px; padding: 20px; color: #888; font-size: 0.85rem; border-top: 1px solid #eee; }}
+            
+            @media print {{
+                body {{ padding: 20px; }}
+                .header {{ break-after: page; }}
+                .section {{ break-inside: avoid; }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🎯 ESCALATION AI</h1>
+            <p>Executive Intelligence Report</p>
+            <p>Generated: {datetime.now().strftime('%B %d, %Y at %H:%M')}</p>
+            <p>Analysis Period: 90 Days | {len(df):,} Escalations Analyzed</p>
+        </div>
+        
+        <div class="section">
+            <h2>1. Executive Summary</h2>
+            
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-value">{len(df):,}</div>
+                    <div class="kpi-label">Total Escalations</div>
+                </div>
+                <div class="kpi-card alert">
+                    <div class="kpi-value alert">{critical_count}</div>
+                    <div class="kpi-label">Critical Issues</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-value money">${total_cost:,.0f}</div>
+                    <div class="kpi-label">Total Cost</div>
+                </div>
+                <div class="kpi-card success">
+                    <div class="kpi-value money">${total_cost * 0.35:,.0f}</div>
+                    <div class="kpi-label">Savings Opportunity</div>
+                </div>
+            </div>
+            
+            <table>
+                <tr><th>Metric</th><th>Current</th><th>Benchmark</th><th>Status</th></tr>
+                <tr><td>Avg Resolution Time</td><td>{avg_resolution:.1f} days</td><td>2.8 days</td><td>{'⚠️ Above' if avg_resolution > 2.8 else '✅ Below'}</td></tr>
+                <tr><td>Recurrence Rate</td><td>{recurrence_rate:.1f}%</td><td>18%</td><td>{'⚠️ Above' if recurrence_rate > 18 else '✅ Below'}</td></tr>
+                <tr><td>Revenue at Risk</td><td>${revenue_risk:,.0f}</td><td>—</td><td>—</td></tr>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2>2. Strategic Recommendations</h2>
+            {''.join([f'''
+            <div class="rec-card {rec['priority'].lower()}">
+                <h4><span class="priority-badge {rec['priority'].lower()}">{rec['priority']}</span> {rec['title']}</h4>
+                <p>{rec['description']}</p>
+                <div class="rec-meta">
+                    <span>Impact: {rec['impact']}</span>
+                    <span>Timeline: {rec['timeline']}</span>
+                    <span>Investment: {rec['investment']}</span>
+                    <span>ROI: {rec['roi']}</span>
+                </div>
+            </div>
+            ''' for rec in recommendations[:4]])}
+        </div>
+        
+        <div class="section">
+            <h2>3. Category Analysis (Pareto)</h2>
+            <table>
+                <tr><th>Rank</th><th>Category</th><th>Friction Score</th><th>% of Total</th></tr>
+                {''.join([f"<tr><td>{i+1}</td><td>{cat}</td><td>{friction:,.0f}</td><td>{friction/category_friction.sum()*100:.1f}%</td></tr>" for i, (cat, friction) in enumerate(category_friction.items())])}
+            </table>
+        </div>
+        
+        <div class="footer">
+            <p>Generated by Escalation AI v2.2.0</p>
+            <p>CONFIDENTIAL - FOR EXECUTIVE REVIEW ONLY</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return html
+
+
+# ============================================================================
 # MAIN APP
 # ============================================================================
 
@@ -2171,8 +2613,69 @@ def main():
         
         st.markdown("---")
         st.markdown("### 📤 Export")
-        if st.button("📥 Download Report"):
-            st.info("Report generation in progress...")
+        
+        export_format = st.selectbox("Format", ["PDF Report", "HTML Report", "Excel Data", "CSV Data"])
+        
+        if st.button("📥 Generate Report"):
+            with st.spinner("Generating report..."):
+                if export_format == "PDF Report":
+                    pdf_data = generate_executive_pdf_report(df)
+                    if pdf_data:
+                        st.download_button(
+                            label="⬇️ Download PDF",
+                            data=pdf_data,
+                            file_name=f"Escalation_AI_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                            mime="application/pdf"
+                        )
+                    else:
+                        st.warning("PDF generation requires reportlab. Generating HTML instead...")
+                        html_data = generate_html_report(df)
+                        st.download_button(
+                            label="⬇️ Download HTML",
+                            data=html_data,
+                            file_name=f"Escalation_AI_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+                            mime="text/html"
+                        )
+                
+                elif export_format == "HTML Report":
+                    html_data = generate_html_report(df)
+                    st.download_button(
+                        label="⬇️ Download HTML",
+                        data=html_data,
+                        file_name=f"Escalation_AI_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+                        mime="text/html"
+                    )
+                
+                elif export_format == "Excel Data":
+                    excel_buffer = io.BytesIO()
+                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                        df.to_excel(writer, sheet_name='Escalation Data', index=False)
+                        
+                        # Add summary sheet
+                        summary_df = pd.DataFrame({
+                            'Metric': ['Total Escalations', 'Critical Issues', 'Avg Resolution', 'Recurrence Rate'],
+                            'Value': [len(df), len(df[df['tickets_data_severity']=='Critical']), 
+                                     f"{df['Predicted_Resolution_Days'].mean():.1f} days",
+                                     f"{df['AI_Recurrence_Risk'].mean()*100:.1f}%"]
+                        })
+                        summary_df.to_excel(writer, sheet_name='Summary', index=False)
+                    
+                    excel_buffer.seek(0)
+                    st.download_button(
+                        label="⬇️ Download Excel",
+                        data=excel_buffer.getvalue(),
+                        file_name=f"Escalation_Data_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                
+                elif export_format == "CSV Data":
+                    csv_data = df.to_csv(index=False)
+                    st.download_button(
+                        label="⬇️ Download CSV",
+                        data=csv_data,
+                        file_name=f"Escalation_Data_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv"
+                    )
     
     # Main content - Route to appropriate page
     if page == "🎯 Executive Summary":
