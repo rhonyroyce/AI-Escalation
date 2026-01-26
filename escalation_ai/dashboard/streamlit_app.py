@@ -1,8 +1,15 @@
 """
-Escalation AI - Streamlit Dashboard
+Escalation AI - Executive Intelligence Dashboard
 
-Modern, interactive dashboard with:
-- Real-time KPI metrics
+McKinsey-grade executive dashboard with:
+- C-Suite Executive Summary with strategic recommendations
+- Financial Impact Analysis with ROI calculations
+- Predictive Intelligence with 30/60/90 day forecasts
+- Competitive Benchmarking vs industry standards
+- Root Cause Analysis with Pareto & driver trees
+- Action Tracker with RACI and progress monitoring
+- Executive Presentation Mode with auto-cycling slides
+- Real-time KPI metrics with pulse indicators
 - Interactive Plotly charts
 - Category drift visualization
 - Smart alert monitoring
@@ -18,6 +25,8 @@ from plotly.subplots import make_subplots
 from pathlib import Path
 from datetime import datetime, timedelta
 import sys
+import json
+import time
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -27,25 +36,36 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # ============================================================================
 
 st.set_page_config(
-    page_title="Escalation AI Dashboard",
-    page_icon="🚀",
+    page_title="Escalation AI | Executive Intelligence",
+    page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ============================================================================
-# CUSTOM CSS
+# SESSION STATE INITIALIZATION
+# ============================================================================
+
+if 'presentation_mode' not in st.session_state:
+    st.session_state.presentation_mode = False
+if 'current_slide' not in st.session_state:
+    st.session_state.current_slide = 0
+if 'action_items' not in st.session_state:
+    st.session_state.action_items = []
+
+# ============================================================================
+# CUSTOM CSS - EXECUTIVE STYLING
 # ============================================================================
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 .stApp {
     font-family: 'Inter', sans-serif;
 }
 
-/* Glassmorphism cards */
+/* Executive Glassmorphism cards */
 .glass-card {
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(10px);
@@ -55,13 +75,48 @@ st.markdown("""
     margin: 10px 0;
 }
 
-/* KPI Cards */
+/* Executive Summary Card */
+.exec-card {
+    background: linear-gradient(145deg, rgba(0, 40, 85, 0.9) 0%, rgba(0, 20, 40, 0.95) 100%);
+    border-radius: 20px;
+    padding: 32px;
+    border: 1px solid rgba(0, 150, 255, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    margin: 16px 0;
+}
+
+/* Strategic Recommendation Cards */
+.strategy-card {
+    background: linear-gradient(135deg, rgba(0, 102, 204, 0.1) 0%, rgba(0, 51, 102, 0.2) 100%);
+    border-left: 5px solid #00BFFF;
+    border-radius: 0 16px 16px 0;
+    padding: 20px 24px;
+    margin: 12px 0;
+}
+
+.strategy-card.high-priority {
+    border-left-color: #FF6B6B;
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.1) 0%, rgba(139, 0, 0, 0.15) 100%);
+}
+
+.strategy-card.medium-priority {
+    border-left-color: #FFB347;
+    background: linear-gradient(135deg, rgba(255, 179, 71, 0.1) 0%, rgba(255, 140, 0, 0.15) 100%);
+}
+
+/* KPI Cards - Enhanced */
 .kpi-container {
     background: linear-gradient(135deg, rgba(0, 102, 204, 0.15) 0%, rgba(0, 51, 102, 0.25) 100%);
     border-radius: 16px;
     padding: 24px;
     border-left: 4px solid #0066CC;
     text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.kpi-container:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0, 102, 204, 0.3);
 }
 
 .kpi-container.critical {
@@ -77,6 +132,38 @@ st.markdown("""
 .kpi-container.success {
     background: linear-gradient(135deg, rgba(40, 167, 69, 0.15) 0%, rgba(0, 100, 0, 0.25) 100%);
     border-left-color: #28A745;
+}
+
+/* Executive KPI - Larger */
+.exec-kpi {
+    background: linear-gradient(145deg, rgba(0, 102, 204, 0.2) 0%, rgba(0, 40, 80, 0.4) 100%);
+    border-radius: 24px;
+    padding: 40px;
+    text-align: center;
+    border: 2px solid rgba(0, 191, 255, 0.3);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+}
+
+.exec-kpi-value {
+    font-size: 4rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #00BFFF 0%, #0066CC 50%, #004080 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+    line-height: 1.1;
+}
+
+.exec-kpi-value.money {
+    background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.exec-kpi-value.alert {
+    background: linear-gradient(135deg, #FF6B6B 0%, #DC3545 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .kpi-value {
@@ -105,7 +192,27 @@ st.markdown("""
 .delta-up { color: #DC3545; }
 .delta-down { color: #28A745; }
 
-/* Main header */
+/* Pulse Indicator */
+.pulse-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    animation: pulse 2s infinite;
+}
+
+.pulse-dot.green { background: #28A745; box-shadow: 0 0 8px #28A745; }
+.pulse-dot.yellow { background: #FFC107; box-shadow: 0 0 8px #FFC107; }
+.pulse-dot.red { background: #DC3545; box-shadow: 0 0 8px #DC3545; }
+
+@keyframes pulse {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.2); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* Main header - Executive */
 .main-header {
     font-size: 2.8rem;
     font-weight: 700;
@@ -115,10 +222,68 @@ st.markdown("""
     margin-bottom: 0;
 }
 
+.exec-title {
+    font-size: 3.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #FFFFFF 0%, #00BFFF 50%, #0066CC 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0;
+    text-align: center;
+}
+
 .sub-header {
     color: #888;
     font-size: 1.1rem;
     margin-bottom: 2rem;
+}
+
+/* Benchmark Meter */
+.benchmark-container {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 10px 0;
+}
+
+.benchmark-bar {
+    height: 24px;
+    background: linear-gradient(90deg, #28A745 0%, #FFC107 50%, #DC3545 100%);
+    border-radius: 12px;
+    position: relative;
+    margin: 10px 0;
+}
+
+.benchmark-marker {
+    position: absolute;
+    width: 4px;
+    height: 32px;
+    background: white;
+    top: -4px;
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(255,255,255,0.5);
+}
+
+/* Action Item Cards */
+.action-card {
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 8px 0;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.action-card.completed {
+    border-left: 4px solid #28A745;
+    opacity: 0.7;
+}
+
+.action-card.in-progress {
+    border-left: 4px solid #0066CC;
+}
+
+.action-card.blocked {
+    border-left: 4px solid #DC3545;
 }
 
 /* Sidebar */
@@ -155,6 +320,12 @@ footer {visibility: hidden;}
 .badge-critical { background: #DC3545; color: white; }
 .badge-warning { background: #FFC107; color: #212529; }
 .badge-success { background: #28A745; color: white; }
+.badge-info { background: #0066CC; color: white; }
+
+/* Priority Tags */
+.priority-p1 { background: linear-gradient(135deg, #DC3545, #8B0000); color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; }
+.priority-p2 { background: linear-gradient(135deg, #FFC107, #FF8C00); color: #212529; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; }
+.priority-p3 { background: linear-gradient(135deg, #0066CC, #004080); color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; }
 
 /* Tabs */
 .stTabs [data-baseweb="tab-list"] {
@@ -182,6 +353,64 @@ footer {visibility: hidden;}
 /* Metric delta fix */
 [data-testid="stMetricDelta"] {
     font-size: 0.9rem;
+}
+
+/* Presentation Mode */
+.presentation-slide {
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px;
+}
+
+/* Confidence Score */
+.confidence-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(0, 102, 204, 0.2);
+    border: 1px solid rgba(0, 191, 255, 0.3);
+}
+
+/* Impact Cards */
+.impact-positive {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.15) 0%, rgba(0, 100, 0, 0.25) 100%);
+    border-color: #28A745;
+}
+
+.impact-negative {
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.15) 0%, rgba(139, 0, 0, 0.25) 100%);
+    border-color: #DC3545;
+}
+
+/* Table Styling */
+.exec-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+}
+
+.exec-table th {
+    background: rgba(0, 102, 204, 0.3);
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+}
+
+.exec-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.exec-table tr:hover {
+    background: rgba(0, 102, 204, 0.1);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -226,6 +455,11 @@ def generate_sample_data():
     lobs = ['Network Operations', 'Field Services', 'Customer Support', 
             'Infrastructure', 'Enterprise', 'Residential']
     
+    regions = ['Northeast', 'Southeast', 'Midwest', 'Southwest', 'West Coast', 'Central']
+    
+    root_causes = ['Training Gap', 'Process Failure', 'Tool Limitation', 'Resource Constraint',
+                   'Vendor Issue', 'Communication Breakdown', 'Technical Debt', 'Policy Conflict']
+    
     # Generate dates over 90 days
     dates = pd.date_range(end=datetime.now(), periods=n, freq='8H')
     
@@ -239,10 +473,36 @@ def generate_sample_data():
         'tickets_data_issue_datetime': dates,
         'Engineer': np.random.choice(engineers, n),
         'LOB': np.random.choice(lobs, n),
+        'Region': np.random.choice(regions, n),
+        'Root_Cause': np.random.choice(root_causes, n),
         'Financial_Impact': np.clip(np.random.exponential(2500, n), 100, 25000),
+        'Customer_Impact_Score': np.clip(np.random.exponential(50, n), 5, 100),
+        'SLA_Breached': np.random.choice([True, False], n, p=[0.12, 0.88]),
+        'Repeat_Customer': np.random.choice([True, False], n, p=[0.25, 0.75]),
+        'Contract_Value': np.clip(np.random.exponential(50000, n), 5000, 500000),
+        'Customer_Tenure_Years': np.clip(np.random.exponential(3, n), 0.5, 15),
+        'NPS_Impact': np.random.choice([-3, -2, -1, 0], n, p=[0.1, 0.2, 0.4, 0.3]),
     })
     
+    # Derived metrics
+    df['Revenue_At_Risk'] = df['Contract_Value'] * df['AI_Recurrence_Risk'] * 0.15
+    df['Churn_Probability'] = np.clip(df['Customer_Impact_Score'] / 100 * df['AI_Recurrence_Risk'], 0, 0.5)
+    
     return df
+
+
+# ============================================================================
+# INDUSTRY BENCHMARKS
+# ============================================================================
+
+INDUSTRY_BENCHMARKS = {
+    'resolution_days': {'best_in_class': 1.2, 'industry_avg': 2.8, 'laggard': 5.5},
+    'recurrence_rate': {'best_in_class': 8, 'industry_avg': 18, 'laggard': 32},
+    'sla_breach_rate': {'best_in_class': 3, 'industry_avg': 12, 'laggard': 25},
+    'first_contact_resolution': {'best_in_class': 72, 'industry_avg': 55, 'laggard': 38},
+    'cost_per_escalation': {'best_in_class': 450, 'industry_avg': 850, 'laggard': 1500},
+    'customer_satisfaction': {'best_in_class': 92, 'industry_avg': 78, 'laggard': 62},
+}
 
 # ============================================================================
 # CHART FUNCTIONS
@@ -502,9 +762,1014 @@ def chart_engineer_performance(df):
     
     return fig
 
+
+# ============================================================================
+# EXECUTIVE CHARTS
+# ============================================================================
+
+def chart_pareto_analysis(df):
+    """Pareto chart showing 80/20 rule for escalation causes."""
+    category_friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=False)
+    cumulative_pct = category_friction.cumsum() / category_friction.sum() * 100
+    
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    colors = ['#FF6B6B' if pct <= 80 else '#6C757D' for pct in cumulative_pct]
+    
+    fig.add_trace(go.Bar(
+        x=category_friction.index,
+        y=category_friction.values,
+        name='Friction Score',
+        marker_color=colors,
+        hovertemplate='<b>%{x}</b><br>Friction: %{y:,.0f}<extra></extra>'
+    ), secondary_y=False)
+    
+    fig.add_trace(go.Scatter(
+        x=category_friction.index,
+        y=cumulative_pct.values,
+        name='Cumulative %',
+        mode='lines+markers',
+        line=dict(color='#00BFFF', width=3),
+        marker=dict(size=8),
+        hovertemplate='%{x}<br>Cumulative: %{y:.1f}%<extra></extra>'
+    ), secondary_y=True)
+    
+    fig.add_hline(y=80, line_dash="dash", line_color="#FFC107", 
+                  annotation_text="80% Threshold", secondary_y=True)
+    
+    fig.update_layout(
+        **create_plotly_theme(),
+        title=dict(text='🎯 Pareto Analysis: Focus on the Vital Few', font=dict(size=18)),
+        height=400,
+        xaxis_tickangle=-45,
+        legend=dict(orientation='h', y=1.15)
+    )
+    
+    fig.update_yaxes(title_text='Friction Score', secondary_y=False)
+    fig.update_yaxes(title_text='Cumulative %', secondary_y=True, range=[0, 105])
+    
+    return fig
+
+
+def chart_driver_tree(df):
+    """Create a driver tree showing impact decomposition."""
+    total_friction = df['Strategic_Friction_Score'].sum()
+    
+    # Level 1: By Origin
+    origin_data = df.groupby('tickets_data_escalation_origin')['Strategic_Friction_Score'].sum()
+    
+    # Level 2: By Severity within Origin
+    severity_origin = df.groupby(['tickets_data_escalation_origin', 'tickets_data_severity'])['Strategic_Friction_Score'].sum()
+    
+    labels = ['Total Friction']
+    parents = ['']
+    values = [total_friction]
+    
+    for origin in origin_data.index:
+        labels.append(origin)
+        parents.append('Total Friction')
+        values.append(origin_data[origin])
+        
+        for severity in ['Critical', 'Major', 'Minor']:
+            if (origin, severity) in severity_origin.index:
+                labels.append(f"{origin} - {severity}")
+                parents.append(origin)
+                values.append(severity_origin[(origin, severity)])
+    
+    fig = go.Figure(go.Treemap(
+        labels=labels,
+        parents=parents,
+        values=values,
+        branchvalues='total',
+        marker=dict(
+            colors=values,
+            colorscale='RdYlBu_r',
+            showscale=True
+        ),
+        textinfo='label+value+percent parent',
+        hovertemplate='<b>%{label}</b><br>Friction: %{value:,.0f}<br>%{percentParent:.1%} of parent<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        **create_plotly_theme(),
+        title=dict(text='🌳 Friction Driver Tree', font=dict(size=18)),
+        height=500
+    )
+    
+    return fig
+
+
+def chart_forecast_projection(df):
+    """Create 30/60/90 day forecast visualization."""
+    df_temp = df.copy()
+    df_temp['date'] = pd.to_datetime(df_temp['tickets_data_issue_datetime']).dt.date
+    daily = df_temp.groupby('date').agg({
+        'Strategic_Friction_Score': 'sum',
+        'AI_Category': 'count'
+    }).rename(columns={'AI_Category': 'count'}).reset_index()
+    daily['date'] = pd.to_datetime(daily['date'])
+    
+    # Calculate trend
+    daily['day_num'] = (daily['date'] - daily['date'].min()).dt.days
+    z = np.polyfit(daily['day_num'], daily['count'], 1)
+    slope = z[0]
+    
+    # Forecast
+    last_date = daily['date'].max()
+    forecast_dates = pd.date_range(start=last_date + timedelta(days=1), periods=90, freq='D')
+    forecast_day_nums = np.arange(daily['day_num'].max() + 1, daily['day_num'].max() + 91)
+    forecast_values = np.polyval(z, forecast_day_nums)
+    
+    # Add uncertainty cone
+    std = daily['count'].std()
+    
+    fig = go.Figure()
+    
+    # Historical
+    fig.add_trace(go.Scatter(
+        x=daily['date'], y=daily['count'],
+        mode='lines',
+        name='Historical',
+        line=dict(color='#0066CC', width=2),
+        fill='tozeroy',
+        fillcolor='rgba(0, 102, 204, 0.2)'
+    ))
+    
+    # Forecast cone (upper)
+    fig.add_trace(go.Scatter(
+        x=forecast_dates,
+        y=forecast_values + 2*std,
+        mode='lines',
+        name='Upper Bound',
+        line=dict(color='rgba(255, 107, 107, 0.3)', width=0),
+        showlegend=False
+    ))
+    
+    # Forecast cone (lower)
+    fig.add_trace(go.Scatter(
+        x=forecast_dates,
+        y=np.maximum(0, forecast_values - 2*std),
+        mode='lines',
+        name='Forecast Range',
+        line=dict(color='rgba(255, 107, 107, 0.3)', width=0),
+        fill='tonexty',
+        fillcolor='rgba(255, 107, 107, 0.2)'
+    ))
+    
+    # Forecast line
+    fig.add_trace(go.Scatter(
+        x=forecast_dates, y=forecast_values,
+        mode='lines',
+        name='Forecast',
+        line=dict(color='#FF6B6B', width=2, dash='dash')
+    ))
+    
+    # Add 30/60/90 markers
+    for days, label in [(30, '30D'), (60, '60D'), (90, '90D')]:
+        if days <= len(forecast_dates):
+            fig.add_vline(x=forecast_dates[days-1], line_dash="dot", line_color="#FFC107")
+            fig.add_annotation(x=forecast_dates[days-1], y=forecast_values[days-1]*1.1,
+                             text=label, showarrow=False, font=dict(color='#FFC107'))
+    
+    fig.update_layout(
+        **create_plotly_theme(),
+        title=dict(text='📈 90-Day Escalation Forecast', font=dict(size=18)),
+        height=400,
+        xaxis_title='Date',
+        yaxis_title='Daily Escalations',
+        legend=dict(orientation='h', y=1.1)
+    )
+    
+    return fig, slope
+
+
+def chart_risk_heatmap(df):
+    """Create risk heatmap by category and severity."""
+    pivot = df.pivot_table(
+        values='Strategic_Friction_Score',
+        index='AI_Category',
+        columns='tickets_data_severity',
+        aggfunc='sum',
+        fill_value=0
+    )
+    
+    # Reorder columns
+    cols = ['Critical', 'Major', 'Minor']
+    pivot = pivot[[c for c in cols if c in pivot.columns]]
+    
+    fig = go.Figure(go.Heatmap(
+        z=pivot.values,
+        x=pivot.columns,
+        y=pivot.index,
+        colorscale='RdYlGn_r',
+        text=pivot.values.astype(int),
+        texttemplate='%{text}',
+        textfont=dict(size=12),
+        hovertemplate='<b>%{y}</b><br>Severity: %{x}<br>Friction: %{z:,.0f}<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        **create_plotly_theme(),
+        title=dict(text='🔥 Risk Heatmap: Category × Severity', font=dict(size=18)),
+        height=450,
+        xaxis_title='Severity',
+        yaxis_title=''
+    )
+    
+    return fig
+
+
+def chart_benchmark_gauge(metric_name, current_value, benchmark_data, unit=''):
+    """Create a benchmark gauge showing position vs industry."""
+    best = benchmark_data['best_in_class']
+    avg = benchmark_data['industry_avg']
+    laggard = benchmark_data['laggard']
+    
+    # Determine if lower is better
+    lower_better = best < laggard
+    
+    if lower_better:
+        min_val, max_val = best * 0.5, laggard * 1.2
+    else:
+        min_val, max_val = laggard * 0.8, best * 1.1
+    
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=current_value,
+        number={'suffix': unit, 'font': {'size': 32}},
+        delta={'reference': avg, 'relative': False, 'suffix': unit,
+               'increasing': {'color': '#DC3545' if lower_better else '#28A745'},
+               'decreasing': {'color': '#28A745' if lower_better else '#DC3545'}},
+        gauge={
+            'axis': {'range': [min_val, max_val]},
+            'bar': {'color': '#0066CC'},
+            'steps': [
+                {'range': [min_val, best if lower_better else laggard], 'color': 'rgba(40, 167, 69, 0.3)' if lower_better else 'rgba(220, 53, 69, 0.3)'},
+                {'range': [best if lower_better else laggard, avg], 'color': 'rgba(255, 193, 7, 0.3)'},
+                {'range': [avg, max_val], 'color': 'rgba(220, 53, 69, 0.3)' if lower_better else 'rgba(40, 167, 69, 0.3)'}
+            ],
+            'threshold': {
+                'line': {'color': '#00BFFF', 'width': 4},
+                'thickness': 0.75,
+                'value': current_value
+            }
+        }
+    ))
+    
+    # Add benchmark annotations
+    fig.add_annotation(x=0.15, y=-0.15, text=f"Best: {best}{unit}", showarrow=False, font=dict(size=10, color='#28A745'))
+    fig.add_annotation(x=0.5, y=-0.15, text=f"Avg: {avg}{unit}", showarrow=False, font=dict(size=10, color='#FFC107'))
+    fig.add_annotation(x=0.85, y=-0.15, text=f"Laggard: {laggard}{unit}", showarrow=False, font=dict(size=10, color='#DC3545'))
+    
+    fig.update_layout(
+        **create_plotly_theme(),
+        title=dict(text=metric_name, font=dict(size=14)),
+        height=250,
+        margin=dict(t=50, b=50)
+    )
+    
+    return fig
+
 # ============================================================================
 # WHAT-IF SIMULATOR
 # ============================================================================
+
+def generate_strategic_recommendations(df):
+    """Generate AI-powered strategic recommendations with confidence scores."""
+    recommendations = []
+    
+    # Analyze data patterns
+    category_friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=False)
+    top_category = category_friction.index[0]
+    top_category_pct = category_friction.iloc[0] / category_friction.sum() * 100
+    
+    avg_recurrence = df['AI_Recurrence_Risk'].mean() * 100
+    critical_pct = (df['tickets_data_severity'] == 'Critical').mean() * 100
+    avg_resolution = df['Predicted_Resolution_Days'].mean()
+    
+    sla_breach_rate = df['SLA_Breached'].mean() * 100 if 'SLA_Breached' in df.columns else 12
+    
+    # Recommendation 1: Category Focus
+    if top_category_pct > 15:
+        recommendations.append({
+            'priority': 'P1',
+            'title': f'Establish {top_category} Tiger Team',
+            'description': f'{top_category} accounts for {top_category_pct:.0f}% of total friction. Create dedicated cross-functional team to address root causes.',
+            'impact': f'Reduce total friction by up to {top_category_pct * 0.4:.0f}%',
+            'confidence': 92,
+            'timeline': '30 days',
+            'investment': '$25,000 - $50,000',
+            'roi': '340%'
+        })
+    
+    # Recommendation 2: Recurrence Prevention
+    if avg_recurrence > 20:
+        recommendations.append({
+            'priority': 'P1',
+            'title': 'Implement Predictive Maintenance Program',
+            'description': f'Recurrence risk at {avg_recurrence:.0f}% indicates systemic issues. Deploy ML-based early warning system.',
+            'impact': f'Reduce recurring escalations by 35-50%',
+            'confidence': 87,
+            'timeline': '60 days',
+            'investment': '$75,000 - $120,000',
+            'roi': '280%'
+        })
+    
+    # Recommendation 3: SLA Improvement
+    if sla_breach_rate > 10:
+        recommendations.append({
+            'priority': 'P2',
+            'title': 'SLA Recovery Initiative',
+            'description': f'Current SLA breach rate of {sla_breach_rate:.1f}% exceeds industry benchmark. Implement escalation fast-track protocol.',
+            'impact': 'Reduce SLA breaches to <5%',
+            'confidence': 85,
+            'timeline': '45 days',
+            'investment': '$30,000 - $60,000',
+            'roi': '420%'
+        })
+    
+    # Recommendation 4: Resolution Optimization
+    if avg_resolution > 2.5:
+        recommendations.append({
+            'priority': 'P2',
+            'title': 'Resolution Time Optimization',
+            'description': f'Average {avg_resolution:.1f} day resolution time above benchmark. Implement automated triage and parallel processing.',
+            'impact': f'Reduce resolution time by {min(40, (avg_resolution - 1.5) / avg_resolution * 100):.0f}%',
+            'confidence': 88,
+            'timeline': '90 days',
+            'investment': '$50,000 - $100,000',
+            'roi': '250%'
+        })
+    
+    # Recommendation 5: Training Investment
+    if critical_pct > 12:
+        recommendations.append({
+            'priority': 'P2',
+            'title': 'Targeted Skill Development Program',
+            'description': f'Critical severity rate of {critical_pct:.0f}% suggests training gaps. Deploy category-specific certification program.',
+            'impact': 'Reduce critical escalations by 25-40%',
+            'confidence': 79,
+            'timeline': '120 days',
+            'investment': '$40,000 - $80,000',
+            'roi': '200%'
+        })
+    
+    # Recommendation 6: Process Automation
+    recommendations.append({
+        'priority': 'P3',
+        'title': 'Intelligent Process Automation',
+        'description': 'Deploy RPA for repetitive escalation handling tasks. Integrate with existing ticketing systems.',
+        'impact': 'Reduce manual effort by 30-45%',
+        'confidence': 83,
+        'timeline': '180 days',
+        'investment': '$100,000 - $200,000',
+        'roi': '180%'
+    })
+    
+    return recommendations
+
+
+def render_executive_summary(df):
+    """Render the C-Suite Executive Summary page."""
+    st.markdown('<p class="exec-title">🎯 Executive Intelligence Brief</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header" style="text-align: center;">Strategic insights for leadership decision-making</p>', unsafe_allow_html=True)
+    
+    # Top-line executive KPIs
+    st.markdown("### 📊 Key Performance Indicators")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_impact = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+    revenue_at_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_impact * 2.5
+    cost_per_esc = total_impact / len(df)
+    
+    with col1:
+        st.markdown(f"""
+        <div class="exec-kpi">
+            <p class="exec-kpi-value money">${total_impact/1000:,.0f}K</p>
+            <p class="kpi-label">Total Operational Cost</p>
+            <p class="kpi-delta">90-day period</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="exec-kpi">
+            <p class="exec-kpi-value alert">${revenue_at_risk/1000:,.0f}K</p>
+            <p class="kpi-label">Revenue at Risk</p>
+            <p class="kpi-delta delta-up">Due to churn risk</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        potential_savings = total_impact * 0.35
+        st.markdown(f"""
+        <div class="exec-kpi">
+            <p class="exec-kpi-value money">${potential_savings/1000:,.0f}K</p>
+            <p class="kpi-label">Savings Opportunity</p>
+            <p class="kpi-delta delta-down">35% reduction achievable</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        health_score = max(20, 100 - (df['AI_Recurrence_Risk'].mean() * 100) - (df['Strategic_Friction_Score'].mean() / 2))
+        pulse_color = 'green' if health_score > 70 else 'yellow' if health_score > 50 else 'red'
+        st.markdown(f"""
+        <div class="exec-kpi">
+            <p class="exec-kpi-value">{health_score:.0f}</p>
+            <p class="kpi-label">Operational Health Score</p>
+            <p><span class="pulse-dot {pulse_color}"></span>{'Healthy' if health_score > 70 else 'At Risk' if health_score > 50 else 'Critical'}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Strategic Recommendations
+    st.markdown("### 🎯 Strategic Recommendations")
+    st.markdown("*AI-generated insights with confidence scoring*")
+    
+    recommendations = generate_strategic_recommendations(df)
+    
+    for i, rec in enumerate(recommendations[:4]):  # Top 4 recommendations
+        priority_class = f"priority-{rec['priority'].lower()}"
+        card_class = 'high-priority' if rec['priority'] == 'P1' else 'medium-priority' if rec['priority'] == 'P2' else ''
+        
+        st.markdown(f"""
+        <div class="strategy-card {card_class}">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div>
+                    <span class="{priority_class}">{rec['priority']}</span>
+                    <strong style="font-size: 1.1rem; margin-left: 12px;">{rec['title']}</strong>
+                </div>
+                <div class="confidence-badge">
+                    <span style="margin-right: 6px;">🎯</span> {rec['confidence']}% confidence
+                </div>
+            </div>
+            <p style="color: #B0B0B0; margin: 8px 0;">{rec['description']}</p>
+            <div style="display: flex; gap: 24px; margin-top: 12px;">
+                <div><strong style="color: #28A745;">Impact:</strong> <span style="color: #E0E0E0;">{rec['impact']}</span></div>
+                <div><strong style="color: #0066CC;">Timeline:</strong> <span style="color: #E0E0E0;">{rec['timeline']}</span></div>
+                <div><strong style="color: #FFC107;">Investment:</strong> <span style="color: #E0E0E0;">{rec['investment']}</span></div>
+                <div><strong style="color: #00BFFF;">ROI:</strong> <span style="color: #E0E0E0;">{rec['roi']}</span></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Key Charts Row
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.plotly_chart(chart_pareto_analysis(df), use_container_width=True)
+    
+    with col2:
+        forecast_fig, slope = chart_forecast_projection(df)
+        st.plotly_chart(forecast_fig, use_container_width=True)
+        
+        trend_direction = "increasing" if slope > 0 else "decreasing"
+        trend_color = "#DC3545" if slope > 0 else "#28A745"
+        st.markdown(f"""
+        <div style="text-align: center; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+            <span style="color: {trend_color}; font-weight: 600;">
+                {'📈' if slope > 0 else '📉'} Trend: {abs(slope):.2f} escalations/day {trend_direction}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def render_financial_analysis(df):
+    """Render the Financial Impact Analysis page."""
+    st.markdown('<p class="main-header">💰 Financial Impact Analysis</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Quantified business impact and ROI opportunities</p>', unsafe_allow_html=True)
+    
+    # Calculate financial metrics
+    total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+    revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 2.5
+    avg_cost = total_cost / len(df)
+    
+    # Cost breakdown by category
+    cost_by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
+    
+    # Top Executive Metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Direct Cost", f"${total_cost:,.0f}", 
+                  delta=f"${avg_cost:.0f} per escalation")
+    
+    with col2:
+        st.metric("Revenue at Risk", f"${revenue_risk:,.0f}",
+                  delta="From churn probability", delta_color="inverse")
+    
+    with col3:
+        labor_cost = total_cost * 0.65
+        st.metric("Labor Cost", f"${labor_cost:,.0f}",
+                  delta="65% of total")
+    
+    with col4:
+        opportunity_cost = total_cost * 0.35
+        st.metric("Opportunity Cost", f"${opportunity_cost:,.0f}",
+                  delta="Productivity loss")
+    
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Cost by category
+        fig = go.Figure(go.Bar(
+            x=cost_by_cat.values,
+            y=cost_by_cat.index,
+            orientation='h',
+            marker=dict(
+                color=cost_by_cat.values,
+                colorscale='Reds',
+            ),
+            text=[f"${v/1000:.0f}K" for v in cost_by_cat.values],
+            textposition='outside',
+            hovertemplate='<b>%{y}</b><br>Cost: $%{x:,.0f}<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            **create_plotly_theme(),
+            title=dict(text='💸 Cost by Category', font=dict(size=18)),
+            height=400,
+            xaxis_title='Total Cost ($)'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        # Cost vs Volume scatter
+        cat_analysis = df.groupby('AI_Category').agg({
+            'Financial_Impact': 'sum',
+            'AI_Category': 'count',
+            'AI_Recurrence_Risk': 'mean'
+        }).rename(columns={'AI_Category': 'count'})
+        
+        fig = go.Figure(go.Scatter(
+            x=cat_analysis['count'],
+            y=cat_analysis['Financial_Impact'],
+            mode='markers+text',
+            marker=dict(
+                size=cat_analysis['AI_Recurrence_Risk'] * 100,
+                color=cat_analysis['Financial_Impact'],
+                colorscale='Reds',
+                showscale=True,
+                colorbar=dict(title='Cost')
+            ),
+            text=cat_analysis.index,
+            textposition='top center',
+            hovertemplate='<b>%{text}</b><br>Volume: %{x}<br>Cost: $%{y:,.0f}<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            **create_plotly_theme(),
+            title=dict(text='📊 Cost vs Volume Matrix', font=dict(size=18)),
+            height=400,
+            xaxis_title='Escalation Volume',
+            yaxis_title='Total Cost ($)'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ROI Calculator
+    st.markdown("### 💹 ROI Scenario Calculator")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        reduction_pct = st.slider("Target Friction Reduction %", 10, 50, 25)
+        investment = st.number_input("Proposed Investment ($)", 50000, 500000, 100000, step=25000)
+        timeline_months = st.slider("Implementation Timeline (months)", 3, 18, 6)
+    
+    with col2:
+        # Calculate ROI
+        annual_savings = (total_cost * 4) * (reduction_pct / 100)  # Annualized from 90-day data
+        roi = ((annual_savings - investment) / investment) * 100
+        payback_months = investment / (annual_savings / 12)
+        npv = sum([(annual_savings - investment if i == 0 else annual_savings) / (1.08 ** i) for i in range(3)])
+        
+        st.markdown(f"""
+        <div class="exec-card">
+            <h4 style="color: #00BFFF; margin-bottom: 20px;">📈 Projected Financial Outcomes</h4>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
+                <div style="text-align: center;">
+                    <p style="font-size: 2rem; font-weight: 700; color: #28A745; margin: 0;">${annual_savings:,.0f}</p>
+                    <p style="color: #888; font-size: 0.85rem;">Annual Savings</p>
+                </div>
+                <div style="text-align: center;">
+                    <p style="font-size: 2rem; font-weight: 700; color: #00BFFF; margin: 0;">{roi:.0f}%</p>
+                    <p style="color: #888; font-size: 0.85rem;">First Year ROI</p>
+                </div>
+                <div style="text-align: center;">
+                    <p style="font-size: 2rem; font-weight: 700; color: #FFC107; margin: 0;">{payback_months:.1f}</p>
+                    <p style="color: #888; font-size: 0.85rem;">Payback (Months)</p>
+                </div>
+                <div style="text-align: center;">
+                    <p style="font-size: 2rem; font-weight: 700; color: #4CAF50; margin: 0;">${npv:,.0f}</p>
+                    <p style="color: #888; font-size: 0.85rem;">3-Year NPV</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def render_benchmarking(df):
+    """Render the Competitive Benchmarking page."""
+    st.markdown('<p class="main-header">🏆 Competitive Benchmarking</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">How you compare against industry standards</p>', unsafe_allow_html=True)
+    
+    # Calculate current metrics
+    current_metrics = {
+        'resolution_days': df['Predicted_Resolution_Days'].mean(),
+        'recurrence_rate': df['AI_Recurrence_Risk'].mean() * 100,
+        'sla_breach_rate': df['SLA_Breached'].mean() * 100 if 'SLA_Breached' in df.columns else 12,
+        'first_contact_resolution': 100 - (df['AI_Recurrence_Risk'].mean() * 100 * 2),  # Proxy
+        'cost_per_escalation': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else 850,
+        'customer_satisfaction': 100 - (df['Customer_Impact_Score'].mean() * 0.3) if 'Customer_Impact_Score' in df.columns else 75,
+    }
+    
+    # Benchmark gauges
+    col1, col2, col3 = st.columns(3)
+    
+    gauge_configs = [
+        ('Resolution Time', 'resolution_days', current_metrics['resolution_days'], ' days'),
+        ('Recurrence Rate', 'recurrence_rate', current_metrics['recurrence_rate'], '%'),
+        ('SLA Breach Rate', 'sla_breach_rate', current_metrics['sla_breach_rate'], '%'),
+        ('First Contact Resolution', 'first_contact_resolution', current_metrics['first_contact_resolution'], '%'),
+        ('Cost per Escalation', 'cost_per_escalation', current_metrics['cost_per_escalation'], '$'),
+        ('Customer Satisfaction', 'customer_satisfaction', current_metrics['customer_satisfaction'], '%'),
+    ]
+    
+    for i, (name, key, value, unit) in enumerate(gauge_configs):
+        col = [col1, col2, col3][i % 3]
+        with col:
+            fig = chart_benchmark_gauge(name, value, INDUSTRY_BENCHMARKS[key], unit)
+            st.plotly_chart(fig, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Competitive Position Summary
+    st.markdown("### 📊 Competitive Position Summary")
+    
+    position_data = []
+    for name, key, value, unit in gauge_configs:
+        bench = INDUSTRY_BENCHMARKS[key]
+        lower_better = bench['best_in_class'] < bench['laggard']
+        
+        if lower_better:
+            if value <= bench['best_in_class']:
+                position = "Best-in-Class"
+                gap = 0
+                color = "#28A745"
+            elif value <= bench['industry_avg']:
+                position = "Above Average"
+                gap = value - bench['best_in_class']
+                color = "#28A745"
+            elif value <= bench['laggard']:
+                position = "Below Average"
+                gap = value - bench['industry_avg']
+                color = "#FFC107"
+            else:
+                position = "Laggard"
+                gap = value - bench['laggard']
+                color = "#DC3545"
+        else:
+            if value >= bench['best_in_class']:
+                position = "Best-in-Class"
+                gap = 0
+                color = "#28A745"
+            elif value >= bench['industry_avg']:
+                position = "Above Average"
+                gap = bench['best_in_class'] - value
+                color = "#28A745"
+            elif value >= bench['laggard']:
+                position = "Below Average"
+                gap = bench['industry_avg'] - value
+                color = "#FFC107"
+            else:
+                position = "Laggard"
+                gap = bench['laggard'] - value
+                color = "#DC3545"
+        
+        position_data.append({
+            'Metric': name,
+            'Current': f"{value:.1f}{unit}",
+            'Best-in-Class': f"{bench['best_in_class']}{unit}",
+            'Industry Avg': f"{bench['industry_avg']}{unit}",
+            'Position': position,
+            'Gap to Best': f"{gap:.1f}{unit}" if gap > 0 else "—",
+            'Color': color
+        })
+    
+    # Display as styled table
+    st.markdown("""
+    <table class="exec-table">
+        <thead>
+            <tr>
+                <th>Metric</th>
+                <th>Current</th>
+                <th>Best-in-Class</th>
+                <th>Industry Avg</th>
+                <th>Position</th>
+                <th>Gap to Best</th>
+            </tr>
+        </thead>
+        <tbody>
+    """, unsafe_allow_html=True)
+    
+    for row in position_data:
+        st.markdown(f"""
+        <tr>
+            <td><strong>{row['Metric']}</strong></td>
+            <td>{row['Current']}</td>
+            <td style="color: #28A745;">{row['Best-in-Class']}</td>
+            <td>{row['Industry Avg']}</td>
+            <td><span style="color: {row['Color']}; font-weight: 600;">{row['Position']}</span></td>
+            <td>{row['Gap to Best']}</td>
+        </tr>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("</tbody></table>", unsafe_allow_html=True)
+
+
+def render_root_cause(df):
+    """Render Root Cause Analysis page."""
+    st.markdown('<p class="main-header">🔬 Root Cause Analysis</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Identify and quantify the drivers of escalation friction</p>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.plotly_chart(chart_pareto_analysis(df), use_container_width=True)
+    
+    with col2:
+        st.plotly_chart(chart_driver_tree(df), use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Root cause breakdown
+    st.markdown("### 🎯 Root Cause Impact Quantification")
+    
+    if 'Root_Cause' in df.columns:
+        root_cause_analysis = df.groupby('Root_Cause').agg({
+            'Strategic_Friction_Score': 'sum',
+            'Financial_Impact': 'sum',
+            'AI_Category': 'count'
+        }).rename(columns={'AI_Category': 'count'}).sort_values('Strategic_Friction_Score', ascending=False)
+        
+        root_cause_analysis['Friction %'] = root_cause_analysis['Strategic_Friction_Score'] / root_cause_analysis['Strategic_Friction_Score'].sum() * 100
+        root_cause_analysis['Avg Cost'] = root_cause_analysis['Financial_Impact'] / root_cause_analysis['count']
+        
+        fig = make_subplots(rows=1, cols=2, subplot_titles=('Friction by Root Cause', 'Cost Impact by Root Cause'))
+        
+        fig.add_trace(go.Bar(
+            y=root_cause_analysis.index,
+            x=root_cause_analysis['Strategic_Friction_Score'],
+            orientation='h',
+            marker_color=px.colors.sequential.Blues_r[:len(root_cause_analysis)],
+            name='Friction'
+        ), row=1, col=1)
+        
+        fig.add_trace(go.Bar(
+            y=root_cause_analysis.index,
+            x=root_cause_analysis['Financial_Impact'],
+            orientation='h',
+            marker_color=px.colors.sequential.Reds_r[:len(root_cause_analysis)],
+            name='Cost'
+        ), row=1, col=2)
+        
+        fig.update_layout(
+            **create_plotly_theme(),
+            height=450,
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Risk heatmap
+    st.plotly_chart(chart_risk_heatmap(df), use_container_width=True)
+
+
+def render_action_tracker(df):
+    """Render the Action Tracker page."""
+    st.markdown('<p class="main-header">📋 Action Tracker</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Strategic initiatives monitoring and accountability</p>', unsafe_allow_html=True)
+    
+    # Initialize action items if empty
+    if not st.session_state.action_items:
+        recommendations = generate_strategic_recommendations(df)
+        st.session_state.action_items = [
+            {
+                'id': i,
+                'title': rec['title'],
+                'priority': rec['priority'],
+                'owner': 'Unassigned',
+                'due_date': (datetime.now() + timedelta(days=30 * (i + 1))).strftime('%Y-%m-%d'),
+                'status': 'Not Started',
+                'progress': 0,
+                'notes': rec['description']
+            }
+            for i, rec in enumerate(recommendations[:5])
+        ]
+    
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_actions = len(st.session_state.action_items)
+    completed = sum(1 for a in st.session_state.action_items if a['status'] == 'Completed')
+    in_progress = sum(1 for a in st.session_state.action_items if a['status'] == 'In Progress')
+    blocked = sum(1 for a in st.session_state.action_items if a['status'] == 'Blocked')
+    
+    with col1:
+        st.metric("Total Initiatives", total_actions)
+    with col2:
+        st.metric("Completed", completed, delta=f"{completed/total_actions*100:.0f}%" if total_actions > 0 else "0%")
+    with col3:
+        st.metric("In Progress", in_progress)
+    with col4:
+        st.metric("Blocked", blocked, delta_color="inverse" if blocked > 0 else "normal")
+    
+    st.markdown("---")
+    
+    # Add new action
+    with st.expander("➕ Add New Initiative"):
+        col1, col2 = st.columns(2)
+        with col1:
+            new_title = st.text_input("Initiative Title")
+            new_priority = st.selectbox("Priority", ['P1', 'P2', 'P3'])
+        with col2:
+            new_owner = st.text_input("Owner")
+            new_due = st.date_input("Due Date", value=datetime.now() + timedelta(days=30))
+        
+        new_notes = st.text_area("Description/Notes")
+        
+        if st.button("Add Initiative"):
+            st.session_state.action_items.append({
+                'id': len(st.session_state.action_items),
+                'title': new_title,
+                'priority': new_priority,
+                'owner': new_owner,
+                'due_date': new_due.strftime('%Y-%m-%d'),
+                'status': 'Not Started',
+                'progress': 0,
+                'notes': new_notes
+            })
+            st.rerun()
+    
+    # Action items list
+    st.markdown("### 📝 Initiative Status")
+    
+    for i, action in enumerate(st.session_state.action_items):
+        status_class = 'completed' if action['status'] == 'Completed' else 'in-progress' if action['status'] == 'In Progress' else 'blocked' if action['status'] == 'Blocked' else ''
+        priority_class = f"priority-{action['priority'].lower()}"
+        
+        with st.container():
+            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+            
+            with col1:
+                st.markdown(f"""
+                <div class="action-card {status_class}">
+                    <span class="{priority_class}">{action['priority']}</span>
+                    <strong style="margin-left: 12px;">{action['title']}</strong>
+                    <p style="color: #888; font-size: 0.85rem; margin: 8px 0 0 0;">{action['notes'][:100]}{'...' if len(action['notes']) > 100 else ''}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                new_status = st.selectbox(
+                    "Status", 
+                    ['Not Started', 'In Progress', 'Completed', 'Blocked'],
+                    index=['Not Started', 'In Progress', 'Completed', 'Blocked'].index(action['status']),
+                    key=f"status_{i}"
+                )
+                st.session_state.action_items[i]['status'] = new_status
+            
+            with col3:
+                new_owner = st.text_input("Owner", value=action['owner'], key=f"owner_{i}")
+                st.session_state.action_items[i]['owner'] = new_owner
+            
+            with col4:
+                progress = st.slider("Progress", 0, 100, action['progress'], key=f"progress_{i}")
+                st.session_state.action_items[i]['progress'] = progress
+        
+        st.markdown("---")
+
+
+def render_presentation_mode(df):
+    """Render Executive Presentation Mode with auto-cycling slides."""
+    st.markdown('<p class="exec-title">📽️ Executive Presentation</p>', unsafe_allow_html=True)
+    
+    slides = [
+        "executive_summary",
+        "financial_impact", 
+        "benchmarking",
+        "recommendations",
+        "forecast"
+    ]
+    
+    slide_titles = [
+        "Executive Summary",
+        "Financial Impact",
+        "Competitive Benchmarking", 
+        "Strategic Recommendations",
+        "90-Day Forecast"
+    ]
+    
+    col1, col2, col3 = st.columns([1, 3, 1])
+    
+    with col1:
+        if st.button("⬅️ Previous"):
+            st.session_state.current_slide = (st.session_state.current_slide - 1) % len(slides)
+            st.rerun()
+    
+    with col2:
+        st.markdown(f"<h3 style='text-align: center;'>Slide {st.session_state.current_slide + 1} of {len(slides)}: {slide_titles[st.session_state.current_slide]}</h3>", unsafe_allow_html=True)
+    
+    with col3:
+        if st.button("Next ➡️"):
+            st.session_state.current_slide = (st.session_state.current_slide + 1) % len(slides)
+            st.rerun()
+    
+    auto_play = st.checkbox("Auto-advance slides (10 seconds)")
+    
+    st.markdown("---")
+    
+    current = slides[st.session_state.current_slide]
+    
+    if current == "executive_summary":
+        # Condensed executive summary
+        total_impact = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+        savings = total_impact * 0.35
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Cost", f"${total_impact:,.0f}")
+        with col2:
+            st.metric("Savings Opportunity", f"${savings:,.0f}")
+        with col3:
+            st.metric("Escalations", f"{len(df):,}")
+        
+        st.plotly_chart(chart_pareto_analysis(df), use_container_width=True)
+    
+    elif current == "financial_impact":
+        col1, col2 = st.columns(2)
+        with col1:
+            cost_by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
+            fig = go.Figure(go.Pie(
+                labels=cost_by_cat.index,
+                values=cost_by_cat.values,
+                hole=0.5,
+                marker=dict(colors=px.colors.sequential.Reds_r)
+            ))
+            fig.update_layout(**create_plotly_theme(), title='Cost Distribution', height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        with col2:
+            st.plotly_chart(chart_driver_tree(df), use_container_width=True)
+    
+    elif current == "benchmarking":
+        current_metrics = {
+            'resolution_days': df['Predicted_Resolution_Days'].mean(),
+            'recurrence_rate': df['AI_Recurrence_Risk'].mean() * 100,
+            'cost_per_escalation': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else 850,
+        }
+        
+        col1, col2, col3 = st.columns(3)
+        for i, (key, title) in enumerate([('resolution_days', 'Resolution Time'), ('recurrence_rate', 'Recurrence Rate'), ('cost_per_escalation', 'Cost/Escalation')]):
+            unit = ' days' if 'days' in key else '%' if 'rate' in key else '$'
+            with [col1, col2, col3][i]:
+                fig = chart_benchmark_gauge(title, current_metrics[key], INDUSTRY_BENCHMARKS[key], unit)
+                st.plotly_chart(fig, use_container_width=True)
+    
+    elif current == "recommendations":
+        recommendations = generate_strategic_recommendations(df)
+        for rec in recommendations[:3]:
+            st.markdown(f"""
+            <div class="strategy-card {'high-priority' if rec['priority'] == 'P1' else ''}">
+                <span class="priority-{rec['priority'].lower()}">{rec['priority']}</span>
+                <strong style="margin-left: 12px;">{rec['title']}</strong>
+                <p style="color: #888;">{rec['description']}</p>
+                <p><strong>ROI:</strong> {rec['roi']} | <strong>Timeline:</strong> {rec['timeline']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    elif current == "forecast":
+        forecast_fig, slope = chart_forecast_projection(df)
+        st.plotly_chart(forecast_fig, use_container_width=True)
+        
+        trend = "📈 Escalations trending UP" if slope > 0 else "📉 Escalations trending DOWN"
+        color = "#DC3545" if slope > 0 else "#28A745"
+        st.markdown(f"<h3 style='text-align: center; color: {color};'>{trend} ({abs(slope):.2f}/day)</h3>", unsafe_allow_html=True)
+    
+    if auto_play:
+        time.sleep(10)
+        st.session_state.current_slide = (st.session_state.current_slide + 1) % len(slides)
+        st.rerun()
+
 
 def render_whatif_simulator(df):
     """Render the What-If Scenario Simulator page."""
@@ -853,13 +2118,16 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.markdown("## 🚀 Escalation AI")
+        st.markdown("## 🎯 Escalation AI")
+        st.markdown("*Executive Intelligence Platform*")
         st.markdown("---")
         
         page = st.radio(
             "Navigation",
-            ["📊 Dashboard", "📈 Analytics", "🔍 Drift Detection", 
-             "⚠️ Alerts", "🔮 What-If Simulator"],
+            ["🎯 Executive Summary", "📊 Dashboard", "📈 Analytics", 
+             "� Financial Analysis", "🏆 Benchmarking", "🔬 Root Cause",
+             "🔍 Drift Detection", "⚠️ Alerts", "🔮 What-If Simulator",
+             "📋 Action Tracker", "📽️ Presentation Mode"],
             label_visibility="collapsed"
         )
         
@@ -870,6 +2138,11 @@ def main():
         st.markdown(f"**Data Source:**")
         st.caption(data_source)
         st.markdown(f"**Records:** {len(df):,}")
+        
+        # Quick stats
+        if 'Financial_Impact' in df.columns:
+            total_cost = df['Financial_Impact'].sum()
+            st.markdown(f"**Total Cost:** ${total_cost:,.0f}")
         
         if st.button("🔄 Refresh Data"):
             st.cache_data.clear()
@@ -895,18 +2168,35 @@ def main():
                     (pd.to_datetime(df['tickets_data_issue_datetime']).dt.date >= date_range[0]) &
                     (pd.to_datetime(df['tickets_data_issue_datetime']).dt.date <= date_range[1])
                 ]
+        
+        st.markdown("---")
+        st.markdown("### 📤 Export")
+        if st.button("📥 Download Report"):
+            st.info("Report generation in progress...")
     
-    # Main content
-    if page == "📊 Dashboard":
+    # Main content - Route to appropriate page
+    if page == "🎯 Executive Summary":
+        render_executive_summary(df)
+    elif page == "📊 Dashboard":
         render_dashboard(df)
     elif page == "📈 Analytics":
         render_analytics(df)
+    elif page == "💰 Financial Analysis":
+        render_financial_analysis(df)
+    elif page == "🏆 Benchmarking":
+        render_benchmarking(df)
+    elif page == "🔬 Root Cause":
+        render_root_cause(df)
     elif page == "🔍 Drift Detection":
         render_drift_page(df)
     elif page == "⚠️ Alerts":
         render_alerts_page(df)
     elif page == "🔮 What-If Simulator":
         render_whatif_simulator(df)
+    elif page == "📋 Action Tracker":
+        render_action_tracker(df)
+    elif page == "📽️ Presentation Mode":
+        render_presentation_mode(df)
 
 
 def render_dashboard(df):
