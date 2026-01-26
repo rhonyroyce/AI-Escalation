@@ -54,6 +54,12 @@ RECURRENCE_ENCODERS_PATH = "recurrence_encoders.pkl"
 RESOLUTION_MODEL_PATH = "resolution_model.pkl"
 
 # ==========================================
+# OUTPUT DIRECTORIES
+# ==========================================
+from pathlib import Path
+PLOT_DIR = Path("plots")  # Directory for generated charts
+
+# ==========================================
 # PRICE CATALOG SETTINGS
 # ==========================================
 PRICE_CATALOG_FILE = "price_catalog.xlsx"
