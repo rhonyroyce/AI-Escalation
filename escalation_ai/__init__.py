@@ -48,6 +48,27 @@ from .reports import generate_report
 # Visualization
 from .visualization import ChartGenerator
 
+# Alerting
+from .alerting import (
+    SmartThresholdCalculator,
+    ThresholdConfig,
+    AlertLevel,
+    calculate_dynamic_thresholds,
+    check_threshold_breach,
+    get_adaptive_limits
+)
+
+# Analysis
+from .analysis import (
+    CategoryDriftDetector,
+    DriftResult,
+    DriftType,
+    detect_category_drift,
+    compare_periods,
+    get_emerging_categories,
+    get_declining_categories
+)
+
 __all__ = [
     # Core
     'OllamaBrain',
@@ -84,6 +105,23 @@ __all__ = [
     'get_gpu_info',
     'init_rapids',
     'clear_gpu_memory',
+    
+    # Alerting
+    'SmartThresholdCalculator',
+    'ThresholdConfig',
+    'AlertLevel',
+    'calculate_dynamic_thresholds',
+    'check_threshold_breach',
+    'get_adaptive_limits',
+    
+    # Analysis
+    'CategoryDriftDetector',
+    'DriftResult',
+    'DriftType',
+    'detect_category_drift',
+    'compare_periods',
+    'get_emerging_categories',
+    'get_declining_categories',
     
     # Metadata
     '__version__',
