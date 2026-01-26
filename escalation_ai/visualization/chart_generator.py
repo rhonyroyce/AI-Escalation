@@ -1021,3 +1021,383 @@ class ChartGenerator:
                     'files': [f.name for f in files]
                 }
         return summary
+
+    # =========================================================================
+    # DRIFT & THRESHOLD CHARTS (04_analysis/)
+    # =========================================================================
+    
+    def chart_category_drift(self, drift_results: List[Any], 
+                              title: str = "Category Drift Analysis") -> Optional[str]:
+        """
+        Chart: Category Drift Visualization
+        Shows emerging and declining categories with change percentages.
+        
+        Args:
+            drift_results: List of DriftResult objects from CategoryDriftDetector
+            title: Chart title
+            
+        Returns:
+            Path to saved chart
+        """
+        try:
+            if not drift_results:
+                return None
+            
+            fig, ax = plt.subplots(figsize=(12, 8))
+            
+            # Filter significant drifts and sort by change
+            significant = [r for r in drift_results if abs(r.change_pct) >= 10]
+            significant = sorted(significant, key=lambda x: x.change_pct, reverse=True)[:15]
+            
+            if not significant:
+                plt.close(fig)
+                return None
+            
+            categories = [r.category for r in significant]
+            changes = [r.change_pct for r in significant]
+            
+            # Color based on direction
+            colors = [self.COLORS['success'] if c > 0 else self.COLORS['danger'] for c in changes]
+            
+            # Horizontal bar chart
+            y_pos = np.arange(len(categories))
+            bars = ax.barh(y_pos, changes, color=colors, alpha=0.8, edgecolor='white')
+            
+            # Add value labels
+            for i, (bar, change) in enumerate(zip(bars, changes)):
+                width = bar.get_width()
+                label_x = width + 2 if width >= 0 else width - 2
+                ha = 'left' if width >= 0 else 'right'
+                ax.text(label_x, bar.get_y() + bar.get_height()/2,
+                       f'{change:+.0f}%', ha=ha, va='center', fontweight='bold', fontsize=9)
+            
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(categories)
+            ax.set_xlabel('Change from Baseline (%)')
+            ax.axvline(x=0, color='black', linewidth=0.8)
+            
+            # Add legend
+            from matplotlib.patches import Patch
+            legend_elements = [
+                Patch(facecolor=self.COLORS['success'], label='Emerging (↑)'),
+                Patch(facecolor=self.COLORS['danger'], label='Declining (↓)')
+            ]
+            ax.legend(handles=legend_elements, loc='lower right')
+            
+            plt.title(title, fontsize=14, fontweight='bold', pad=20)
+            fig.tight_layout()
+            
+            filepath = self.chart_dirs['analysis'] / 'category_drift.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            
+            return str(filepath)
+            
+        except Exception as e:
+            print(f"Error generating category drift chart: {e}")
+            plt.close('all')
+            return None
+    
+    def chart_drift_timeline(self, rolling_drift_df: pd.DataFrame,
+                              title: str = "Category Drift Over Time") -> Optional[str]:
+        """
+        Chart: Rolling Drift Timeline
+        Shows drift severity and category changes over time.
+        
+        Args:
+            rolling_drift_df: DataFrame from CategoryDriftDetector.get_rolling_drift()
+            title: Chart title
+            
+        Returns:
+            Path to saved chart
+        """
+        try:
+            if rolling_drift_df.empty:
+                return None
+            
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
+            
+            dates = pd.to_datetime(rolling_drift_df['period_end'])
+            
+            # Top: Drift severity over time
+            ax1.fill_between(dates, rolling_drift_df['max_severity'], 
+                            alpha=0.3, color=self.COLORS['warning'])
+            ax1.plot(dates, rolling_drift_df['max_severity'], 
+                    color=self.COLORS['warning'], linewidth=2, marker='o', markersize=4)
+            
+            ax1.axhline(y=0.5, color=self.COLORS['danger'], linestyle='--', 
+                       linewidth=1.5, label='High Drift Threshold')
+            ax1.axhline(y=0.2, color=self.COLORS['warning'], linestyle='--', 
+                       linewidth=1.5, alpha=0.7, label='Moderate Drift Threshold')
+            
+            ax1.set_ylabel('Max Drift Severity')
+            ax1.set_ylim(0, 1.1)
+            ax1.legend(loc='upper right')
+            ax1.set_title('Drift Severity Trend', fontweight='bold')
+            
+            # Bottom: Emerging vs Declining counts
+            width = (dates.max() - dates.min()).days / len(dates) * 0.4
+            width = pd.Timedelta(days=max(1, width))
+            
+            ax2.bar(dates - width/2, rolling_drift_df['emerging_categories'], 
+                   width=width, label='Emerging', color=self.COLORS['success'], alpha=0.8)
+            ax2.bar(dates + width/2, rolling_drift_df['declining_categories'], 
+                   width=width, label='Declining', color=self.COLORS['danger'], alpha=0.8)
+            
+            ax2.set_ylabel('Category Count')
+            ax2.set_xlabel('Period End Date')
+            ax2.legend(loc='upper right')
+            ax2.set_title('Emerging vs Declining Categories', fontweight='bold')
+            
+            plt.suptitle(title, fontsize=16, fontweight='bold', y=1.02)
+            fig.tight_layout()
+            
+            filepath = self.chart_dirs['analysis'] / 'drift_timeline.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            
+            return str(filepath)
+            
+        except Exception as e:
+            print(f"Error generating drift timeline chart: {e}")
+            plt.close('all')
+            return None
+    
+    def chart_distribution_comparison(self, baseline_dist: Dict[str, float], 
+                                       current_dist: Dict[str, float],
+                                       title: str = "Category Distribution: Baseline vs Current") -> Optional[str]:
+        """
+        Chart: Side-by-side distribution comparison
+        Shows baseline vs current category distributions.
+        
+        Args:
+            baseline_dist: Dict of category -> proportion for baseline
+            current_dist: Dict of category -> proportion for current
+            title: Chart title
+            
+        Returns:
+            Path to saved chart
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 8))
+            
+            all_cats = sorted(set(baseline_dist.keys()) | set(current_dist.keys()))
+            
+            baseline_vals = [baseline_dist.get(c, 0) * 100 for c in all_cats]
+            current_vals = [current_dist.get(c, 0) * 100 for c in all_cats]
+            
+            x = np.arange(len(all_cats))
+            width = 0.35
+            
+            bars1 = ax.bar(x - width/2, baseline_vals, width, label='Baseline',
+                          color=self.COLORS['secondary'], alpha=0.8)
+            bars2 = ax.bar(x + width/2, current_vals, width, label='Current',
+                          color=self.COLORS['accent'], alpha=0.8)
+            
+            # Highlight significant changes
+            for i, (b, c) in enumerate(zip(baseline_vals, current_vals)):
+                if b > 0:
+                    change = ((c - b) / b) * 100
+                    if abs(change) > 25:
+                        arrow = '↑' if change > 0 else '↓'
+                        color = self.COLORS['success'] if change > 0 else self.COLORS['danger']
+                        ax.annotate(f'{arrow}{abs(change):.0f}%', 
+                                   xy=(x[i], max(b, c) + 1),
+                                   ha='center', fontsize=8, fontweight='bold', color=color)
+            
+            ax.set_xlabel('Category')
+            ax.set_ylabel('Percentage (%)')
+            ax.set_xticks(x)
+            ax.set_xticklabels(all_cats, rotation=45, ha='right')
+            ax.legend(loc='upper right')
+            
+            plt.title(title, fontsize=14, fontweight='bold', pad=20)
+            fig.tight_layout()
+            
+            filepath = self.chart_dirs['analysis'] / 'distribution_comparison.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            
+            return str(filepath)
+            
+        except Exception as e:
+            print(f"Error generating distribution comparison chart: {e}")
+            plt.close('all')
+            return None
+
+    # =========================================================================
+    # ALERT THRESHOLD CHARTS (01_risk/)
+    # =========================================================================
+    
+    def chart_threshold_status(self, threshold_results: List[Any],
+                                title: str = "Smart Alert Status Dashboard") -> Optional[str]:
+        """
+        Chart: Threshold breach status for multiple metrics
+        Shows current values vs thresholds with alert levels.
+        
+        Args:
+            threshold_results: List of ThresholdResult objects
+            title: Chart title
+            
+        Returns:
+            Path to saved chart
+        """
+        try:
+            if not threshold_results:
+                return None
+            
+            n_metrics = len(threshold_results)
+            fig, axes = plt.subplots(1, n_metrics, figsize=(4 * n_metrics, 6))
+            
+            if n_metrics == 1:
+                axes = [axes]
+            
+            level_colors = {
+                'normal': self.COLORS['success'],
+                'warning': self.COLORS['warning'],
+                'critical': '#FF5722',
+                'emergency': self.COLORS['danger']
+            }
+            
+            for ax, result in zip(axes, threshold_results):
+                # Create gauge-like visualization
+                thresholds = result.thresholds
+                current = result.current_value
+                max_val = max(thresholds['emergency'] * 1.2, current * 1.1)
+                
+                # Draw threshold zones
+                ax.axhspan(0, thresholds['warning'], alpha=0.3, color=self.COLORS['success'])
+                ax.axhspan(thresholds['warning'], thresholds['critical'], alpha=0.3, color=self.COLORS['warning'])
+                ax.axhspan(thresholds['critical'], thresholds['emergency'], alpha=0.3, color='#FF5722')
+                ax.axhspan(thresholds['emergency'], max_val, alpha=0.3, color=self.COLORS['danger'])
+                
+                # Draw current value bar
+                color = level_colors.get(result.alert_level.value, self.COLORS['neutral'])
+                ax.bar([0], [current], color=color, width=0.5, edgecolor='black', linewidth=2)
+                
+                # Add threshold lines
+                for level, value in thresholds.items():
+                    ax.axhline(y=value, color='black', linestyle='--', linewidth=1, alpha=0.7)
+                    ax.text(0.55, value, f'{level.capitalize()}: {value:.1f}', 
+                           va='center', fontsize=8)
+                
+                # Value label
+                ax.text(0, current + max_val * 0.02, f'{current:.1f}', 
+                       ha='center', va='bottom', fontsize=12, fontweight='bold')
+                
+                ax.set_xlim(-0.5, 1)
+                ax.set_ylim(0, max_val)
+                ax.set_xticks([])
+                ax.set_title(f"{result.metric_name}\n({result.alert_level.value.upper()})",
+                            fontsize=11, fontweight='bold')
+            
+            plt.suptitle(title, fontsize=14, fontweight='bold', y=1.02)
+            fig.tight_layout()
+            
+            filepath = self.chart_dirs['risk'] / 'threshold_status.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            
+            return str(filepath)
+            
+        except Exception as e:
+            print(f"Error generating threshold status chart: {e}")
+            plt.close('all')
+            return None
+    
+    def chart_metric_with_thresholds(self, df: pd.DataFrame, 
+                                      metric_column: str,
+                                      datetime_column: str,
+                                      thresholds: Dict[str, float],
+                                      title: str = None) -> Optional[str]:
+        """
+        Chart: Time series with threshold bands
+        Shows metric over time with warning/critical/emergency bands.
+        
+        Args:
+            df: Data with metric and datetime
+            metric_column: Column with metric values
+            datetime_column: Column with datetime
+            thresholds: Dict with 'warning', 'critical', 'emergency' values
+            title: Chart title
+            
+        Returns:
+            Path to saved chart
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 7))
+            
+            df = df.copy()
+            df['_dt'] = pd.to_datetime(df[datetime_column], errors='coerce')
+            df = df.dropna(subset=['_dt', metric_column]).sort_values('_dt')
+            
+            dates = df['_dt']
+            values = df[metric_column]
+            
+            # Plot threshold zones
+            max_val = max(values.max(), thresholds['emergency']) * 1.1
+            ax.fill_between(dates, 0, thresholds['warning'], 
+                           alpha=0.15, color=self.COLORS['success'], label='Normal')
+            ax.fill_between(dates, thresholds['warning'], thresholds['critical'], 
+                           alpha=0.15, color=self.COLORS['warning'], label='Warning Zone')
+            ax.fill_between(dates, thresholds['critical'], thresholds['emergency'], 
+                           alpha=0.15, color='#FF5722', label='Critical Zone')
+            ax.fill_between(dates, thresholds['emergency'], max_val, 
+                           alpha=0.15, color=self.COLORS['danger'], label='Emergency Zone')
+            
+            # Plot values
+            ax.plot(dates, values, color=self.COLORS['primary'], 
+                   linewidth=2, marker='o', markersize=4, label=metric_column)
+            
+            # Highlight breaches
+            warning_breach = values >= thresholds['warning']
+            critical_breach = values >= thresholds['critical']
+            emergency_breach = values >= thresholds['emergency']
+            
+            if warning_breach.any():
+                ax.scatter(dates[warning_breach & ~critical_breach], 
+                          values[warning_breach & ~critical_breach],
+                          color=self.COLORS['warning'], s=100, zorder=5, marker='^')
+            if critical_breach.any():
+                ax.scatter(dates[critical_breach & ~emergency_breach], 
+                          values[critical_breach & ~emergency_breach],
+                          color='#FF5722', s=120, zorder=5, marker='^')
+            if emergency_breach.any():
+                ax.scatter(dates[emergency_breach], values[emergency_breach],
+                          color=self.COLORS['danger'], s=150, zorder=5, marker='X')
+            
+            # Add threshold lines
+            ax.axhline(y=thresholds['warning'], color=self.COLORS['warning'], 
+                      linestyle='--', linewidth=1.5, alpha=0.7)
+            ax.axhline(y=thresholds['critical'], color='#FF5722', 
+                      linestyle='--', linewidth=1.5, alpha=0.7)
+            ax.axhline(y=thresholds['emergency'], color=self.COLORS['danger'], 
+                      linestyle='--', linewidth=1.5, alpha=0.7)
+            
+            ax.set_xlabel('Date')
+            ax.set_ylabel(metric_column)
+            ax.legend(loc='upper right', fontsize=9)
+            ax.set_ylim(0, max_val)
+            
+            # Stats annotation
+            breach_count = (values >= thresholds['warning']).sum()
+            ax.annotate(f'Breaches: {breach_count} / {len(values)} ({breach_count/len(values)*100:.0f}%)',
+                       xy=(0.02, 0.98), xycoords='axes fraction',
+                       ha='left', va='top', fontsize=10,
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
+            chart_title = title or f'{metric_column} with Smart Alert Thresholds'
+            plt.title(chart_title, fontsize=14, fontweight='bold', pad=20)
+            fig.tight_layout()
+            
+            safe_name = metric_column.lower().replace(' ', '_')[:30]
+            filepath = self.chart_dirs['risk'] / f'thresholds_{safe_name}.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+            
+            return str(filepath)
+            
+        except Exception as e:
+            print(f"Error generating metric threshold chart: {e}")
+            plt.close('all')
+            return None
