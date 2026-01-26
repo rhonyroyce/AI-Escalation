@@ -13,6 +13,40 @@ Or with the package installed:
 
 import logging
 import sys
+import os
+import subprocess
+
+# ==========================================
+# CONDA ENVIRONMENT CHECK
+# ==========================================
+REQUIRED_ENV = "ml-gpu"
+
+def ensure_conda_env():
+    """Ensure we're running in the correct conda environment."""
+    current_env = os.environ.get('CONDA_DEFAULT_ENV', '')
+    
+    if current_env != REQUIRED_ENV:
+        print(f"⚠️  Wrong conda environment: '{current_env or 'none'}'")
+        print(f"📦 Required environment: '{REQUIRED_ENV}'")
+        print()
+        print(f"Please activate the correct environment:")
+        print(f"    conda activate {REQUIRED_ENV}")
+        print()
+        
+        # Ask user if they want to continue anyway
+        try:
+            response = input("Continue anyway? (y/N): ").strip().lower()
+            if response != 'y':
+                print("Exiting. Please activate ml-gpu environment.")
+                sys.exit(1)
+        except KeyboardInterrupt:
+            print("\nExiting.")
+            sys.exit(1)
+    else:
+        print(f"✅ Conda environment: {REQUIRED_ENV}")
+
+# Check environment before anything else
+ensure_conda_env()
 
 # Configure logging
 logging.basicConfig(
