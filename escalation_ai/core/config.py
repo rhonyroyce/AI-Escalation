@@ -5,6 +5,12 @@ Contains all constants, weights, thresholds, and column mappings.
 """
 
 # ==========================================
+# GPU / RAPIDS CONFIGURATION
+# ==========================================
+USE_GPU = True  # Enable GPU acceleration when available (cuML, cuDF)
+GPU_MEMORY_LIMIT = 0.8  # Max fraction of GPU memory to use (0.0-1.0)
+
+# ==========================================
 # AI MODEL CONFIGURATION
 # ==========================================
 OLLAMA_BASE_URL = "http://localhost:11434"

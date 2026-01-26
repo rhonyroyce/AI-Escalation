@@ -3,6 +3,8 @@ Recurrence Predictor - ML-based ticket recurrence prediction.
 
 Uses Gradient Boosting to predict which tickets are likely to recur
 within 30 days, enabling proactive intervention.
+
+GPU-accelerated with RAPIDS cuML when available.
 """
 
 import os
@@ -10,7 +12,6 @@ import pickle
 import logging
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import roc_auc_score
@@ -18,7 +19,13 @@ from sklearn.metrics import roc_auc_score
 from ..core.config import (
     ANCHORS, 
     RECURRENCE_MODEL_PATH,
-    RECURRENCE_ENCODERS_PATH
+    RECURRENCE_ENCODERS_PATH,
+    USE_GPU
+)
+from ..core.gpu_utils import (
+    GPURandomForestClassifier,
+    is_gpu_available,
+    clear_gpu_memory
 )
 
 logger = logging.getLogger(__name__)
@@ -165,12 +172,17 @@ class RecurrencePredictor:
             X, y, test_size=0.2, random_state=42, stratify=y if len(y.unique()) > 1 else None
         )
         
-        # Train model (Gradient Boosting for better probability calibration)
-        self.model = GradientBoostingClassifier(
+        # Train model (GPU-accelerated Random Forest or CPU fallback)
+        use_gpu = USE_GPU and is_gpu_available()
+        if use_gpu:
+            logger.info("  [GPU] Training with cuML RandomForestClassifier")
+        else:
+            logger.info("  [CPU] Training with sklearn GradientBoostingClassifier")
+        
+        self.model = GPURandomForestClassifier(
+            use_gpu=use_gpu,
             n_estimators=100,
-            max_depth=4,
-            learning_rate=0.1,
-            min_samples_split=10,
+            max_depth=8,
             random_state=42
         )
         

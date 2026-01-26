@@ -17,6 +17,12 @@ __author__ = "Escalation AI Team"
 from .core.config import *
 from .core.ai_engine import OllamaBrain
 from .core.utils import clean_text, validate_columns
+from .core.gpu_utils import (
+    is_gpu_available,
+    get_gpu_info,
+    init_rapids,
+    clear_gpu_memory,
+)
 
 # Classification and Scoring
 from .classification import classify_rows, get_anchor_centroids
@@ -72,6 +78,12 @@ __all__ = [
     
     # Visualization
     'ChartGenerator',
+    
+    # GPU Utilities
+    'is_gpu_available',
+    'get_gpu_info',
+    'init_rapids',
+    'clear_gpu_memory',
     
     # Metadata
     '__version__',

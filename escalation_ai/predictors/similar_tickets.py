@@ -3,6 +3,8 @@ Similar Ticket Finder - AI-powered semantic similarity analysis.
 
 Uses embeddings to find semantically similar historical tickets,
 then compares resolutions to identify patterns and inconsistencies.
+
+GPU-accelerated with RAPIDS cuML when available.
 """
 
 import os
@@ -19,7 +21,13 @@ from ..core.config import (
     COL_SUMMARY, COL_SEVERITY, COL_DATETIME, COL_CLOSE_DATE,
     COL_ROOT_CAUSE, COL_LESSON_TITLE, COL_ENGINEER, COL_LOB,
     COL_TYPE, COL_ORIGIN, COL_RESOLUTION_DATE,
-    SIMILARITY_FEEDBACK_PATH
+    SIMILARITY_FEEDBACK_PATH, USE_GPU
+)
+from ..core.gpu_utils import (
+    GPUSimilaritySearch,
+    cosine_similarity_gpu,
+    batch_cosine_similarity_gpu,
+    is_gpu_available
 )
 
 logger = logging.getLogger(__name__)
@@ -33,7 +41,7 @@ class SimilarTicketFinder:
     then compares resolutions to identify patterns and inconsistencies.
     
     Key Features:
-    - Embedding-based semantic similarity
+    - Embedding-based semantic similarity (GPU-accelerated)
     - Resolution pattern analysis across similar tickets
     - Days to resolution comparison
     - Human-in-the-loop feedback for similarity validation
@@ -55,6 +63,12 @@ class SimilarTicketFinder:
         self.resolution_patterns = {}
         self.feedback_data = {}
         
+        # GPU-accelerated similarity search index
+        self.use_gpu = USE_GPU and is_gpu_available()
+        self.gpu_search_index = None
+        self.index_embeddings = None
+        self.index_ids = None
+        
         # Load existing feedback if available
         self._load_feedback()
         
@@ -66,7 +80,7 @@ class SimilarTicketFinder:
             COL_ROOT_CAUSE,
         ]
         
-        logger.info("[Similar Ticket Finder] Initialized")
+        logger.info(f"[Similar Ticket Finder] Initialized (GPU: {self.use_gpu})")
     
     def _load_feedback(self):
         """Load human feedback on similarity matches from file."""
@@ -142,16 +156,51 @@ class SimilarTicketFinder:
         
         return None
     
+    def build_gpu_index(self, historical_df):
+        """
+        Build GPU-accelerated similarity search index from historical data.
+        
+        This pre-computes embeddings and builds a fast nearest neighbor index
+        for efficient similarity search.
+        """
+        if not self.use_gpu:
+            return
+        
+        logger.info("[Similar Ticket Finder] Building GPU similarity index...")
+        
+        embeddings = []
+        ids = []
+        
+        for idx, row in historical_df.iterrows():
+            text = str(row.get(COL_SUMMARY, row.get('Text', ''))).strip()
+            if not text:
+                continue
+            
+            embedding = self._get_embedding(text, f"hist_{idx}")
+            if embedding is not None:
+                embeddings.append(embedding)
+                ids.append(idx)
+        
+        if embeddings:
+            self.index_embeddings = np.array(embeddings, dtype=np.float32)
+            self.index_ids = ids
+            
+            # Build GPU search index
+            self.gpu_search_index = GPUSimilaritySearch(
+                use_gpu=self.use_gpu,
+                metric='cosine',
+                n_neighbors=min(self.top_k * 2, len(embeddings))
+            )
+            self.gpu_search_index.fit(self.index_embeddings)
+            
+            logger.info(f"[Similar Ticket Finder] GPU index built with {len(embeddings)} embeddings")
+    
     def _cosine_similarity(self, vec1, vec2):
-        """Calculate cosine similarity between two vectors."""
+        """Calculate cosine similarity between two vectors (GPU-accelerated)."""
         if vec1 is None or vec2 is None:
             return 0.0
-        dot = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-        return dot / (norm1 * norm2)
+        use_gpu = USE_GPU and is_gpu_available()
+        return cosine_similarity_gpu(vec1, vec2, use_gpu=use_gpu)
     
     def _get_embedding(self, text, ticket_id=None):
         """Get embedding for text, with caching."""
@@ -295,8 +344,45 @@ class SimilarTicketFinder:
             'resolution_time': resolution_time_analysis
         }
     
+    def _build_similar_ticket_result(self, idx, hist_row, query_id, adjusted_similarity, base_similarity):
+        """Build a similar ticket result dictionary."""
+        hist_text = str(hist_row.get(COL_SUMMARY, hist_row.get('Text', ''))).strip()
+        hist_ticket_id = hist_row.get('ID', str(idx))
+        resolution_text = self._get_resolution_text(hist_row)
+        days_to_resolution = self._calculate_days_to_resolution(hist_row)
+        
+        feedback_key = f"{query_id}|{hist_ticket_id}"
+        reverse_key = f"{hist_ticket_id}|{query_id}"
+        has_feedback = feedback_key in self.feedback_data or reverse_key in self.feedback_data
+        feedback_status = ""
+        if has_feedback:
+            fb = self.feedback_data.get(feedback_key) or self.feedback_data.get(reverse_key)
+            if fb:
+                feedback_status = "✅ Confirmed" if fb.get('is_similar') else "❌ Rejected"
+        
+        return {
+            'index': idx,
+            'id': hist_ticket_id,
+            'text': hist_text[:200] + '...' if len(hist_text) > 200 else hist_text,
+            'similarity': adjusted_similarity,
+            'base_similarity': base_similarity,
+            'category': hist_row.get('AI_Category', 'Unknown'),
+            'severity': hist_row.get('Severity_Norm', hist_row.get(COL_SEVERITY, 'Unknown')),
+            'root_cause': hist_row.get('Root_Cause_Category', hist_row.get(COL_ROOT_CAUSE, 'Unknown')),
+            'resolution': resolution_text,
+            'lesson': hist_row.get(COL_LESSON_TITLE, ''),
+            'action': hist_row.get('Action_Required', ''),
+            'date': hist_row.get('Issue_Date', hist_row.get(COL_DATETIME, '')),
+            'engineer': hist_row.get('Engineer', hist_row.get(COL_ENGINEER, '')),
+            'lob': hist_row.get('LOB', hist_row.get(COL_LOB, '')),
+            'friction_score': hist_row.get('Strategic_Friction_Score', 0),
+            'recurred': hist_row.get('Recurrence_Actual', hist_row.get('Is_Repeat', 'Unknown')),
+            'days_to_resolution': days_to_resolution,
+            'feedback_status': feedback_status
+        }
+    
     def find_similar(self, query_row, historical_df, exclude_self=True):
-        """Find tickets similar to the query ticket."""
+        """Find tickets similar to the query ticket (GPU-accelerated when available)."""
         query_id = query_row.get(COL_SUMMARY, query_row.get('ID', ''))
         query_text = str(query_row.get(COL_SUMMARY, query_row.get('Text', ''))).strip()
         
@@ -309,6 +395,42 @@ class SimilarTicketFinder:
         
         similar_tickets = []
         
+        # Use GPU index if available for fast search
+        if self.gpu_search_index is not None and self.index_ids is not None:
+            # Fast GPU-based nearest neighbor search
+            similarities, indices = self.gpu_search_index.search(query_embedding, k=self.top_k * 2)
+            
+            for sim, local_idx in zip(similarities, indices):
+                if local_idx >= len(self.index_ids):
+                    continue
+                    
+                idx = self.index_ids[local_idx]
+                if idx not in historical_df.index:
+                    continue
+                    
+                hist_row = historical_df.loc[idx]
+                
+                if exclude_self:
+                    hist_id = hist_row.get(COL_SUMMARY, hist_row.get('ID', ''))
+                    if hist_id == query_id:
+                        continue
+                
+                base_similarity = float(sim)
+                hist_ticket_id = hist_row.get('ID', str(idx))
+                adjusted_similarity = self.get_feedback_adjusted_similarity(
+                    str(query_id), str(hist_ticket_id), base_similarity
+                )
+                
+                if adjusted_similarity >= self.similarity_threshold:
+                    similar_tickets.append(
+                        self._build_similar_ticket_result(idx, hist_row, query_id, 
+                                                          adjusted_similarity, base_similarity)
+                    )
+            
+            similar_tickets.sort(key=lambda x: x['similarity'], reverse=True)
+            return similar_tickets[:self.top_k]
+        
+        # Fallback: CPU-based row-by-row search
         for idx, hist_row in historical_df.iterrows():
             if exclude_self:
                 hist_id = hist_row.get(COL_SUMMARY, hist_row.get('ID', ''))

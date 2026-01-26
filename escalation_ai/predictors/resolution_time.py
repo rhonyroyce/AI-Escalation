@@ -3,14 +3,16 @@ Resolution Time Predictor - ML-based resolution time prediction.
 
 Predicts resolution time for tickets based on historical patterns,
 issue characteristics, and human-provided expectations.
+
+GPU-accelerated with RAPIDS cuML when available.
 """
 
 import logging
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
 
-from ..core.config import COL_SUMMARY, COL_SEVERITY, COL_DATETIME, COL_RESOLUTION_DATE
+from ..core.config import COL_SUMMARY, COL_SEVERITY, COL_DATETIME, COL_RESOLUTION_DATE, USE_GPU
+from ..core.gpu_utils import GPURandomForestRegressor, is_gpu_available
 
 logger = logging.getLogger(__name__)
 
@@ -116,12 +118,16 @@ class ResolutionTimePredictor:
         y = train_df['actual_days'].values
         
         try:
-            self.model = RandomForestRegressor(
+            # Use GPU-accelerated model when available
+            use_gpu = USE_GPU and is_gpu_available()
+            if use_gpu:
+                logger.info("[Resolution Predictor] Training with GPU acceleration")
+            
+            self.model = GPURandomForestRegressor(
+                use_gpu=use_gpu,
                 n_estimators=50,
                 max_depth=8,
-                min_samples_leaf=3,
-                random_state=42,
-                n_jobs=-1
+                random_state=42
             )
             self.model.fit(X, y)
             self.is_trained = True
