@@ -15,7 +15,7 @@ import pandas as pd
 
 from ..core.config import (
     REPORT_TITLE, REPORT_VERSION, GEN_MODEL, MC_BLUE,
-    COL_SUMMARY, COL_SEVERITY, COL_ORIGIN, COL_TYPE
+    COL_SUMMARY, COL_SEVERITY, COL_ORIGIN, COL_TYPE, COL_DATETIME
 )
 from ..visualization import ChartGenerator
 
@@ -299,6 +299,10 @@ class ExcelReportWriter:
         # Generate all charts (returns dict organized by category)
         chart_paths = self.chart_generator.generate_all_charts(analysis_data)
         
+        # Generate drift and threshold charts if applicable
+        self._generate_drift_charts(df, chart_paths)
+        self._generate_threshold_charts(df, chart_paths)
+        
         # Flatten for backward compatibility (also return total count)
         all_paths = []
         for category_paths in chart_paths.values():
@@ -306,6 +310,121 @@ class ExcelReportWriter:
         
         logger.info(f"Generated {len(all_paths)} charts across {len(chart_paths)} categories")
         return chart_paths
+    
+    def _generate_drift_charts(self, df, chart_paths):
+        """Generate category drift detection charts."""
+        try:
+            from ..analysis import CategoryDriftDetector, DriftType
+            
+            category_col = 'AI_Category'
+            datetime_col = COL_DATETIME
+            
+            if category_col not in df.columns:
+                return
+            
+            # Check if we have datetime for temporal analysis
+            if datetime_col in df.columns:
+                df_temp = df.copy()
+                df_temp['_dt'] = pd.to_datetime(df_temp[datetime_col], errors='coerce')
+                df_temp = df_temp.dropna(subset=['_dt']).sort_values('_dt')
+                
+                if len(df_temp) >= 60:  # Need enough data for meaningful comparison
+                    # Split into baseline (first 60%) and current (last 40%)
+                    split_idx = int(len(df_temp) * 0.6)
+                    baseline_df = df_temp.iloc[:split_idx]
+                    current_df = df_temp.iloc[split_idx:]
+                    
+                    # Detect drift
+                    detector = CategoryDriftDetector()
+                    detector.set_baseline(baseline_df, category_col)
+                    drift_results = detector.detect_drift(current_df, category_col)
+                    
+                    # Generate drift chart
+                    if drift_results:
+                        path = self.chart_generator.chart_category_drift(
+                            drift_results, 
+                            title="Category Drift: Baseline vs Recent Period"
+                        )
+                        if path:
+                            chart_paths['analysis'].append(path)
+                            logger.info("Generated category drift chart")
+                    
+                    # Generate distribution comparison
+                    baseline_dist = baseline_df[category_col].value_counts(normalize=True).to_dict()
+                    current_dist = current_df[category_col].value_counts(normalize=True).to_dict()
+                    path = self.chart_generator.chart_distribution_comparison(
+                        baseline_dist, current_dist,
+                        title="Category Distribution: Baseline (60%) vs Recent (40%)"
+                    )
+                    if path:
+                        chart_paths['analysis'].append(path)
+                        logger.info("Generated distribution comparison chart")
+                        
+        except ImportError:
+            logger.debug("Category drift module not available")
+        except Exception as e:
+            logger.warning(f"Error generating drift charts: {e}")
+    
+    def _generate_threshold_charts(self, df, chart_paths):
+        """Generate smart alert threshold charts."""
+        try:
+            from ..alerting import SmartThresholdCalculator
+            
+            datetime_col = COL_DATETIME
+            
+            if datetime_col not in df.columns:
+                return
+            
+            df_temp = df.copy()
+            df_temp['_dt'] = pd.to_datetime(df_temp[datetime_col], errors='coerce')
+            df_temp = df_temp.dropna(subset=['_dt'])
+            
+            if len(df_temp) < 30:
+                return
+            
+            # Calculate daily escalation counts
+            df_temp['_date'] = df_temp['_dt'].dt.date
+            daily_counts = df_temp.groupby('_date').size().reset_index(name='escalation_count')
+            daily_counts['date'] = pd.to_datetime(daily_counts['_date'])
+            
+            if len(daily_counts) >= 14:  # Need at least 2 weeks
+                # Calculate thresholds
+                calc = SmartThresholdCalculator()
+                calc.fit(daily_counts, 'escalation_count', 'date')
+                thresholds = calc.calculate_thresholds('escalation_count')
+                
+                # Generate threshold chart
+                path = self.chart_generator.chart_metric_with_thresholds(
+                    daily_counts, 'escalation_count', 'date', thresholds,
+                    title="Daily Escalation Count with Smart Alert Thresholds"
+                )
+                if path:
+                    chart_paths['risk'].append(path)
+                    logger.info("Generated escalation threshold chart")
+            
+            # Also do friction score if available
+            if 'Strategic_Friction_Score' in df.columns:
+                daily_friction = df_temp.groupby('_date')['Strategic_Friction_Score'].sum().reset_index()
+                daily_friction.columns = ['_date', 'daily_friction']
+                daily_friction['date'] = pd.to_datetime(daily_friction['_date'])
+                
+                if len(daily_friction) >= 14:
+                    calc = SmartThresholdCalculator()
+                    calc.fit(daily_friction, 'daily_friction', 'date')
+                    thresholds = calc.calculate_thresholds('daily_friction')
+                    
+                    path = self.chart_generator.chart_metric_with_thresholds(
+                        daily_friction, 'daily_friction', 'date', thresholds,
+                        title="Daily Friction Score with Smart Alert Thresholds"
+                    )
+                    if path:
+                        chart_paths['risk'].append(path)
+                        logger.info("Generated friction threshold chart")
+                        
+        except ImportError:
+            logger.debug("Smart thresholds module not available")
+        except Exception as e:
+            logger.warning(f"Error generating threshold charts: {e}")
     
     def _build_analysis_data(self, df):
         """Build analysis data dictionary from DataFrame for chart generation."""
