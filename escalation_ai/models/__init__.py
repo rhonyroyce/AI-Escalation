@@ -1,19 +1,29 @@
 """
 Models module for Escalation AI.
 
-Contains ML models for prediction, classification, and analysis.
+Contains data models, ML predictors, and analysis components.
 """
 
-from escalation_ai.models.recurrence_predictor import RecurrencePredictor
-from escalation_ai.models.similar_ticket_finder import SimilarTicketFinder
-from escalation_ai.models.resolution_predictor import ResolutionTimePredictor
-from escalation_ai.models.feedback_learning import FeedbackLearning
-from escalation_ai.models.price_catalog import PriceCatalog
+# Data models are always available
+from .data_models import (
+    TicketData,
+    AnalysisResult,
+    SimilarTicketMatch,
+    ResolutionTimePrediction,
+    validate_dataframe,
+    normalize_severity,
+    normalize_origin,
+    calculate_resolution_days
+)
 
 __all__ = [
-    'RecurrencePredictor',
-    'SimilarTicketFinder', 
-    'ResolutionTimePredictor',
-    'FeedbackLearning',
-    'PriceCatalog',
+    # Data models
+    'TicketData',
+    'AnalysisResult', 
+    'SimilarTicketMatch',
+    'ResolutionTimePrediction',
+    'validate_dataframe',
+    'normalize_severity',
+    'normalize_origin',
+    'calculate_resolution_days',
 ]

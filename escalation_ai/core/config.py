@@ -47,6 +47,13 @@ FEEDBACK_WEIGHT = 0.4  # How much weight to give user feedback vs original ancho
 SIMILARITY_FEEDBACK_PATH = "similarity_feedback.json"
 
 # ==========================================
+# ML MODEL PATHS
+# ==========================================
+RECURRENCE_MODEL_PATH = "recurrence_model.pkl"
+RECURRENCE_ENCODERS_PATH = "recurrence_encoders.pkl"
+RESOLUTION_MODEL_PATH = "resolution_model.pkl"
+
+# ==========================================
 # PRICE CATALOG SETTINGS
 # ==========================================
 PRICE_CATALOG_FILE = "price_catalog.xlsx"

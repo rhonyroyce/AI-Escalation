@@ -1,0 +1,320 @@
+"""
+Excel Report Generator for Escalation AI.
+
+Generates comprehensive Excel reports with McKinsey-style formatting,
+including dashboards, charts, and detailed analysis sheets.
+"""
+
+import os
+import logging
+from datetime import datetime
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils.dataframe import dataframe_to_rows
+import pandas as pd
+
+from ..core.config import (
+    REPORT_TITLE, REPORT_VERSION, GEN_MODEL, MC_BLUE,
+    COL_SUMMARY, COL_SEVERITY, COL_ORIGIN, COL_TYPE
+)
+from ..visualization import ChartGenerator
+
+logger = logging.getLogger(__name__)
+
+
+class ExcelReportWriter:
+    """
+    Excel Report Writer with McKinsey-style formatting.
+    
+    Creates professional multi-sheet Excel reports with:
+    - Executive Summary sheet
+    - Dashboard with embedded charts
+    - Scored Data with conditional formatting
+    - Financial Analysis
+    - Resolution Time Analysis
+    - Raw Data backup
+    """
+    
+    def __init__(self, output_path):
+        self.output_path = output_path
+        self.output_dir = os.path.dirname(output_path)
+        self.wb = Workbook()
+        self.chart_generator = None
+        
+        # Style definitions
+        self.header_font = Font(bold=True, size=12, color="FFFFFF")
+        self.header_fill = PatternFill(start_color="004C97", end_color="004C97", fill_type="solid")
+        self.title_font = Font(bold=True, size=18, color="004C97")
+        self.subtitle_font = Font(size=10, italic=True, color="666666")
+        
+    def _style_header_row(self, ws, row=1, start_col=1, end_col=None):
+        """Apply header styling to a row."""
+        if end_col is None:
+            end_col = ws.max_column
+        
+        for col in range(start_col, end_col + 1):
+            cell = ws.cell(row=row, column=col)
+            cell.font = self.header_font
+            cell.fill = self.header_fill
+            cell.alignment = Alignment(horizontal='center', wrap_text=True)
+    
+    def write_executive_summary(self, df, exec_summary_text):
+        """Write the Executive Summary sheet."""
+        ws = self.wb.create_sheet("Executive Summary", 0)
+        ws.sheet_view.showGridLines = False
+        
+        report_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        # Title
+        ws['A1'] = REPORT_TITLE
+        ws['A1'].font = self.title_font
+        ws.merge_cells('A1:H1')
+        
+        # Subtitle
+        ws['A2'] = f"Generated: {report_timestamp} | Version: {REPORT_VERSION} | AI Model: {GEN_MODEL}"
+        ws['A2'].font = self.subtitle_font
+        ws.merge_cells('A2:H2')
+        
+        # Key metrics header
+        ws['A4'] = "KEY METRICS AT A GLANCE"
+        ws['A4'].font = Font(bold=True, size=12, color="FFFFFF")
+        ws['A4'].fill = self.header_fill
+        ws.merge_cells('A4:H4')
+        
+        # Calculate metrics
+        total_tickets = len(df)
+        total_friction = df['Strategic_Friction_Score'].sum() if 'Strategic_Friction_Score' in df.columns else 0
+        critical_count = (df['Severity_Norm'] == 'Critical').sum() if 'Severity_Norm' in df.columns else 0
+        total_financial = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else 0
+        
+        # Write metrics
+        metrics = [
+            ("Total Tickets", str(total_tickets)),
+            ("Friction Score", f"{total_friction:,.0f}"),
+            ("Critical Issues", str(critical_count)),
+            ("Financial Impact", f"${total_financial:,.0f}"),
+        ]
+        
+        for i, (label, val) in enumerate(metrics):
+            col = 1 + (i * 2)
+            ws.cell(row=5, column=col).value = label
+            ws.cell(row=5, column=col).font = Font(bold=True, size=9, color="666666")
+            ws.cell(row=6, column=col).value = val
+            ws.cell(row=6, column=col).font = Font(bold=True, size=14, color="004C97")
+        
+        # AI Synthesis header
+        ws['A10'] = "AI EXECUTIVE SYNTHESIS"
+        ws['A10'].font = Font(bold=True, size=12, color="FFFFFF")
+        ws['A10'].fill = PatternFill(start_color="D9534F", end_color="D9534F", fill_type="solid")
+        ws.merge_cells('A10:H10')
+        
+        # Write synthesis
+        current_row = 11
+        for para in exec_summary_text.split('\n\n'):
+            if para.strip():
+                ws[f'A{current_row}'] = para.strip()
+                ws[f'A{current_row}'].alignment = Alignment(wrap_text=True, vertical='top')
+                ws.merge_cells(f'A{current_row}:H{current_row}')
+                ws.row_dimensions[current_row].height = 60
+                current_row += 1
+        
+        # Set column widths
+        for col in ['A', 'C', 'E', 'G']:
+            ws.column_dimensions[col].width = 18
+        for col in ['B', 'D', 'F', 'H']:
+            ws.column_dimensions[col].width = 12
+    
+    def write_dashboard(self, df, chart_paths):
+        """Write the Dashboard sheet with chart references."""
+        ws = self.wb.create_sheet("Dashboard", 1)
+        ws.sheet_view.showGridLines = False
+        
+        ws['A1'] = "VISUAL ANALYTICS DASHBOARD"
+        ws['A1'].font = self.title_font
+        ws.merge_cells('A1:L1')
+        
+        ws['A3'] = "📊 Charts are saved alongside the Excel file. See the output folder for PNG visualizations."
+        ws['A3'].font = Font(size=11, italic=True, color="666666")
+        ws.merge_cells('A3:L3')
+        
+        # List chart paths
+        if chart_paths:
+            ws['A5'] = "Available Charts:"
+            ws['A5'].font = Font(bold=True, size=12)
+            
+            for i, path in enumerate(chart_paths[:15]):
+                filename = os.path.basename(path)
+                ws[f'A{6+i}'] = f"  • {filename}"
+        else:
+            ws['A5'] = "No charts were generated."
+    
+    def write_scored_data(self, df):
+        """Write the Scored Data sheet with conditional formatting."""
+        ws = self.wb.create_sheet("Scored Data", 2)
+        
+        # Select key columns
+        key_cols = [
+            COL_SUMMARY, 'AI_Category', 'AI_Confidence', 'Severity_Norm', 
+            'Origin_Norm', 'Strategic_Friction_Score', 'Learning_Status',
+            'Financial_Impact', 'AI_Recurrence_Risk', 'Similar_Ticket_Count'
+        ]
+        
+        available_cols = [c for c in key_cols if c in df.columns]
+        
+        if available_cols:
+            export_df = df[available_cols].copy()
+        else:
+            export_df = df.copy()
+        
+        # Write header
+        for col_idx, col_name in enumerate(export_df.columns, 1):
+            ws.cell(row=1, column=col_idx).value = col_name
+        
+        self._style_header_row(ws)
+        
+        # Write data
+        for row_idx, row in enumerate(export_df.itertuples(index=False), 2):
+            for col_idx, value in enumerate(row, 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                if pd.isna(value):
+                    cell.value = ""
+                elif isinstance(value, float):
+                    cell.value = round(value, 2)
+                else:
+                    cell.value = str(value)[:1000]  # Truncate long text
+        
+        # Auto-fit columns (approximate)
+        for col_idx, col_name in enumerate(export_df.columns, 1):
+            ws.column_dimensions[chr(64 + col_idx) if col_idx <= 26 else 'AA'].width = 20
+    
+    def write_resolution_time_sheet(self, df):
+        """Write Resolution Time Analysis sheet."""
+        ws = self.wb.create_sheet("Resolution Time Analysis", 3)
+        
+        # Check if resolution time columns exist
+        res_cols = ['AI_Category', 'Actual_Resolution_Days', 'Predicted_Resolution_Days', 
+                   'Human_Expected_Days', 'Resolution_Prediction_Confidence']
+        
+        available = [c for c in res_cols if c in df.columns]
+        
+        if not available:
+            ws['A1'] = "Resolution Time Analysis"
+            ws['A1'].font = self.title_font
+            ws['A3'] = "No resolution time data available."
+            return
+        
+        # Title
+        ws['A1'] = "RESOLUTION TIME ANALYSIS"
+        ws['A1'].font = self.title_font
+        ws.merge_cells('A1:G1')
+        
+        # Summary metrics
+        if 'Actual_Resolution_Days' in df.columns and 'Predicted_Resolution_Days' in df.columns:
+            valid = df.dropna(subset=['Actual_Resolution_Days', 'Predicted_Resolution_Days'])
+            
+            if len(valid) > 0:
+                actual = valid['Actual_Resolution_Days']
+                predicted = valid['Predicted_Resolution_Days']
+                
+                mae = (actual - predicted).abs().mean()
+                
+                ws['A3'] = "Prediction Accuracy Metrics"
+                ws['A3'].font = Font(bold=True)
+                
+                ws['A4'] = f"Mean Absolute Error: {mae:.2f} days"
+                ws['A5'] = f"Sample Size: {len(valid)} tickets"
+                ws['A6'] = f"Average Actual: {actual.mean():.2f} days"
+                ws['A7'] = f"Average Predicted: {predicted.mean():.2f} days"
+        
+        # Write data table starting at row 10
+        start_row = 10
+        ws[f'A{start_row-1}'] = "Detailed Resolution Time Data"
+        ws[f'A{start_row-1}'].font = Font(bold=True)
+        
+        export_df = df[available].copy()
+        
+        for col_idx, col_name in enumerate(export_df.columns, 1):
+            ws.cell(row=start_row, column=col_idx).value = col_name
+        
+        self._style_header_row(ws, row=start_row, end_col=len(available))
+        
+        for row_idx, row in enumerate(export_df.itertuples(index=False), start_row + 1):
+            for col_idx, value in enumerate(row, 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                if pd.isna(value):
+                    cell.value = ""
+                elif isinstance(value, float):
+                    cell.value = round(value, 2)
+                else:
+                    cell.value = str(value)
+    
+    def write_raw_data(self, df_raw):
+        """Write Raw Data backup sheet."""
+        ws = self.wb.create_sheet("Raw Data", -1)
+        
+        # Write header
+        for col_idx, col_name in enumerate(df_raw.columns, 1):
+            ws.cell(row=1, column=col_idx).value = col_name
+        
+        self._style_header_row(ws)
+        
+        # Write data
+        for row_idx, row in enumerate(df_raw.itertuples(index=False), 2):
+            for col_idx, value in enumerate(row, 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                if pd.isna(value):
+                    cell.value = ""
+                else:
+                    cell.value = str(value)[:1000]
+    
+    def generate_charts(self, df):
+        """Generate all visualization charts."""
+        self.chart_generator = ChartGenerator(df, self.output_dir)
+        chart_paths = self.chart_generator.generate_all()
+        return chart_paths
+    
+    def save(self):
+        """Save the workbook."""
+        # Remove default sheet if it exists
+        if 'Sheet' in self.wb.sheetnames:
+            del self.wb['Sheet']
+        
+        self.wb.save(self.output_path)
+        logger.info(f"Report saved to {self.output_path}")
+
+
+def generate_report(df, output_path, exec_summary_text, df_raw=None):
+    """
+    Generate comprehensive Excel report.
+    
+    Args:
+        df: Processed DataFrame with all analysis columns
+        output_path: Path to save the Excel file
+        exec_summary_text: AI-generated executive summary text
+        df_raw: Original raw DataFrame (optional, for backup sheet)
+    
+    Returns:
+        List of chart paths generated
+    """
+    logger.info(f"[Report Generator] Creating report at {output_path}")
+    
+    writer = ExcelReportWriter(output_path)
+    
+    # Write all sheets
+    writer.write_executive_summary(df, exec_summary_text)
+    
+    # Generate charts
+    chart_paths = writer.generate_charts(df)
+    
+    writer.write_dashboard(df, chart_paths)
+    writer.write_scored_data(df)
+    writer.write_resolution_time_sheet(df)
+    
+    if df_raw is not None:
+        writer.write_raw_data(df_raw)
+    
+    writer.save()
+    
+    logger.info(f"[Report Generator] Report complete with {len(chart_paths)} charts")
+    
+    return chart_paths

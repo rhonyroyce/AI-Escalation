@@ -13,12 +13,66 @@ This package provides comprehensive analysis of telecom escalation tickets inclu
 __version__ = "2.2.0"
 __author__ = "Escalation AI Team"
 
-from escalation_ai.core.config import *
-from escalation_ai.core.ai_engine import OllamaBrain
-from escalation_ai.pipeline import main_pipeline
+# Core imports
+from .core.config import *
+from .core.ai_engine import OllamaBrain
+from .core.utils import clean_text, validate_columns
+
+# Classification and Scoring
+from .classification import classify_rows, get_anchor_centroids
+from .scoring import calculate_strategic_friction
+
+# Feedback modules
+from .feedback import FeedbackLearning, PriceCatalog
+
+# Predictors
+from .predictors import (
+    RecurrencePredictor,
+    SimilarTicketFinder,
+    ResolutionTimePredictor,
+    apply_recurrence_predictions,
+    apply_similar_ticket_analysis,
+    apply_resolution_time_prediction
+)
+
+# Pipeline and Reports
+from .pipeline import EscalationPipeline, main_pipeline
+from .reports import generate_report
+
+# Visualization
+from .visualization import ChartGenerator
 
 __all__ = [
-    'main_pipeline',
+    # Core
     'OllamaBrain',
+    'clean_text',
+    'validate_columns',
+    
+    # Classification & Scoring
+    'classify_rows',
+    'get_anchor_centroids',
+    'calculate_strategic_friction',
+    
+    # Feedback
+    'FeedbackLearning',
+    'PriceCatalog',
+    
+    # Predictors
+    'RecurrencePredictor',
+    'SimilarTicketFinder',
+    'ResolutionTimePredictor',
+    'apply_recurrence_predictions',
+    'apply_similar_ticket_analysis',
+    'apply_resolution_time_prediction',
+    
+    # Pipeline & Reports
+    'EscalationPipeline',
+    'main_pipeline',
+    'generate_report',
+    
+    # Visualization
+    'ChartGenerator',
+    
+    # Metadata
     '__version__',
 ]
