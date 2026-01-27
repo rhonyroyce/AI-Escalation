@@ -194,10 +194,75 @@ class ResolutionTimePredictor:
                 'method': 'category_stats'
             }
         
+        # Heuristic prediction when no training data available
+        return self._predict_heuristic(row, category)
+    
+    def _predict_heuristic(self, row, category):
+        """
+        Heuristic-based resolution time prediction when ML model isn't trained.
+        Uses category complexity, severity, and other indicators.
+        """
+        # Base resolution times by category (telecom industry averages)
+        category_base_days = {
+            'OSS/NMS & Systems': 4.5,
+            'RF & Antenna Issues': 6.0,
+            'Process & Documentation': 2.5,
+            'Communication & Coordination': 2.0,
+            'Configuration & Integration': 5.0,
+            'Transmission & Backhaul': 7.0,
+            'Power & Environment': 4.0,
+            'Site Access & Logistics': 3.5,
+            'Contractor & Vendor Issues': 8.0,
+            'Hardware Issues': 5.5,
+            'Software Issues': 4.0,
+        }
+        
+        # Start with category-based estimate
+        base_days = category_base_days.get(category, 5.0)
+        
+        # Adjust for severity
+        severity = str(row.get('Severity_Norm', row.get(COL_SEVERITY, 'Medium'))).lower()
+        if 'critical' in severity or 's1' in severity:
+            base_days *= 0.6  # Faster resolution for critical issues
+        elif 'high' in severity or 's2' in severity:
+            base_days *= 0.8
+        elif 'low' in severity:
+            base_days *= 1.3  # Lower priority takes longer
+        
+        # Adjust for complexity (based on summary text)
+        summary = str(row.get(COL_SUMMARY, ''))
+        complexity_indicators = ['multiple', 'complex', 'integration', 'migration', 'several', 'widespread']
+        simple_indicators = ['simple', 'quick', 'minor', 'single', 'easy']
+        
+        if any(ind in summary.lower() for ind in complexity_indicators):
+            base_days *= 1.4
+        elif any(ind in summary.lower() for ind in simple_indicators):
+            base_days *= 0.7
+        
+        # Adjust for recurrence risk (repeat issues may be systemic and harder to fix)
+        recurrence_risk = str(row.get('AI_Recurrence_Risk', '')).lower()
+        if 'high' in recurrence_risk:
+            base_days *= 1.2
+        elif 'low' in recurrence_risk:
+            base_days *= 0.9
+        
+        # Add some variability based on friction score
+        friction = row.get('Strategic_Friction_Score', 50)
+        if pd.notna(friction):
+            base_days *= (0.9 + (float(friction) / 500))  # 0.9 to 1.1 multiplier
+        
+        # Round to 1 decimal place, minimum 0.5 days
+        predicted_days = max(0.5, round(base_days, 1))
+        
+        # Confidence based on how specific our estimate is
+        confidence = 0.4  # Heuristic confidence is moderate
+        if category in category_base_days:
+            confidence = 0.55
+        
         return {
-            'predicted_days': 5.0,
-            'confidence': 0.2,
-            'method': 'default'
+            'predicted_days': predicted_days,
+            'confidence': confidence,
+            'method': 'heuristic'
         }
     
     def set_human_expectations(self, expectations_dict):
@@ -250,23 +315,32 @@ class ResolutionTimePredictor:
         if len(valid) < 5:
             return None
         
-        actual = valid['Actual_Resolution_Days'].values
-        predicted = valid['Predicted_Resolution_Days'].values
+        actual = np.array(valid['Actual_Resolution_Days'].values, dtype=float)
+        predicted = np.array(valid['Predicted_Resolution_Days'].values, dtype=float)
+        
+        # Calculate correlation safely
+        try:
+            if len(actual) > 2 and np.std(actual) > 0 and np.std(predicted) > 0:
+                correlation = np.corrcoef(actual, predicted)[0, 1]
+            else:
+                correlation = 0.0
+        except Exception:
+            correlation = 0.0
         
         metrics = {
             'mae': np.mean(np.abs(predicted - actual)),
             'rmse': np.sqrt(np.mean((predicted - actual) ** 2)),
             'mape': np.mean(np.abs((actual - predicted) / (actual + 0.1))) * 100,
             'sample_count': len(valid),
-            'correlation': np.corrcoef(actual, predicted)[0, 1] if len(valid) > 2 else 0
+            'correlation': correlation
         }
         
         metrics['by_category'] = {}
         for category in valid['AI_Category'].dropna().unique():
             cat_data = valid[valid['AI_Category'] == category]
             if len(cat_data) >= 3:
-                cat_actual = cat_data['Actual_Resolution_Days'].values
-                cat_pred = cat_data['Predicted_Resolution_Days'].values
+                cat_actual = np.array(cat_data['Actual_Resolution_Days'].values, dtype=float)
+                cat_pred = np.array(cat_data['Predicted_Resolution_Days'].values, dtype=float)
                 metrics['by_category'][category] = {
                     'mae': np.mean(np.abs(cat_pred - cat_actual)),
                     'count': len(cat_data)

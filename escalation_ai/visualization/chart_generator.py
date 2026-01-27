@@ -45,7 +45,12 @@ class ChartGenerator:
     
     def __init__(self, output_dir: Optional[Path] = None):
         """Initialize chart generator with output directory."""
-        self.output_dir = output_dir or PLOT_DIR
+        if output_dir is None:
+            self.output_dir = PLOT_DIR
+        elif isinstance(output_dir, str):
+            self.output_dir = Path(output_dir)
+        else:
+            self.output_dir = output_dir
         self._setup_directories()
         self._setup_style()
         
@@ -147,7 +152,7 @@ class ChartGenerator:
         Shows cumulative friction by category with 80/20 analysis.
         """
         try:
-            fig, ax = plt.subplots(figsize=(12, 7))
+            fig, ax = plt.subplots(figsize=(14, 8))
             
             friction_data = data.get('friction_by_category', {})
             if not friction_data:
@@ -162,23 +167,29 @@ class ChartGenerator:
             values = list(values)
             categories = list(categories)
             
+            # Truncate long category names for display
+            cat_labels = [c[:18] + '..' if len(c) > 18 else c for c in categories]
+            
             # Calculate cumulative percentage
             total = sum(values)
             cumulative = np.cumsum(values) / total * 100
             
-            # Bar chart
-            bars = ax.bar(categories, values, color=self.COLORS['primary'], alpha=0.8, label='Friction Points')
+            # Bar chart with truncated labels
+            x_pos = np.arange(len(cat_labels))
+            bars = ax.bar(x_pos, values, color=self.COLORS['primary'], alpha=0.8, label='Friction Points')
             
             # Cumulative line
             ax2 = ax.twinx()
-            ax2.plot(categories, cumulative, color=self.COLORS['accent'], 
+            ax2.plot(x_pos, cumulative, color=self.COLORS['accent'], 
                     marker='o', linewidth=2.5, markersize=8, label='Cumulative %')
             ax2.axhline(y=80, color=self.COLORS['danger'], linestyle='--', 
                        linewidth=1.5, alpha=0.7, label='80% Threshold')
             
-            # Styling
+            # Styling - rotate x-axis labels
             ax.set_xlabel('Category')
             ax.set_ylabel('Friction Points', color=self.COLORS['primary'])
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels(cat_labels, rotation=45, ha='right', fontsize=9)
             ax2.set_ylabel('Cumulative %', color=self.COLORS['accent'])
             ax2.set_ylim(0, 105)
             
@@ -188,7 +199,7 @@ class ChartGenerator:
             # Value labels
             for bar, val in zip(bars, values):
                 ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5,
-                       f'{val}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+                       f'{val:.1f}', ha='center', va='bottom', fontsize=9, fontweight='bold')
             
             fig.tight_layout()
             
@@ -359,23 +370,32 @@ class ChartGenerator:
         Horizontal bar chart showing friction points by engineer.
         """
         try:
-            fig, ax = plt.subplots(figsize=(12, 8))
+            fig, ax = plt.subplots(figsize=(12, 10))
             
             engineer_data = data.get('friction_by_engineer', {})
             if not engineer_data:
-                engineer_data = {
-                    'Engineer A': 85, 'Engineer B': 72, 'Engineer C': 68,
-                    'Engineer D': 55, 'Engineer E': 45, 'Engineer F': 38
-                }
+                # No data available - create placeholder chart
+                ax.text(0.5, 0.5, 'No Engineer Data Available\n\nEnsure tickets_data_engineer_name column exists', 
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.axis('off')
+                plt.title('Engineer Friction Analysis\nData Not Available', 
+                         fontsize=14, fontweight='bold', pad=20)
+                filepath = self.chart_dirs['engineer'] / 'engineer_friction.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
             
             engineers = list(engineer_data.keys())
             friction = list(engineer_data.values())
             
-            # Sort by friction (highest first)
-            sorted_pairs = sorted(zip(friction, engineers), reverse=True)
+            # Sort by friction (highest first) and limit to top 15
+            sorted_pairs = sorted(zip(friction, engineers), reverse=True)[:15]
             friction, engineers = zip(*sorted_pairs)
             friction = list(friction)
-            engineers = list(engineers)
+            # Truncate long names
+            engineers = [e[:20] + '...' if len(e) > 20 else e for e in engineers]
             
             # Color by performance tier
             colors = []
@@ -392,30 +412,24 @@ class ChartGenerator:
             # Value labels
             for bar, val in zip(bars, friction):
                 ax.text(val + 1, bar.get_y() + bar.get_height()/2,
-                       f'{val}', va='center', fontsize=10, fontweight='bold')
+                       f'{val:.0f}', va='center', fontsize=9, fontweight='bold')
             
-            # Target line
-            target = data.get('friction_target', 50)
-            ax.axvline(x=target, color=self.COLORS['primary'], 
-                      linestyle='--', linewidth=2, label=f'Target ({target})')
+            ax.set_xlabel('Friction Score', fontsize=11)
+            ax.set_ylabel('Engineer', fontsize=11)
             
-            ax.set_xlabel('Friction Score')
-            ax.set_ylabel('Engineer')
-            ax.legend(loc='lower right')
-            
-            # Add legend for colors
+            # Add legend for colors - positioned at lower right to avoid data overlap
             legend_patches = [
                 mpatches.Patch(color=self.COLORS['danger'], label='High Risk (>70)'),
-                mpatches.Patch(color=self.COLORS['warning'], label='Medium Risk (50-70)'),
+                mpatches.Patch(color=self.COLORS['warning'], label='Medium (50-70)'),
                 mpatches.Patch(color=self.COLORS['success'], label='Low Risk (<50)'),
             ]
-            ax.legend(handles=legend_patches, loc='lower right')
+            ax.legend(handles=legend_patches, loc='lower right', fontsize=9, framealpha=0.9)
             
             plt.title('Engineer Friction Analysis\nPerformance Risk Assessment', 
-                     fontsize=14, fontweight='bold', pad=20)
+                     fontsize=14, fontweight='bold', pad=15)
             
             ax.invert_yaxis()
-            fig.tight_layout()
+            plt.subplots_adjust(left=0.25)  # Make room for engineer names
             
             filepath = self.chart_dirs['engineer'] / 'engineer_friction.png'
             plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
@@ -438,43 +452,52 @@ class ChartGenerator:
             
             learning_data = data.get('engineer_learning', {})
             if not learning_data:
-                learning_data = {
-                    'Engineer A': {'completed': 8, 'pending': 2},
-                    'Engineer B': {'completed': 6, 'pending': 4},
-                    'Engineer C': {'completed': 9, 'pending': 1},
-                    'Engineer D': {'completed': 5, 'pending': 5},
-                }
+                # No data available - create placeholder chart
+                ax.text(0.5, 0.5, 'No Engineer Learning Data Available\n\nEnsure tickets_data_engineer_name column exists', 
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.axis('off')
+                plt.title('Engineer Learning Progress\nData Not Available', 
+                         fontsize=14, fontweight='bold', pad=20)
+                filepath = self.chart_dirs['engineer'] / 'engineer_learning.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
             
             engineers = list(learning_data.keys())
             completed = [learning_data[e].get('completed', 0) for e in engineers]
             pending = [learning_data[e].get('pending', 0) for e in engineers]
             
+            # Truncate long names
+            engineers = [e[:15] + '...' if len(e) > 15 else e for e in engineers]
+            
             x = np.arange(len(engineers))
             width = 0.35
             
-            bars1 = ax.bar(x - width/2, completed, width, label='Completed',
+            bars1 = ax.bar(x - width/2, completed, width, label='Resolved',
                           color=self.COLORS['success'], alpha=0.85)
-            bars2 = ax.bar(x + width/2, pending, width, label='Pending',
+            bars2 = ax.bar(x + width/2, pending, width, label='Repeat Issues',
                           color=self.COLORS['warning'], alpha=0.85)
             
-            ax.set_xlabel('Engineer')
-            ax.set_ylabel('Modules')
+            ax.set_xlabel('Engineer', fontsize=11)
+            ax.set_ylabel('Issue Count', fontsize=11)
             ax.set_xticks(x)
-            ax.set_xticklabels(engineers, rotation=45, ha='right')
-            ax.legend()
+            ax.set_xticklabels(engineers, rotation=45, ha='right', fontsize=9)
+            ax.legend(loc='upper right', fontsize=10)
             
             # Value labels
             for bars in [bars1, bars2]:
                 for bar in bars:
                     height = bar.get_height()
                     if height > 0:
-                        ax.text(bar.get_x() + bar.get_width()/2, height + 0.1,
-                               f'{int(height)}', ha='center', va='bottom', fontsize=9)
+                        ax.text(bar.get_x() + bar.get_width()/2, height + 0.3,
+                               f'{int(height)}', ha='center', va='bottom', fontsize=8)
             
-            plt.title('Engineer Learning Progress\nTraining Module Completion', 
-                     fontsize=14, fontweight='bold', pad=20)
+            plt.title('Engineer Learning Progress\nIssue Resolution vs Repeat Patterns', 
+                     fontsize=14, fontweight='bold', pad=15)
             
-            fig.tight_layout()
+            plt.subplots_adjust(bottom=0.25)  # Make room for rotated labels
             
             filepath = self.chart_dirs['engineer'] / 'engineer_learning.png'
             plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
@@ -501,10 +524,18 @@ class ChartGenerator:
             
             lob_data = data.get('friction_by_lob', {})
             if not lob_data:
-                lob_data = {
-                    'Enterprise': 42, 'SMB': 35, 'Consumer': 28,
-                    'Government': 22, 'Healthcare': 18
-                }
+                # No data available - create placeholder chart
+                ax.text(0.5, 0.5, 'No LOB Data Available\n\nEnsure tickets_data_lob column exists', 
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.axis('off')
+                plt.title('LOB Friction Distribution\nData Not Available', 
+                         fontsize=14, fontweight='bold', pad=20)
+                filepath = self.chart_dirs['lob'] / 'lob_friction.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
             
             lobs = list(lob_data.keys())
             friction = list(lob_data.values())
@@ -516,21 +547,24 @@ class ChartGenerator:
             # Value labels
             for bar, val in zip(bars, friction):
                 ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5,
-                       f'{val}', ha='center', va='bottom', fontsize=11, fontweight='bold')
+                       f'{val:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
             
             # Average line
             avg = np.mean(friction)
             ax.axhline(y=avg, color=self.COLORS['accent'], linestyle='--', 
                       linewidth=2, label=f'Average ({avg:.1f})')
             
-            ax.set_xlabel('Line of Business')
-            ax.set_ylabel('Friction Score')
-            ax.legend(loc='upper right')
+            ax.set_xlabel('Line of Business', fontsize=11)
+            ax.set_ylabel('Friction Score', fontsize=11)
+            # Rotate x-axis labels if more than 4 items
+            if len(lobs) > 4:
+                plt.xticks(rotation=45, ha='right', fontsize=10)
+            ax.legend(loc='upper right', fontsize=10)
             
             plt.title('LOB Friction Distribution\nBusiness Unit Performance', 
-                     fontsize=14, fontweight='bold', pad=20)
+                     fontsize=14, fontweight='bold', pad=15)
             
-            fig.tight_layout()
+            plt.subplots_adjust(bottom=0.2)  # Make room for rotated labels
             
             filepath = self.chart_dirs['lob'] / 'lob_friction.png'
             plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
@@ -546,50 +580,73 @@ class ChartGenerator:
     def _chart_lob_matrix(self, data: Dict[str, Any]) -> Optional[str]:
         """
         Chart 08: LOB Performance Matrix
-        Bubble chart showing LOB by volume, friction, and resolution time.
+        Grouped bar chart showing LOB metrics: volume, friction, and resolution time.
         """
         try:
-            fig, ax = plt.subplots(figsize=(12, 8))
+            fig, ax = plt.subplots(figsize=(14, 8))
             
-            matrix_data = data.get('lob_matrix', {})
-            if not matrix_data:
-                matrix_data = {
-                    'Enterprise': {'volume': 150, 'friction': 42, 'resolution': 4.2},
-                    'SMB': {'volume': 200, 'friction': 35, 'resolution': 3.5},
-                    'Consumer': {'volume': 350, 'friction': 28, 'resolution': 2.8},
-                    'Government': {'volume': 80, 'friction': 22, 'resolution': 5.5},
-                }
+            # Use friction_by_lob and lob_counts to build matrix data
+            lob_friction = data.get('friction_by_lob', {})
+            lob_counts = data.get('lob_counts', {})
+            resolution_by_lob = data.get('resolution_by_lob', {})
             
-            lobs = list(matrix_data.keys())
-            volumes = [matrix_data[l]['volume'] for l in lobs]
-            frictions = [matrix_data[l]['friction'] for l in lobs]
-            resolutions = [matrix_data[l]['resolution'] for l in lobs]
+            if not lob_friction or not lob_counts:
+                # No data available - create placeholder chart
+                ax.text(0.5, 0.5, 'No LOB Matrix Data Available\n\nEnsure tickets_data_lob column exists', 
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.axis('off')
+                plt.title('LOB Performance Matrix\nData Not Available', 
+                         fontsize=14, fontweight='bold', pad=20)
+                filepath = self.chart_dirs['lob'] / 'lob_matrix.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
             
-            # Normalize bubble sizes
-            size_scale = np.array(volumes) / max(volumes) * 1000
+            # Build matrix from available data
+            lobs = list(lob_friction.keys())
+            volumes = np.array([lob_counts.get(lob, 0) for lob in lobs])
+            frictions = np.array([lob_friction.get(lob, 0) for lob in lobs])
+            resolutions = np.array([resolution_by_lob.get(lob, 5.0) for lob in lobs])
             
-            scatter = ax.scatter(frictions, resolutions, s=size_scale, 
-                                alpha=0.6, c=range(len(lobs)), 
-                                cmap='viridis', edgecolors='white', linewidth=2)
+            # Normalize all metrics to 0-100 scale for comparison
+            vol_norm = (volumes / max(volumes) * 100) if max(volumes) > 0 else volumes
+            fric_norm = frictions  # Already in a reasonable scale
+            res_norm = (resolutions / max(resolutions) * 100) if max(resolutions) > 0 else resolutions
             
-            # Labels
-            for i, lob in enumerate(lobs):
-                ax.annotate(lob, (frictions[i], resolutions[i]), 
-                           textcoords="offset points", xytext=(0, 10),
-                           ha='center', fontsize=10, fontweight='bold')
+            x = np.arange(len(lobs))
+            width = 0.25
             
-            ax.set_xlabel('Friction Score')
-            ax.set_ylabel('Avg Resolution Time (days)')
+            # Create grouped bars
+            bars1 = ax.bar(x - width, vol_norm, width, label='Volume (normalized)', 
+                          color=self.COLORS['primary'], alpha=0.85)
+            bars2 = ax.bar(x, fric_norm, width, label='Friction Score', 
+                          color=self.COLORS['warning'], alpha=0.85)
+            bars3 = ax.bar(x + width, res_norm, width, label='Resolution Time (normalized)', 
+                          color=self.COLORS['accent'], alpha=0.85)
             
-            # Size legend
-            ax.text(0.02, 0.98, 'Bubble Size = Ticket Volume', 
-                   transform=ax.transAxes, fontsize=9, verticalalignment='top',
-                   style='italic', color='gray')
+            ax.set_xlabel('Line of Business', fontsize=11)
+            ax.set_ylabel('Score (normalized)', fontsize=11)
+            ax.set_xticks(x)
+            ax.set_xticklabels(lobs, rotation=45, ha='right', fontsize=10)
+            
+            # Position legend outside chart
+            ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), fontsize=9, borderaxespad=0)
+            
+            # Add actual values as annotations
+            for i, (v, f, r) in enumerate(zip(volumes, frictions, resolutions)):
+                ax.annotate(f'Vol:{v}', xy=(x[i] - width, vol_norm[i] + 2), 
+                           ha='center', va='bottom', fontsize=7, rotation=90)
+                ax.annotate(f'{f:.0f}', xy=(x[i], fric_norm[i] + 2), 
+                           ha='center', va='bottom', fontsize=7, rotation=90)
+                ax.annotate(f'{r:.1f}d', xy=(x[i] + width, res_norm[i] + 2), 
+                           ha='center', va='bottom', fontsize=7, rotation=90)
             
             plt.title('LOB Performance Matrix\nVolume vs Friction vs Resolution', 
                      fontsize=14, fontweight='bold', pad=20)
             
-            fig.tight_layout()
+            plt.subplots_adjust(bottom=0.2, right=0.78)  # Room for labels and legend
             
             filepath = self.chart_dirs['lob'] / 'lob_matrix.png'
             plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
@@ -601,47 +658,86 @@ class ChartGenerator:
             print(f"Error generating LOB matrix chart: {e}")
             plt.close('all')
             return None
-    
+
     def _chart_lob_categories(self, data: Dict[str, Any]) -> Optional[str]:
         """
         Chart 09: LOB Category Breakdown
         Stacked bar chart showing issue categories by LOB.
         """
         try:
-            fig, ax = plt.subplots(figsize=(12, 7))
+            fig, ax = plt.subplots(figsize=(14, 8))
             
-            category_data = data.get('lob_categories', {})
+            # Use lob_by_category from analysis data
+            category_data = data.get('lob_by_category', {})
             if not category_data:
-                category_data = {
-                    'Enterprise': {'Network': 20, 'Billing': 12, 'Hardware': 10},
-                    'SMB': {'Network': 15, 'Billing': 15, 'Hardware': 5},
-                    'Consumer': {'Network': 10, 'Billing': 10, 'Hardware': 8},
-                }
+                # No data available - create placeholder chart
+                ax.text(0.5, 0.5, 'No LOB Category Data Available\n\nEnsure tickets_data_lob column exists', 
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.axis('off')
+                plt.title('LOB Category Breakdown\nData Not Available', 
+                         fontsize=14, fontweight='bold', pad=20)
+                filepath = self.chart_dirs['lob'] / 'lob_categories.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
             
-            lobs = list(category_data.keys())
-            categories = list(set(cat for lob_cats in category_data.values() for cat in lob_cats.keys()))
+            # Aggregate smaller categories into "Other" to avoid legend overflow
+            # Calculate total per category
+            cat_totals = {}
+            for cat, lob_data in category_data.items():
+                cat_totals[cat] = sum(lob_data.values())
+            
+            # Sort by total and keep top 8, rest goes to "Other"
+            sorted_cats = sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)
+            top_cats = [c[0] for c in sorted_cats[:8]]
+            other_cats = [c[0] for c in sorted_cats[8:]]
+            
+            # Build new category_data with "Other" aggregated
+            lobs = set()
+            for cat_data in category_data.values():
+                lobs.update(cat_data.keys())
+            lobs = list(lobs)
+            
+            # Truncate long category names for display
+            cat_labels = [c[:15] + '..' if len(c) > 15 else c for c in top_cats]
+            if other_cats:
+                cat_labels.append('Other')
             
             x = np.arange(len(lobs))
             width = 0.6
             
             bottom = np.zeros(len(lobs))
-            colors = plt.cm.Set2(np.linspace(0, 1, len(categories)))
+            colors = plt.cm.Set2(np.linspace(0, 1, len(cat_labels)))
             
-            for i, category in enumerate(categories):
-                values = [category_data[lob].get(category, 0) for lob in lobs]
-                ax.bar(x, values, width, label=category, bottom=bottom, color=colors[i])
-                bottom += values
+            for i, category in enumerate(top_cats):
+                cat_lob_data = category_data.get(category, {})
+                values = [cat_lob_data.get(lob, 0) for lob in lobs]
+                ax.bar(x, values, width, label=cat_labels[i], bottom=bottom, color=colors[i])
+                bottom += np.array(values)
             
-            ax.set_xlabel('Line of Business')
-            ax.set_ylabel('Issue Count')
+            # Add "Other" bar if there are aggregated categories
+            if other_cats:
+                other_values = np.zeros(len(lobs))
+                for cat in other_cats:
+                    cat_lob_data = category_data.get(cat, {})
+                    for j, lob in enumerate(lobs):
+                        other_values[j] += cat_lob_data.get(lob, 0)
+                ax.bar(x, other_values, width, label='Other', bottom=bottom, color=colors[-1])
+            
+            ax.set_xlabel('Line of Business', fontsize=11)
+            ax.set_ylabel('Issue Count', fontsize=11)
             ax.set_xticks(x)
-            ax.set_xticklabels(lobs)
-            ax.legend(title='Category', loc='upper right')
+            ax.set_xticklabels(lobs, rotation=45, ha='right', fontsize=10)
+            # Place legend outside the chart with controlled size
+            ax.legend(title='Category', loc='upper left', fontsize=9, 
+                     bbox_to_anchor=(1.02, 1), borderaxespad=0, ncol=1)
             
             plt.title('LOB Category Breakdown\nIssue Distribution by Business Unit', 
-                     fontsize=14, fontweight='bold', pad=20)
+                     fontsize=14, fontweight='bold', pad=15)
             
-            fig.tight_layout()
+            plt.subplots_adjust(right=0.78, bottom=0.18)  # Make room for legend and labels
             
             filepath = self.chart_dirs['lob'] / 'lob_categories.png'
             plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
@@ -829,17 +925,36 @@ class ChartGenerator:
         Shows predicted vs actual recurrence rates.
         """
         try:
-            fig, ax = plt.subplots(figsize=(11, 7))
+            fig, ax = plt.subplots(figsize=(12, 7))
             
             recurrence_data = data.get('ai_recurrence', {})
-            if not recurrence_data:
-                recurrence_data = {
-                    'categories': ['Network', 'Billing', 'Hardware', 'Software', 'Other'],
-                    'predicted': [25, 18, 22, 15, 8],
-                    'actual': [23, 20, 19, 16, 10],
-                }
+            
+            # Check if we have valid data (non-empty with non-zero values)
+            has_valid_data = (recurrence_data and 
+                             recurrence_data.get('categories') and
+                             recurrence_data.get('predicted') and
+                             any(v > 0 for v in recurrence_data.get('predicted', [])))
+            
+            if not has_valid_data:
+                # Create a message indicating data not available
+                ax.text(0.5, 0.5, 'AI Recurrence Data Not Available\n\n'
+                       'Ensure AI_Recurrence_Probability column\nis populated with non-zero values', 
+                       ha='center', va='center', fontsize=12, transform=ax.transAxes,
+                       bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.axis('off')
+                plt.title('AI Recurrence Prediction\nPredicted vs Actual Rates', 
+                         fontsize=14, fontweight='bold', pad=15)
+                filepath = self.chart_dirs['predictive'] / 'ai_recurrence.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
             
             categories = recurrence_data.get('categories', [])
+            # Truncate long category names
+            cat_labels = [c[:15] + '..' if len(c) > 15 else c for c in categories]
+            
             predicted = recurrence_data.get('predicted', [])
             actual = recurrence_data.get('actual', [])
             
@@ -851,23 +966,24 @@ class ChartGenerator:
             bars2 = ax.bar(x + width/2, actual, width, label='Actual',
                           color=self.COLORS['accent'], alpha=0.85)
             
-            ax.set_xlabel('Category')
-            ax.set_ylabel('Recurrence Rate (%)')
+            ax.set_xlabel('Category', fontsize=11)
+            ax.set_ylabel('Recurrence Rate (%)', fontsize=11)
             ax.set_xticks(x)
-            ax.set_xticklabels(categories, rotation=45, ha='right')
-            ax.legend()
+            ax.set_xticklabels(cat_labels, rotation=45, ha='right', fontsize=9)
+            ax.legend(loc='upper right', fontsize=10)
             
             # Value labels
             for bars in [bars1, bars2]:
                 for bar in bars:
                     height = bar.get_height()
-                    ax.text(bar.get_x() + bar.get_width()/2, height + 0.3,
-                           f'{height}%', ha='center', va='bottom', fontsize=9)
+                    if height > 0:
+                        ax.text(bar.get_x() + bar.get_width()/2, height + 0.5,
+                               f'{height:.0f}%', ha='center', va='bottom', fontsize=8)
             
             plt.title('AI Recurrence Prediction\nPredicted vs Actual Rates', 
-                     fontsize=14, fontweight='bold', pad=20)
+                     fontsize=14, fontweight='bold', pad=15)
             
-            fig.tight_layout()
+            plt.subplots_adjust(bottom=0.2)  # Room for rotated labels
             
             filepath = self.chart_dirs['predictive'] / 'ai_recurrence.png'
             plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
@@ -900,9 +1016,12 @@ class ChartGenerator:
                 }
             
             categories = list(resolution_data.keys())
+            # Truncate long category names
+            cat_labels = [c[:15] + '..' if len(c) > 15 else c for c in categories]
+            
             data_arrays = [resolution_data[cat] for cat in categories]
             
-            bp = ax.boxplot(data_arrays, labels=categories, patch_artist=True,
+            bp = ax.boxplot(data_arrays, labels=cat_labels, patch_artist=True,
                            medianprops={'color': 'black', 'linewidth': 2})
             
             # Color boxes
@@ -911,19 +1030,20 @@ class ChartGenerator:
                 patch.set_facecolor(color)
                 patch.set_alpha(0.7)
             
-            ax.set_xlabel('Category')
-            ax.set_ylabel('Resolution Time (days)')
+            ax.set_xlabel('Category', fontsize=11)
+            ax.set_ylabel('Resolution Time (days)', fontsize=11)
+            plt.xticks(rotation=45, ha='right', fontsize=9)
             
             # Target line
             target = data.get('resolution_target', 3)
             ax.axhline(y=target, color=self.COLORS['success'], linestyle='--',
                       linewidth=2, label=f'Target ({target} days)')
-            ax.legend(loc='upper right')
+            ax.legend(loc='upper right', fontsize=10)
             
             plt.title('Resolution Time Distribution\nPredicted Time by Category', 
-                     fontsize=14, fontweight='bold', pad=20)
+                     fontsize=14, fontweight='bold', pad=15)
             
-            fig.tight_layout()
+            plt.subplots_adjust(bottom=0.2)  # Room for rotated labels
             
             filepath = self.chart_dirs['predictive'] / 'resolution_time.png'
             plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
@@ -946,7 +1066,7 @@ class ChartGenerator:
         Stacked bar showing costs and potential savings.
         """
         try:
-            fig, ax = plt.subplots(figsize=(12, 7))
+            fig, ax = plt.subplots(figsize=(14, 8))
             
             financial_data = data.get('financial_impact', {})
             if not financial_data:
@@ -958,6 +1078,9 @@ class ChartGenerator:
                 }
             
             categories = financial_data.get('categories', [])
+            # Truncate long category names
+            cat_labels = [c[:15] + '..' if len(c) > 15 else c for c in categories]
+            
             direct = np.array(financial_data.get('direct_cost', [])) / 1000  # Convert to K
             indirect = np.array(financial_data.get('indirect_cost', [])) / 1000
             savings = np.array(financial_data.get('potential_savings', [])) / 1000
@@ -972,31 +1095,35 @@ class ChartGenerator:
             bars3 = ax.bar(x + width, savings, width, label='Potential Savings',
                           color=self.COLORS['success'], alpha=0.85)
             
-            ax.set_xlabel('Category')
-            ax.set_ylabel('Amount ($K)')
+            ax.set_xlabel('Category', fontsize=11)
+            ax.set_ylabel('Amount ($K)', fontsize=11)
             ax.set_xticks(x)
-            ax.set_xticklabels(categories)
-            ax.legend(loc='upper right')
+            ax.set_xticklabels(cat_labels, rotation=45, ha='right', fontsize=9)
+            
+            # Position legend outside chart area to avoid overlap
+            ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1), fontsize=9, 
+                     borderaxespad=0, framealpha=0.9)
             
             # Value labels
             for bars in [bars1, bars2, bars3]:
                 for bar in bars:
                     height = bar.get_height()
-                    ax.text(bar.get_x() + bar.get_width()/2, height + 0.5,
-                           f'${height:.0f}K', ha='center', va='bottom', fontsize=8)
+                    if height > 0:
+                        ax.text(bar.get_x() + bar.get_width()/2, height + 0.5,
+                               f'${height:.0f}K', ha='center', va='bottom', fontsize=7)
             
-            # Total savings annotation
+            # Total savings annotation - positioned at top left inside chart
             total_savings = savings.sum()
             ax.annotate(f'Total Potential Savings: ${total_savings:.0f}K',
-                       xy=(0.98, 0.98), xycoords='axes fraction',
-                       ha='right', va='top', fontsize=11, fontweight='bold',
+                       xy=(0.02, 0.98), xycoords='axes fraction',
+                       ha='left', va='top', fontsize=10, fontweight='bold',
                        color=self.COLORS['success'],
                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
             
             plt.title('Financial Impact Analysis\nCost Breakdown & Savings Opportunity', 
-                     fontsize=14, fontweight='bold', pad=20)
+                     fontsize=14, fontweight='bold', pad=15)
             
-            fig.tight_layout()
+            plt.subplots_adjust(bottom=0.2, right=0.82)  # Room for rotated labels and legend
             
             filepath = self.chart_dirs['financial'] / 'financial_impact.png'
             plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')

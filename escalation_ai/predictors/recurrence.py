@@ -192,17 +192,31 @@ class RecurrencePredictor:
         y_pred = self.model.predict(X_test)
         y_proba = self.model.predict_proba(X_test)[:, 1]
         
+        # Convert to numpy for metrics calculation (GPU compatibility)
+        if hasattr(y_pred, 'get'):
+            y_pred = y_pred.get()  # cupy to numpy
+        if hasattr(y_proba, 'get'):
+            y_proba = y_proba.get()
+        y_test_np = np.array(y_test.values)
+        
         # Calculate metrics
         try:
-            auc_score = roc_auc_score(y_test, y_proba) if len(y_test.unique()) > 1 else 0.5
+            auc_score = roc_auc_score(y_test_np, y_proba) if len(np.unique(y_test_np)) > 1 else 0.5
         except Exception:
             auc_score = 0.5
         
-        accuracy = (y_pred == y_test).mean()
+        accuracy = (y_pred == y_test_np).mean()
         
-        # Feature importance
-        feature_importance = dict(zip(feature_names, self.model.feature_importances_))
-        top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:5]
+        # Feature importance (may not be available for all model types)
+        try:
+            feature_imp = self.model.feature_importances_
+            if hasattr(feature_imp, 'get'):
+                feature_imp = feature_imp.get()
+            feature_importance = dict(zip(feature_names, feature_imp))
+            top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:5]
+        except (AttributeError, Exception) as e:
+            logger.debug(f"Feature importances not available: {e}")
+            top_features = [(f, 0.0) for f in feature_names[:5]]
         
         self.model_metrics = {
             'accuracy': accuracy,
@@ -243,7 +257,9 @@ class RecurrencePredictor:
         df['AI_Recurrence_Confidence'] = 'Low'
         
         if not self.is_trained:
-            logger.info("[Recurrence Predictor] Model not trained, skipping predictions")
+            # Use heuristic-based prediction when model isn't trained
+            logger.info("[Recurrence Predictor] Model not trained, using heuristic prediction")
+            df = self._predict_heuristic(df)
             return df
         
         try:
@@ -287,10 +303,94 @@ class RecurrencePredictor:
             logger.info(f"  → Average recurrence probability: {probabilities.mean():.1%}")
             
         except Exception as e:
-            logger.warning(f"[Recurrence Predictor] Prediction failed: {e}")
+            logger.warning(f"[Recurrence Predictor] ML prediction failed: {e}")
+            logger.info("[Recurrence Predictor] Falling back to heuristic prediction")
+            df = self._predict_heuristic(df)
         
         return df
     
+    def _predict_heuristic(self, df):
+        """
+        Heuristic-based recurrence prediction when ML model isn't trained.
+        Uses available signals like Learning_Status, PM risk, friction score, etc.
+        """
+        from ..core.config import COL_RECURRENCE_RISK
+        
+        def calculate_risk_score(row):
+            """Calculate recurrence risk score (0-1) based on multiple factors."""
+            score = 0.3  # Base probability
+            
+            # Factor 1: Learning Status (repeat offender indicator)
+            learning = str(row.get('Learning_Status', '')).upper()
+            if 'REPEAT' in learning:
+                score += 0.25
+            elif 'POSSIBLE' in learning:
+                score += 0.15
+            
+            # Factor 2: PM-reported recurrence risk
+            pm_risk = str(row.get(COL_RECURRENCE_RISK, row.get('tickets_data_risk_for_recurrence_pm', ''))).lower()
+            if 'high' in pm_risk:
+                score += 0.3
+            elif 'medium' in pm_risk or 'moderate' in pm_risk:
+                score += 0.15
+            elif 'low' in pm_risk:
+                score -= 0.1
+            
+            # Factor 3: Similar ticket count (more similar tickets = higher risk pattern)
+            similar_count = row.get('Similar_Ticket_Count', 0)
+            if pd.notna(similar_count) and similar_count > 0:
+                score += min(0.2, int(similar_count) * 0.04)
+            
+            # Factor 4: Strategic Friction Score (higher friction = systemic issues)
+            friction = row.get('Strategic_Friction_Score', 0)
+            if pd.notna(friction):
+                score += min(0.15, float(friction) / 100 * 0.15)
+            
+            # Factor 5: Severity (higher severity issues tend to recur more)
+            severity = str(row.get('Severity_Norm', row.get('tickets_data_severity', ''))).lower()
+            if 'critical' in severity or 'sev1' in severity or 's1' in severity:
+                score += 0.1
+            elif 'high' in severity or 'sev2' in severity or 's2' in severity:
+                score += 0.05
+            
+            # Factor 6: Category risk (some categories have higher recurrence)
+            category = str(row.get('AI_Category', '')).lower()
+            high_risk_categories = ['oss', 'system', 'process', 'configuration']
+            if any(cat in category for cat in high_risk_categories):
+                score += 0.05
+            
+            return min(1.0, max(0.0, score))  # Clamp to 0-1
+        
+        def categorize_risk(prob):
+            if prob >= 0.7:
+                return '🔴 High (>70%)'
+            elif prob >= 0.5:
+                return '🟠 Elevated (50-70%)'
+            elif prob >= 0.3:
+                return '🟡 Moderate (30-50%)'
+            else:
+                return '🟢 Low (<30%)'
+        
+        def get_confidence(prob):
+            # Heuristic predictions have medium confidence
+            if prob >= 0.7 or prob <= 0.2:
+                return 'Medium'
+            else:
+                return 'Low'
+        
+        # Calculate scores for all rows
+        df['AI_Recurrence_Probability'] = df.apply(calculate_risk_score, axis=1)
+        df['AI_Recurrence_Risk'] = df['AI_Recurrence_Probability'].apply(categorize_risk)
+        df['AI_Recurrence_Confidence'] = df['AI_Recurrence_Probability'].apply(get_confidence)
+        
+        # Log summary
+        high_risk = (df['AI_Recurrence_Probability'] >= 0.5).sum()
+        logger.info(f"[Recurrence Predictor] Heuristic predictions complete:")
+        logger.info(f"  → {high_risk}/{len(df)} tickets flagged as elevated/high risk (≥50%)")
+        logger.info(f"  → Average risk probability: {df['AI_Recurrence_Probability'].mean():.1%}")
+        
+        return df
+
     def save(self, model_path=None, encoders_path=None):
         """Save trained model and encoders to disk."""
         model_path = model_path or RECURRENCE_MODEL_PATH
@@ -372,8 +472,8 @@ def apply_recurrence_predictions(df, train_if_possible=True):
     Apply recurrence predictions to the dataframe.
     
     This function:
-    1. Tries to load a pre-trained model
-    2. If not available and data permits, trains a new model
+    1. Derives Recurrence_Actual from recidivism analysis (Learning_Status)
+    2. Tries to load a pre-trained model or trains a new one
     3. Applies predictions to all tickets
     
     Args:
@@ -387,19 +487,68 @@ def apply_recurrence_predictions(df, train_if_possible=True):
     
     logger.info("[Recurrence Predictor] Initializing AI-based recurrence prediction...")
     
+    # Step 1: Derive Recurrence_Actual from recidivism analysis if not already present
+    if 'Recurrence_Actual' not in df.columns:
+        df = _derive_recurrence_labels(df)
+    
     # Try to load existing model
     if recurrence_predictor.load():
         logger.info("  Using pre-trained model")
     elif train_if_possible:
         # Train new model if we have recurrence data
         if 'Recurrence_Actual' in df.columns:
-            metrics = recurrence_predictor.train(df)
-            if 'error' not in metrics:
-                recurrence_predictor.save()
+            # Check we have both Yes and No labels
+            label_counts = df['Recurrence_Actual'].value_counts()
+            if 'Yes' in label_counts and 'No' in label_counts:
+                if label_counts['Yes'] >= 10 and label_counts['No'] >= 10:
+                    metrics = recurrence_predictor.train(df)
+                    if 'error' not in metrics:
+                        recurrence_predictor.save()
+                else:
+                    logger.info(f"  Insufficient balanced training data (Yes: {label_counts.get('Yes', 0)}, No: {label_counts.get('No', 0)})")
+            else:
+                logger.info("  Training data lacks both Yes/No labels - using heuristic prediction")
         else:
             logger.info("  No historical recurrence data - will train on next run with outcomes")
     
     # Apply predictions
     df = recurrence_predictor.predict(df)
+    
+    return df
+
+
+def _derive_recurrence_labels(df):
+    """
+    Derive Recurrence_Actual labels from recidivism analysis results.
+    
+    Uses Learning_Status (from Phase 3 recidivism analysis) to determine
+    which tickets represent actual recurrences vs. new issues.
+    """
+    df = df.copy()
+    
+    # Initialize as 'No' (not a recurrence)
+    df['Recurrence_Actual'] = 'No'
+    
+    # Mark as 'Yes' based on recidivism analysis findings
+    if 'Learning_Status' in df.columns:
+        # REPEAT OFFENSE = confirmed recurrence
+        repeat_mask = df['Learning_Status'].astype(str).str.contains('REPEAT', case=False, na=False)
+        df.loc[repeat_mask, 'Recurrence_Actual'] = 'Yes'
+        
+        # POSSIBLE REPEAT = likely recurrence
+        possible_mask = df['Learning_Status'].astype(str).str.contains('POSSIBLE', case=False, na=False)
+        df.loc[possible_mask, 'Recurrence_Actual'] = 'Yes'
+        
+        yes_count = repeat_mask.sum() + possible_mask.sum()
+        no_count = len(df) - yes_count
+        logger.info(f"  Derived recurrence labels: {yes_count} recurrences, {no_count} new issues")
+    
+    # Also consider high recidivism scores if available
+    if 'Recidivism_Score' in df.columns:
+        high_score_mask = df['Recidivism_Score'] >= 0.7
+        additional = high_score_mask & (df['Recurrence_Actual'] == 'No')
+        df.loc[additional, 'Recurrence_Actual'] = 'Yes'
+        if additional.sum() > 0:
+            logger.info(f"  Additional {additional.sum()} tickets marked as recurrence from high similarity scores")
     
     return df

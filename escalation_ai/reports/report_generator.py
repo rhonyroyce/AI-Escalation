@@ -11,11 +11,13 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.drawing.image import Image as XLImage
 import pandas as pd
 
 from ..core.config import (
     REPORT_TITLE, REPORT_VERSION, GEN_MODEL, MC_BLUE,
-    COL_SUMMARY, COL_SEVERITY, COL_ORIGIN, COL_TYPE, COL_DATETIME
+    COL_SUMMARY, COL_SEVERITY, COL_ORIGIN, COL_TYPE, COL_DATETIME,
+    COL_ENGINEER, COL_LOB
 )
 from ..visualization import ChartGenerator
 
@@ -125,7 +127,7 @@ class ExcelReportWriter:
             ws.column_dimensions[col].width = 12
     
     def write_dashboard(self, df, chart_paths):
-        """Write the Dashboard sheet with chart references organized by category."""
+        """Write the Dashboard sheet with embedded chart images in a grid layout."""
         ws = self.wb.create_sheet("Dashboard", 1)
         ws.sheet_view.showGridLines = False
         
@@ -133,60 +135,125 @@ class ExcelReportWriter:
         ws['A1'].font = self.title_font
         ws.merge_cells('A1:L1')
         
-        ws['A3'] = "📊 Charts are organized by category in the plots/ folder."
+        ws['A3'] = "📊 Strategic Visual Analysis - Embedded Charts"
         ws['A3'].font = Font(size=11, italic=True, color="666666")
         ws.merge_cells('A3:L3')
         
-        # List chart paths by category
+        # Category display order and labels
+        category_labels = {
+            'risk': '📊 Risk Analysis',
+            'engineer': '👷 Engineer Performance',
+            'lob': '🏢 Line of Business',
+            'analysis': '🔍 Root Cause Analysis',
+            'predictive': '🤖 Predictive Models',
+            'financial': '💰 Financial Impact',
+        }
+        
+        # Grid layout settings
+        img_width = 380  # pixels - smaller to fit 3 per row
+        img_height = 228  # 60% aspect ratio
+        cols_per_row = 3  # 3 charts per row
+        col_positions = ['A', 'F', 'K']  # Column positions for each chart in row
+        rows_per_chart = 15  # Excel rows per chart height
+        header_gap_rows = 2  # Gap between header and first chart row
+        
+        # Set column widths to accommodate images
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O']:
+            ws.column_dimensions[col].width = 8
+        
+        current_row = 5
+        images_embedded = 0
+        
         if chart_paths and isinstance(chart_paths, dict):
-            row = 5
-            category_labels = {
-                'risk': '📊 Risk Analysis Charts (01_risk/)',
-                'engineer': '👷 Engineer Performance Charts (02_engineer/)',
-                'lob': '🏢 Line of Business Charts (03_lob/)',
-                'analysis': '🔍 Root Cause Analysis Charts (04_analysis/)',
-                'predictive': '🤖 Predictive Model Charts (05_predictive/)',
-                'financial': '💰 Financial Impact Charts (06_financial/)',
-            }
-            
             for category, label in category_labels.items():
                 if category in chart_paths and chart_paths[category]:
-                    ws[f'A{row}'] = label
-                    ws[f'A{row}'].font = Font(bold=True, size=11, color="003366")
-                    row += 1
+                    # Write category header with gap below
+                    ws[f'A{current_row}'] = label
+                    ws[f'A{current_row}'].font = Font(bold=True, size=14, color="003366")
+                    ws.row_dimensions[current_row].height = 25
+                    ws.merge_cells(f'A{current_row}:O{current_row}')
+                    current_row += header_gap_rows  # Gap after header
                     
-                    for path in chart_paths[category]:
-                        filename = os.path.basename(path)
-                        ws[f'A{row}'] = f"  • {filename}"
-                        row += 1
-                    row += 1  # Extra space between categories
+                    # Embed charts in grid layout
+                    chart_list = chart_paths[category]
+                    for i, chart_path in enumerate(chart_list):
+                        if os.path.exists(chart_path):
+                            try:
+                                img = XLImage(chart_path)
+                                img.width = img_width
+                                img.height = img_height
+                                
+                                # Calculate grid position
+                                col_idx = i % cols_per_row
+                                row_offset = (i // cols_per_row) * rows_per_chart
+                                
+                                # Place image at grid position
+                                cell_ref = f'{col_positions[col_idx]}{current_row + row_offset}'
+                                ws.add_image(img, cell_ref)
+                                images_embedded += 1
+                                
+                            except Exception as e:
+                                logger.warning(f"Failed to embed chart {chart_path}: {e}")
+                    
+                    # Calculate total rows used for this category
+                    num_rows_of_charts = (len(chart_list) + cols_per_row - 1) // cols_per_row
+                    current_row += num_rows_of_charts * rows_per_chart + 2  # +2 for gap between categories
+        
         elif chart_paths and isinstance(chart_paths, list):
-            # Fallback for list format
-            ws['A5'] = "Available Charts:"
-            ws['A5'].font = Font(bold=True, size=12)
-            for i, path in enumerate(chart_paths[:15]):
-                filename = os.path.basename(path)
-                ws[f'A{6+i}'] = f"  • {filename}"
+            # Fallback for list format - also use grid
+            for i, path in enumerate(chart_paths[:18]):
+                if os.path.exists(path):
+                    try:
+                        img = XLImage(path)
+                        img.width = img_width
+                        img.height = img_height
+                        
+                        col_idx = i % cols_per_row
+                        row_offset = (i // cols_per_row) * rows_per_chart
+                        cell_ref = f'{col_positions[col_idx]}{5 + row_offset}'
+                        ws.add_image(img, cell_ref)
+                        images_embedded += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to embed {path}: {e}")
+        
+        if images_embedded == 0:
+            ws['A5'] = "No charts were generated or embedded."
         else:
-            ws['A5'] = "No charts were generated."
+            logger.info(f"Embedded {images_embedded} chart images in Dashboard sheet")
     
-    def write_scored_data(self, df):
-        """Write the Scored Data sheet with conditional formatting."""
+    def write_scored_data(self, df, df_raw=None):
+        """
+        Write the Scored Data sheet with all raw data columns + AI-generated columns.
+        This is now the main data sheet combining input data and AI results.
+        """
         ws = self.wb.create_sheet("Scored Data", 2)
         
-        # Select key columns
-        key_cols = [
-            COL_SUMMARY, 'AI_Category', 'AI_Confidence', 'Severity_Norm', 
-            'Origin_Norm', 'Strategic_Friction_Score', 'Learning_Status',
-            'Financial_Impact', 'AI_Recurrence_Risk', 'Similar_Ticket_Count'
-        ]
-        
-        available_cols = [c for c in key_cols if c in df.columns]
-        
-        if available_cols:
-            export_df = df[available_cols].copy()
+        # If we have raw data, merge AI columns into it
+        if df_raw is not None and len(df_raw) == len(df):
+            export_df = df_raw.copy()
+            
+            # AI-generated columns to append
+            ai_cols = [
+                'AI_Category', 'AI_Confidence', 'Severity_Norm', 'Origin_Norm',
+                'Strategic_Friction_Score', 'Learning_Status', 'Financial_Impact',
+                'AI_Recurrence_Probability', 'AI_Recurrence_Risk', 'AI_Recurrence_Confidence',
+                'Similar_Ticket_Count', 'Similar_Ticket_IDs',
+                'Inconsistent_Resolution', 'Predicted_Resolution_Days',
+                'Resolution_Prediction_Confidence', 'AI_Root_Cause'
+            ]
+            
+            # Add each AI column that exists in scored df but not in raw
+            for col in ai_cols:
+                if col in df.columns and col not in export_df.columns:
+                    export_df[col] = df[col].values
         else:
+            # Fallback: use the scored df as-is
             export_df = df.copy()
+        
+        # Ensure Identity is the first column if it exists
+        if 'Identity' in export_df.columns:
+            cols = ['Identity'] + [c for c in export_df.columns if c != 'Identity']
+            export_df = export_df[cols]
         
         # Write header
         for col_idx, col_name in enumerate(export_df.columns, 1):
@@ -202,12 +269,23 @@ class ExcelReportWriter:
                     cell.value = ""
                 elif isinstance(value, float):
                     cell.value = round(value, 2)
+                elif isinstance(value, (list, dict)):
+                    cell.value = str(value)[:1000]
                 else:
                     cell.value = str(value)[:1000]  # Truncate long text
         
         # Auto-fit columns (approximate)
-        for col_idx, col_name in enumerate(export_df.columns, 1):
-            ws.column_dimensions[chr(64 + col_idx) if col_idx <= 26 else 'AA'].width = 20
+        for col_idx in range(1, len(export_df.columns) + 1):
+            col_letter = self._get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = 18
+    
+    def _get_column_letter(self, col_idx):
+        """Convert column index to Excel column letter (1=A, 27=AA, etc.)."""
+        result = ""
+        while col_idx > 0:
+            col_idx, remainder = divmod(col_idx - 1, 26)
+            result = chr(65 + remainder) + result
+        return result
     
     def write_resolution_time_sheet(self, df):
         """Write Resolution Time Analysis sheet."""
@@ -271,8 +349,13 @@ class ExcelReportWriter:
                     cell.value = str(value)
     
     def write_raw_data(self, df_raw):
-        """Write Raw Data backup sheet."""
+        """Write Raw Data backup sheet with Identity as primary key."""
         ws = self.wb.create_sheet("Raw Data", -1)
+        
+        # Ensure Identity is the first column if it exists
+        if 'Identity' in df_raw.columns:
+            cols = ['Identity'] + [c for c in df_raw.columns if c != 'Identity']
+            df_raw = df_raw[cols]
         
         # Write header
         for col_idx, col_name in enumerate(df_raw.columns, 1):
@@ -291,7 +374,8 @@ class ExcelReportWriter:
     
     def generate_charts(self, df):
         """Generate all visualization charts organized by category."""
-        self.chart_generator = ChartGenerator(self.output_dir)
+        # Use default PLOT_DIR for charts (not output_dir which is report location)
+        self.chart_generator = ChartGenerator()
         
         # Build analysis data from DataFrame for chart generation
         analysis_data = self._build_analysis_data(df)
@@ -441,15 +525,37 @@ class ExcelReportWriter:
                 origin_counts = df[COL_ORIGIN].value_counts()
                 analysis_data['risk_by_origin'] = origin_counts.to_dict()
             
-            # Friction by engineer (if available)
-            if 'Assigned_Engineer' in df.columns and 'Strategic_Friction_Score' in df.columns:
-                eng_friction = df.groupby('Assigned_Engineer')['Strategic_Friction_Score'].mean()
+            # Friction by engineer - use actual column name
+            engineer_col = None
+            for col in ['tickets_data_engineer_name', 'Assigned_Engineer', 'Engineer', COL_ENGINEER]:
+                if col in df.columns:
+                    engineer_col = col
+                    break
+            
+            if engineer_col and 'Strategic_Friction_Score' in df.columns:
+                eng_friction = df.groupby(engineer_col)['Strategic_Friction_Score'].mean()
+                # Filter out empty/null values and limit to top 15
+                eng_friction = eng_friction[eng_friction.index.notna() & (eng_friction.index != '')]
+                eng_friction = eng_friction.nlargest(15)
                 analysis_data['friction_by_engineer'] = eng_friction.to_dict()
             
-            # Friction by LOB
-            if 'LOB' in df.columns and 'Strategic_Friction_Score' in df.columns:
-                lob_friction = df.groupby('LOB')['Strategic_Friction_Score'].mean()
+            # Friction by LOB - use actual column name
+            lob_col = None
+            for col in ['tickets_data_lob', 'LOB', COL_LOB]:
+                if col in df.columns:
+                    lob_col = col
+                    break
+            
+            if lob_col and 'Strategic_Friction_Score' in df.columns:
+                lob_friction = df.groupby(lob_col)['Strategic_Friction_Score'].mean()
+                # Filter out empty/null values
+                lob_friction = lob_friction[lob_friction.index.notna() & (lob_friction.index != '') & (lob_friction.index != '0')]
                 analysis_data['friction_by_lob'] = lob_friction.to_dict()
+                
+                # Also add LOB counts for other charts
+                lob_counts = df[lob_col].value_counts()
+                lob_counts = lob_counts[lob_counts.index.notna() & (lob_counts.index != '') & (lob_counts.index != '0')]
+                analysis_data['lob_counts'] = lob_counts.to_dict()
             
             # Root causes (from AI categories)
             if 'AI_Category' in df.columns:
@@ -457,12 +563,12 @@ class ExcelReportWriter:
                 analysis_data['root_causes'] = root_causes.to_dict()
             
             # AI recurrence data
-            if 'AI_Recurrence_Risk' in df.columns and 'AI_Category' in df.columns:
-                recurrence_by_cat = df.groupby('AI_Category')['AI_Recurrence_Risk'].mean() * 100
+            if 'AI_Recurrence_Probability' in df.columns and 'AI_Category' in df.columns:
+                recurrence_by_cat = df.groupby('AI_Category')['AI_Recurrence_Probability'].mean() * 100
                 analysis_data['ai_recurrence'] = {
                     'categories': list(recurrence_by_cat.index),
                     'predicted': list(recurrence_by_cat.values),
-                    'actual': list(recurrence_by_cat.values * 0.95),  # Simulated actual
+                    'actual': list(recurrence_by_cat.values * 0.95),
                 }
             
             # Resolution time data
@@ -481,6 +587,35 @@ class ExcelReportWriter:
                     'indirect_cost': [v * 0.5 for v in values],
                     'potential_savings': [v * 0.7 for v in values],
                 }
+            
+            # Engineer learning data for engineer_learning chart
+            if engineer_col and 'Learning_Status' in df.columns:
+                eng_learning = {}
+                for eng in df[engineer_col].dropna().unique():
+                    eng_data = df[df[engineer_col] == eng]
+                    completed = (eng_data['Learning_Status'].str.contains('New', na=False) | 
+                                eng_data['Learning_Status'].str.contains('Monitored', na=False)).sum()
+                    pending = (~eng_data['Learning_Status'].str.contains('New', na=False) & 
+                              ~eng_data['Learning_Status'].str.contains('Monitored', na=False)).sum()
+                    eng_learning[eng] = {'completed': int(completed), 'pending': int(pending)}
+                # Limit to top 10 by total issues
+                eng_learning = dict(sorted(eng_learning.items(), 
+                                          key=lambda x: x[1]['completed'] + x[1]['pending'], 
+                                          reverse=True)[:10])
+                analysis_data['engineer_learning'] = eng_learning
+            
+            # LOB by category data for LOB matrix
+            if lob_col and 'AI_Category' in df.columns:
+                lob_by_cat = df.groupby([lob_col, 'AI_Category']).size().unstack(fill_value=0)
+                # Filter out empty LOBs
+                lob_by_cat = lob_by_cat[lob_by_cat.index.notna() & (lob_by_cat.index != '') & (lob_by_cat.index != '0')]
+                analysis_data['lob_by_category'] = lob_by_cat.to_dict()
+            
+            # Resolution time by LOB for LOB matrix chart
+            if lob_col and 'Predicted_Resolution_Days' in df.columns:
+                res_by_lob = df.groupby(lob_col)['Predicted_Resolution_Days'].mean()
+                res_by_lob = res_by_lob[res_by_lob.index.notna() & (res_by_lob.index != '') & (res_by_lob.index != '0')]
+                analysis_data['resolution_by_lob'] = res_by_lob.to_dict()
                 
         except Exception as e:
             logger.warning(f"Error building analysis data: {e}")
@@ -521,14 +656,18 @@ def generate_report(df, output_path, exec_summary_text, df_raw=None):
     chart_paths = writer.generate_charts(df)
     
     writer.write_dashboard(df, chart_paths)
-    writer.write_scored_data(df)
+    
+    # Write Scored Data - combines raw data with AI columns (no separate Raw Data sheet)
+    writer.write_scored_data(df, df_raw)
+    
     writer.write_resolution_time_sheet(df)
     
-    if df_raw is not None:
-        writer.write_raw_data(df_raw)
+    # Note: Raw Data sheet removed - all data is now in Scored Data sheet
     
     writer.save()
     
-    logger.info(f"[Report Generator] Report complete with {len(chart_paths)} charts")
+    # Count total charts
+    total_charts = sum(len(paths) for paths in chart_paths.values()) if isinstance(chart_paths, dict) else len(chart_paths)
+    logger.info(f"[Report Generator] Report complete with {total_charts} charts")
     
     return chart_paths

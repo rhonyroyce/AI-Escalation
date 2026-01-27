@@ -181,18 +181,22 @@ def audit_learning(df, ai):
         
         df.at[df.index[i], 'Recidivism_Score'] = max_similarity
         
-        # Classify based on similarity
-        if max_similarity >= 0.60:
+        # Classify based on similarity - using higher thresholds for accuracy
+        # 0.85+ = Very similar (near duplicate/same root cause)
+        # 0.75-0.85 = Likely related issues
+        # 0.65-0.75 = Possibly related, needs review
+        # <0.65 = Different enough to be considered separate issues
+        if max_similarity >= 0.85:
             df.at[df.index[i], 'Learning_Status'] = '🔴 REPEAT OFFENSE'
             if most_similar_idx >= 0:
                 similar_text = str(df.iloc[most_similar_idx].get(COL_SUMMARY, ''))[:100]
                 df.at[df.index[i], 'Similar_Historical_Issue'] = similar_text
-        elif max_similarity >= 0.50:
+        elif max_similarity >= 0.75:
             df.at[df.index[i], 'Learning_Status'] = '🟡 POSSIBLE REPEAT'
-        elif max_similarity >= 0.40:
+        elif max_similarity >= 0.65:
             df.at[df.index[i], 'Learning_Status'] = '🟢 Monitored'
         else:
-            df.at[df.index[i], 'Learning_Status'] = 'New'
+            df.at[df.index[i], 'Learning_Status'] = '🆕 New Issue'
     
     # Log summary
     repeat_count = (df['Learning_Status'].str.contains('REPEAT', na=False)).sum()
