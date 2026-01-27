@@ -155,7 +155,7 @@ def launch_dashboard(port: int = 8501, open_browser: bool = True):
         sys.executable, "-m", "streamlit", "run",
         str(dashboard_path),
         "--server.port", str(port),
-        "--server.headless", "true" if not open_browser else "false",
+        "--server.headless", "true",  # Always headless, we handle browser opening ourselves
         "--browser.gatherUsageStats", "false",
         "--theme.base", "dark",
         "--theme.primaryColor", "#0066CC",
@@ -165,7 +165,7 @@ def launch_dashboard(port: int = 8501, open_browser: bool = True):
     ]
     
     try:
-        # Open browser after a short delay
+        # Open browser after a short delay (only once)
         if open_browser:
             def open_browser_delayed():
                 time.sleep(2)

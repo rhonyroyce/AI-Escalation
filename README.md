@@ -17,22 +17,26 @@ AI Escalation is a comprehensive Python application that analyzes telecom escala
 ## Features
 
 ### 🧠 AI-Powered Analysis
+
 - Uses Ollama with local LLM models (qwen3-embedding, gemma3)
 - Semantic similarity matching for ticket classification
 - 11-category telecom-specific classification system
 
 ### 📊 McKinsey-Style Reporting
+
 - 15 executive-quality visualization charts
 - Strategic friction scoring
 - Risk stratification analysis
 - Automated executive summary generation
 
 ### 🔄 Continuous Learning
+
 - Human feedback integration for classification improvement
 - Similar ticket validation with dropdown feedback
 - Resolution time expectation calibration
 
 ### 🎯 Predictive Analytics
+
 - Recurrence risk prediction (ML-based)
 - Resolution time prediction with accuracy tracking
 - Similar ticket pattern analysis
@@ -40,6 +44,7 @@ AI Escalation is a comprehensive Python application that analyzes telecom escala
 ## Prerequisites
 
 ### 1. Ollama Installation
+
 ```bash
 # Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
@@ -53,6 +58,7 @@ ollama serve
 ```
 
 ### 2. Python Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -77,11 +83,13 @@ pip install -r requirements.txt
 ## Usage
 
 ### Running the Analysis
+
 ```bash
 python main.py
 ```
 
 This will:
+
 1. Open a file dialog to select your Excel data file
 2. Process the tickets through the AI pipeline
 3. Generate charts in the `output/plots/` directory
@@ -90,6 +98,7 @@ This will:
 ### Input Data Format
 
 Your Excel file should contain columns like:
+
 - `tickets_data_issue_summary` - Issue description
 - `tickets_data_severity` - Severity level (Critical/Major/Minor)
 - `tickets_data_type_1` - Ticket type
@@ -106,7 +115,7 @@ Your Excel file should contain columns like:
 
 ## Project Structure
 
-```
+```text
 AI-Escalation/
 ├── main.py                     # Main entry point
 ├── EscalationAI0126.py        # Core analysis engine (5700+ lines)
@@ -171,12 +180,14 @@ WEIGHTS = {
 ## Human Feedback Workflow
 
 ### Classification Feedback
+
 1. Open `classification_feedback.xlsx`
 2. Review AI classifications
 3. Correct wrong categories in dropdown
 4. Save and re-run analysis
 
 ### Similarity Feedback
+
 1. Open `similarity_feedback.xlsx`
 2. Review ticket pairs marked by AI
 3. Select "Similar" or "Not Similar" in dropdown

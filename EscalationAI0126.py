@@ -21,7 +21,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.worksheet.datavalidation import DataValidation
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 import json
 
@@ -722,7 +722,10 @@ class PriceCatalog:
             
             # ===== Sheet 1: Instructions =====
             ws_instructions = wb.active
-            ws_instructions.title = "Instructions"
+            if ws_instructions is None:
+                ws_instructions = wb.create_sheet("Instructions", 0)
+            else:
+                ws_instructions.title = "Instructions"
             
             instructions = [
                 ["PRICE CATALOG - INSTRUCTIONS"],
@@ -880,6 +883,15 @@ class PriceCatalog:
             logger.error(f"Failed to create price catalog template: {e}")
             raise
     
+    def _safe_float(self, value, default: float = 0.0) -> float:
+        """Safely convert a cell value to float, handling openpyxl's various types."""
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
+
     def load_catalog(self) -> bool:
         """Load pricing data from Excel catalog"""
         if not os.path.exists(self.catalog_path):
@@ -895,12 +907,11 @@ class PriceCatalog:
                 ws = wb["Category Costs"]
                 for row in ws.iter_rows(min_row=2, values_only=True):
                     if row[0]:  # Category name exists
-                        category = str(row[0]).strip()
-                        self.category_costs[category] = {
-                            'material_cost': float(row[1] or 0),
-                            'labor_hours': float(row[2] or 0),
-                            'hourly_rate': float(row[3] or DEFAULT_HOURLY_RATE),
-                            'delay_cost_per_hour': float(row[4] or 0),
+                        self.category_costs[str(row[0]).strip()] = {
+                            'material_cost': self._safe_float(row[1], 0),
+                            'labor_hours': self._safe_float(row[2], 0),
+                            'hourly_rate': self._safe_float(row[3], DEFAULT_HOURLY_RATE),
+                            'delay_cost_per_hour': self._safe_float(row[4], DEFAULT_DELAY_COST),
                         }
                 logger.info(f"  → Loaded {len(self.category_costs)} category cost entries")
             
@@ -912,9 +923,9 @@ class PriceCatalog:
                         self.keyword_costs.append({
                             'pattern': str(row[0]).strip(),
                             'category_override': str(row[1] or '').strip(),
-                            'material_cost': float(row[2] or 0),
-                            'labor_hours': float(row[3] or 0),
-                            'priority': int(row[4] or 99),
+                            'material_cost': self._safe_float(row[2], 0),
+                            'labor_hours': self._safe_float(row[3], 0),
+                            'priority': int(self._safe_float(row[4], 99)),
                         })
                 # Sort by priority (lower = higher priority)
                 self.keyword_costs.sort(key=lambda x: x['priority'])
@@ -926,7 +937,7 @@ class PriceCatalog:
                 for row in ws.iter_rows(min_row=2, values_only=True):
                     if row[0]:
                         severity = str(row[0]).strip().lower()
-                        self.severity_multipliers[severity] = float(row[1] or 1.0)
+                        self.severity_multipliers[severity] = self._safe_float(row[1], 1.0)
                 logger.info(f"  → Loaded {len(self.severity_multipliers)} severity multipliers")
             
             # Load Origin Premiums
@@ -935,7 +946,16 @@ class PriceCatalog:
                 for row in ws.iter_rows(min_row=2, values_only=True):
                     if row[0]:
                         origin = str(row[0]).strip().lower()
-                        self.origin_premiums[origin] = float(row[1] or 0)
+                        self.origin_premiums[origin] = self._safe_float(row[1], 0)
+                logger.info(f"  → Loaded {len(self.origin_premiums)} origin premium rules")
+            
+            # Load Origin Premiums
+            if "Origin Premiums" in wb.sheetnames:
+                ws = wb["Origin Premiums"]
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    if row[0]:
+                        origin = str(row[0]).strip().lower()
+                        self.origin_premiums[origin] = self._safe_float(row[1], 0)
                 logger.info(f"  → Loaded {len(self.origin_premiums)} origin premium rules")
             
             wb.close()
@@ -968,7 +988,7 @@ class PriceCatalog:
         origin: str = "Technical",
         description: str = "",
         delay_hours: float = 4.0
-    ) -> Dict[str, float]:
+    ) -> Dict[str, Any]:
         """
         Calculate total financial impact for an escalation.
         
@@ -2402,7 +2422,7 @@ class RecurrencePredictor:
         df['AI_Recurrence_Risk'] = 'Unknown'
         df['AI_Recurrence_Confidence'] = 'Low'
         
-        if not self.is_trained:
+        if not self.is_trained or self.model is None:
             logger.info("[Recurrence Predictor] Model not trained, skipping predictions")
             return df
         
@@ -3459,7 +3479,7 @@ class ResolutionTimePredictor:
         # Feature matrix
         self.feature_columns = [c for c in train_df.columns if c != 'actual_days']
         X = train_df[self.feature_columns].values
-        y = train_df['actual_days'].values
+        y = np.asarray(train_df['actual_days'].values)
         
         # Train Random Forest Regressor
         try:
@@ -4511,7 +4531,7 @@ def generate_plots(df, output_dir):
                     ax2.plot([0, max_val], [0, max_val], 'r--', label='Perfect Prediction', linewidth=2)
                     
                     # Calculate R² and MAE
-                    correlation = np.corrcoef(actual, predicted)[0, 1] if len(actual) > 2 else 0
+                    correlation = np.corrcoef(np.asarray(actual), np.asarray(predicted))[0, 1] if len(actual) > 2 else 0
                     mae = np.mean(np.abs(predicted - actual))
                     
                     ax2.set_xlabel('Actual Resolution Days')
@@ -5591,11 +5611,11 @@ TIME ANALYSIS:
             valid_predictions = df.dropna(subset=['Actual_Resolution_Days', 'Predicted_Resolution_Days']) if has_actual and has_predicted else pd.DataFrame()
             
             if len(valid_predictions) > 0:
-                actual = valid_predictions['Actual_Resolution_Days'].values
-                predicted = valid_predictions['Predicted_Resolution_Days'].values
+                actual = np.asarray(valid_predictions['Actual_Resolution_Days'].values)
+                predicted = np.asarray(valid_predictions['Predicted_Resolution_Days'].values)
                 mae = np.mean(np.abs(predicted - actual))
                 rmse = np.sqrt(np.mean((predicted - actual) ** 2))
-                correlation = np.corrcoef(actual, predicted)[0, 1] if len(actual) > 2 else 0
+                correlation = np.corrcoef(np.asarray(actual), np.asarray(predicted))[0, 1] if len(actual) > 2 else 0
                 
                 ws_resolution['A5'] = f"Mean Absolute Error (MAE): {mae:.2f} days"
                 ws_resolution['A6'] = f"Root Mean Square Error (RMSE): {rmse:.2f} days"
@@ -5629,8 +5649,8 @@ TIME ANALYSIS:
                 cell.fill = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
             
             # Data rows by category
+            row_num = row_start + 2  # Initialize row_num before the conditional block
             if 'AI_Category' in df.columns:
-                row_num = row_start + 2
                 for cat in df['AI_Category'].dropna().unique()[:15]:  # Top 15 categories
                     cat_df = df[df['AI_Category'] == cat]
                     count = len(cat_df)
