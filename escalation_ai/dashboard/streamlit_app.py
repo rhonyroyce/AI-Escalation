@@ -424,7 +424,35 @@ footer {visibility: hidden;}
 @st.cache_data
 def load_data():
     """Load the most recent analysis data."""
-    # Look for processed Excel files
+    # First try Strategic_Report.xlsx (current output format)
+    strategic_report = Path("Strategic_Report.xlsx")
+    if strategic_report.exists():
+        try:
+            df = pd.read_excel(strategic_report, sheet_name="Scored Data")
+            
+            # Map column names to expected format
+            if 'tickets_data_engineer_name' in df.columns and 'Engineer' not in df.columns:
+                df['Engineer'] = df['tickets_data_engineer_name']
+            if 'tickets_data_lob' in df.columns and 'LOB' not in df.columns:
+                df['LOB'] = df['tickets_data_lob']
+            
+            # Use AI_Recurrence_Probability as the numeric recurrence risk
+            # (AI_Recurrence_Risk in file is string like "Elevated (50-70%)")
+            if 'AI_Recurrence_Probability' in df.columns:
+                df['AI_Recurrence_Risk'] = pd.to_numeric(df['AI_Recurrence_Probability'], errors='coerce').fillna(0.15)
+            
+            # Ensure numeric columns are numeric
+            numeric_cols = ['Strategic_Friction_Score', 'Financial_Impact', 'Predicted_Resolution_Days', 
+                           'AI_Confidence', 'Resolution_Prediction_Confidence']
+            for col in numeric_cols:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            
+            return df, "Strategic_Report.xlsx"
+        except Exception as e:
+            st.warning(f"Could not load Strategic_Report.xlsx: {e}")
+    
+    # Look for other processed Excel files
     data_files = list(Path(".").glob("**/Escalation_Analysis_*.xlsx"))
     
     if data_files:
@@ -639,7 +667,8 @@ def chart_trend_timeline(df):
 
 def chart_recurrence_risk(df):
     """Gauge chart for average recurrence risk."""
-    avg_risk = df['AI_Recurrence_Risk'].mean() * 100
+    # AI_Recurrence_Risk is now guaranteed to be numeric from load_data()
+    avg_risk = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
     
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta",
@@ -735,31 +764,49 @@ def chart_engineer_performance(df):
     if 'Engineer' not in df.columns:
         return None
     
-    eng_stats = df.groupby('Engineer').agg({
-        'Strategic_Friction_Score': 'mean',
-        'AI_Recurrence_Risk': 'mean',
-        'AI_Category': 'count'
-    }).rename(columns={'AI_Category': 'ticket_count'}).sort_values('Strategic_Friction_Score')
+    # Build agg dict with available columns
+    agg_dict = {'AI_Category': 'count'}
+    if 'Strategic_Friction_Score' in df.columns:
+        agg_dict['Strategic_Friction_Score'] = 'mean'
+    if 'AI_Recurrence_Risk' in df.columns:
+        agg_dict['AI_Recurrence_Risk'] = 'mean'
+    
+    eng_stats = df.groupby('Engineer').agg(agg_dict).rename(columns={'AI_Category': 'ticket_count'})
+    if 'Strategic_Friction_Score' in eng_stats.columns:
+        eng_stats = eng_stats.sort_values('Strategic_Friction_Score')
+        x_vals = eng_stats['Strategic_Friction_Score']
+        x_title = 'Average Friction Score'
+        text_vals = [f"{v:.0f} ({c} tickets)" for v, c in zip(eng_stats['Strategic_Friction_Score'], eng_stats['ticket_count'])]
+    else:
+        eng_stats = eng_stats.sort_values('ticket_count')
+        x_vals = eng_stats['ticket_count']
+        x_title = 'Ticket Count'
+        text_vals = [f"{c} tickets" for c in eng_stats['ticket_count']]
     
     fig = go.Figure(go.Bar(
-        x=eng_stats['Strategic_Friction_Score'],
+        x=x_vals,
         y=eng_stats.index,
         orientation='h',
         marker=dict(
-            color=eng_stats['Strategic_Friction_Score'],
+            color=x_vals,
             colorscale='RdYlGn_r',
             line=dict(width=0)
         ),
-        text=[f"{v:.0f} ({c} tickets)" for v, c in zip(eng_stats['Strategic_Friction_Score'], eng_stats['ticket_count'])],
+        text=text_vals,
         textposition='outside',
-        hovertemplate='<b>%{y}</b><br>Avg Friction: %{x:.1f}<extra></extra>'
+        hovertemplate='<b>%{y}</b><br>Value: %{x:.1f}<extra></extra>'
     ))
     
+    # Get theme without margin, then add custom margin
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+    
     fig.update_layout(
-        **create_plotly_theme(),
-        title=dict(text='Engineer Performance (Avg Friction)', font=dict(size=16)),
-        xaxis_title='Average Friction Score',
-        height=350
+        **theme,
+        title=dict(text='Engineer Performance', font=dict(size=16)),
+        xaxis_title=x_title,
+        height=400,
+        margin=dict(l=150, r=100, t=60, b=40)  # Room for names and values
     )
     
     return fig
@@ -1023,11 +1070,15 @@ def chart_benchmark_gauge(metric_name, current_value, benchmark_data, unit=''):
     fig.add_annotation(x=0.5, y=-0.15, text=f"Avg: {avg}{unit}", showarrow=False, font=dict(size=10, color='#FFC107'))
     fig.add_annotation(x=0.85, y=-0.15, text=f"Laggard: {laggard}{unit}", showarrow=False, font=dict(size=10, color='#DC3545'))
     
+    # Get theme without margin, then add specific margin
+    theme = create_plotly_theme()
+    theme.pop('margin', None)  # Remove margin from theme
+    
     fig.update_layout(
-        **create_plotly_theme(),
+        **theme,
         title=dict(text=metric_name, font=dict(size=14)),
         height=250,
-        margin=dict(t=50, b=50)
+        margin=dict(t=50, b=50, l=30, r=30)
     )
     
     return fig
@@ -1045,9 +1096,10 @@ def generate_strategic_recommendations(df):
     top_category = category_friction.index[0]
     top_category_pct = category_friction.iloc[0] / category_friction.sum() * 100
     
-    avg_recurrence = df['AI_Recurrence_Risk'].mean() * 100
-    critical_pct = (df['tickets_data_severity'] == 'Critical').mean() * 100
-    avg_resolution = df['Predicted_Resolution_Days'].mean()
+    # Get safe values
+    avg_recurrence = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
+    critical_pct = (df['tickets_data_severity'] == 'Critical').mean() * 100 if 'tickets_data_severity' in df.columns else 10
+    avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
     
     sla_breach_rate = df['SLA_Breached'].mean() * 100 if 'SLA_Breached' in df.columns else 12
     
@@ -1174,7 +1226,10 @@ def render_executive_summary(df):
         """, unsafe_allow_html=True)
     
     with col4:
-        health_score = max(20, 100 - (df['AI_Recurrence_Risk'].mean() * 100) - (df['Strategic_Friction_Score'].mean() / 2))
+        # Get safe values
+        recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
+        friction_mean = df['Strategic_Friction_Score'].mean() if 'Strategic_Friction_Score' in df.columns else 50
+        health_score = max(20, 100 - recurrence_rate - (friction_mean / 2))
         pulse_color = 'green' if health_score > 70 else 'yellow' if health_score > 50 else 'red'
         st.markdown(f"""
         <div class="exec-kpi">
@@ -1245,13 +1300,21 @@ def render_financial_analysis(df):
     st.markdown('<p class="main-header">💰 Financial Impact Analysis</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Quantified business impact and ROI opportunities</p>', unsafe_allow_html=True)
     
+    # Ensure Financial_Impact column exists
+    if 'Financial_Impact' not in df.columns:
+        df = df.copy()
+        df['Financial_Impact'] = df['Strategic_Friction_Score'] * 50 if 'Strategic_Friction_Score' in df.columns else 1500
+    
     # Calculate financial metrics
-    total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+    total_cost = df['Financial_Impact'].sum()
     revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 2.5
-    avg_cost = total_cost / len(df)
+    avg_cost = total_cost / len(df) if len(df) > 0 else 0
     
     # Cost breakdown by category
-    cost_by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
+    if 'AI_Category' in df.columns:
+        cost_by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
+    else:
+        cost_by_cat = pd.Series({'Unknown': total_cost})
     
     # Top Executive Metrics
     col1, col2, col3, col4 = st.columns(4)
@@ -1293,48 +1356,61 @@ def render_financial_analysis(df):
             hovertemplate='<b>%{y}</b><br>Cost: $%{x:,.0f}<extra></extra>'
         ))
         
+        # Get theme without margin
+        theme = create_plotly_theme()
+        theme.pop('margin', None)
+        
         fig.update_layout(
-            **create_plotly_theme(),
+            **theme,
             title=dict(text='💸 Cost by Category', font=dict(size=18)),
             height=400,
-            xaxis_title='Total Cost ($)'
+            xaxis_title='Total Cost ($)',
+            margin=dict(l=150, r=80, t=60, b=40)  # More room for labels
         )
         
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
         # Cost vs Volume scatter
-        cat_analysis = df.groupby('AI_Category').agg({
-            'Financial_Impact': 'sum',
-            'AI_Category': 'count',
-            'AI_Recurrence_Risk': 'mean'
-        }).rename(columns={'AI_Category': 'count'})
-        
-        fig = go.Figure(go.Scatter(
-            x=cat_analysis['count'],
-            y=cat_analysis['Financial_Impact'],
-            mode='markers+text',
-            marker=dict(
-                size=cat_analysis['AI_Recurrence_Risk'] * 100,
-                color=cat_analysis['Financial_Impact'],
-                colorscale='Reds',
-                showscale=True,
-                colorbar=dict(title='Cost')
-            ),
-            text=cat_analysis.index,
-            textposition='top center',
-            hovertemplate='<b>%{text}</b><br>Volume: %{x}<br>Cost: $%{y:,.0f}<extra></extra>'
-        ))
-        
-        fig.update_layout(
-            **create_plotly_theme(),
-            title=dict(text='📊 Cost vs Volume Matrix', font=dict(size=18)),
-            height=400,
-            xaxis_title='Escalation Volume',
-            yaxis_title='Total Cost ($)'
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+        if 'AI_Category' in df.columns:
+            agg_dict = {'Financial_Impact': 'sum'}
+            if 'AI_Recurrence_Risk' in df.columns:
+                agg_dict['AI_Recurrence_Risk'] = 'mean'
+            
+            cat_analysis = df.groupby('AI_Category').agg(agg_dict)
+            cat_analysis['count'] = df.groupby('AI_Category').size()
+            
+            # Ensure AI_Recurrence_Risk exists for marker size
+            if 'AI_Recurrence_Risk' not in cat_analysis.columns:
+                cat_analysis['AI_Recurrence_Risk'] = 0.5
+            
+            fig = go.Figure(go.Scatter(
+                x=cat_analysis['count'],
+                y=cat_analysis['Financial_Impact'],
+                mode='markers+text',
+                marker=dict(
+                    size=cat_analysis['AI_Recurrence_Risk'] * 100 + 10,
+                    color=cat_analysis['Financial_Impact'],
+                    colorscale='Reds',
+                    showscale=True,
+                    colorbar=dict(title='Cost')
+                ),
+                text=cat_analysis.index,
+                textposition='top center',
+                hovertemplate='<b>%{text}</b><br>Volume: %{x}<br>Cost: $%{y:,.0f}<extra></extra>'
+            ))
+            
+            fig.update_layout(
+                **create_plotly_theme(),
+                title=dict(text='📊 Cost vs Volume Matrix', font=dict(size=18)),
+                height=400,
+                xaxis_title='Escalation Volume',
+                yaxis_title='Total Cost ($)'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Category data not available for Cost vs Volume analysis.")
     
     st.markdown("---")
     
@@ -1385,12 +1461,16 @@ def render_benchmarking(df):
     st.markdown('<p class="main-header">🏆 Competitive Benchmarking</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">How you compare against industry standards</p>', unsafe_allow_html=True)
     
+    # Get safe values with defaults
+    recurrence_rate = df['AI_Recurrence_Risk'].mean() if 'AI_Recurrence_Risk' in df.columns else 0.15
+    resolution_days = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
+    
     # Calculate current metrics
     current_metrics = {
-        'resolution_days': df['Predicted_Resolution_Days'].mean(),
-        'recurrence_rate': df['AI_Recurrence_Risk'].mean() * 100,
+        'resolution_days': resolution_days,
+        'recurrence_rate': recurrence_rate * 100,
         'sla_breach_rate': df['SLA_Breached'].mean() * 100 if 'SLA_Breached' in df.columns else 12,
-        'first_contact_resolution': 100 - (df['AI_Recurrence_Risk'].mean() * 100 * 2),  # Proxy
+        'first_contact_resolution': 100 - (recurrence_rate * 100 * 2),  # Proxy
         'cost_per_escalation': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else 850,
         'customer_satisfaction': 100 - (df['Customer_Impact_Score'].mean() * 0.3) if 'Customer_Impact_Score' in df.columns else 75,
     }
@@ -1468,35 +1548,24 @@ def render_benchmarking(df):
             'Color': color
         })
     
-    # Display as styled table
-    st.markdown("""
-    <table class="exec-table">
-        <thead>
-            <tr>
-                <th>Metric</th>
-                <th>Current</th>
-                <th>Best-in-Class</th>
-                <th>Industry Avg</th>
-                <th>Position</th>
-                <th>Gap to Best</th>
-            </tr>
-        </thead>
-        <tbody>
-    """, unsafe_allow_html=True)
+    # Display as a proper dataframe with styling
+    display_df = pd.DataFrame(position_data)
+    display_df = display_df[['Metric', 'Current', 'Best-in-Class', 'Industry Avg', 'Position', 'Gap to Best']]
     
-    for row in position_data:
-        st.markdown(f"""
-        <tr>
-            <td><strong>{row['Metric']}</strong></td>
-            <td>{row['Current']}</td>
-            <td style="color: #28A745;">{row['Best-in-Class']}</td>
-            <td>{row['Industry Avg']}</td>
-            <td><span style="color: {row['Color']}; font-weight: 600;">{row['Position']}</span></td>
-            <td>{row['Gap to Best']}</td>
-        </tr>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("</tbody></table>", unsafe_allow_html=True)
+    # Use Streamlit's dataframe with custom styling
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Metric": st.column_config.TextColumn("Metric", width="medium"),
+            "Current": st.column_config.TextColumn("Current", width="small"),
+            "Best-in-Class": st.column_config.TextColumn("Best-in-Class", width="small"),
+            "Industry Avg": st.column_config.TextColumn("Industry Avg", width="small"),
+            "Position": st.column_config.TextColumn("Position", width="medium"),
+            "Gap to Best": st.column_config.TextColumn("Gap to Best", width="small"),
+        }
+    )
 
 
 def render_root_cause(df):
@@ -1734,9 +1803,13 @@ def render_presentation_mode(df):
             st.plotly_chart(chart_driver_tree(df), use_container_width=True)
     
     elif current == "benchmarking":
+        # Get safe values
+        recurrence_rate = df['AI_Recurrence_Risk'].mean() if 'AI_Recurrence_Risk' in df.columns else 0.15
+        resolution_days = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
+        
         current_metrics = {
-            'resolution_days': df['Predicted_Resolution_Days'].mean(),
-            'recurrence_rate': df['AI_Recurrence_Risk'].mean() * 100,
+            'resolution_days': resolution_days,
+            'recurrence_rate': recurrence_rate * 100,
             'cost_per_escalation': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else 850,
         }
         
@@ -1778,12 +1851,18 @@ def render_whatif_simulator(df):
     st.markdown("### 🔮 What-If Scenario Simulator")
     st.markdown("Adjust parameters to simulate impact on escalation metrics.")
     
+    # Get safe values with defaults
+    recurrence_rate = df['AI_Recurrence_Risk'].mean() if 'AI_Recurrence_Risk' in df.columns else 0.15
+    avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
+    friction_sum = df['Strategic_Friction_Score'].sum() if 'Strategic_Friction_Score' in df.columns else 3000
+    cost_sum = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else 375000
+    
     # Current baseline metrics
     baseline = {
-        'avg_resolution': df['Predicted_Resolution_Days'].mean(),
-        'recurrence_rate': df['AI_Recurrence_Risk'].mean() * 100,
-        'monthly_friction': df['Strategic_Friction_Score'].sum() / 3,  # Assume 3 months data
-        'monthly_cost': df['Financial_Impact'].sum() / 3 if 'Financial_Impact' in df.columns else 125000
+        'avg_resolution': avg_resolution,
+        'recurrence_rate': recurrence_rate * 100,
+        'monthly_friction': friction_sum / 3,  # Assume 3 months data
+        'monthly_cost': cost_sum / 3
     }
     
     col1, col2 = st.columns(2)
@@ -2011,11 +2090,19 @@ def render_alerts_page(df):
     # Calculate current metrics
     df_temp = df.copy()
     df_temp['date'] = pd.to_datetime(df_temp['tickets_data_issue_datetime']).dt.date
-    daily = df_temp.groupby('date').agg({
-        'Strategic_Friction_Score': 'sum',
-        'AI_Category': 'count',
-        'AI_Recurrence_Risk': 'mean'
-    }).rename(columns={'AI_Category': 'count'})
+    
+    # Build agg dict with available columns
+    agg_dict = {'AI_Category': 'count'}
+    if 'Strategic_Friction_Score' in df.columns:
+        agg_dict['Strategic_Friction_Score'] = 'sum'
+    if 'AI_Recurrence_Risk' in df.columns:
+        agg_dict['AI_Recurrence_Risk'] = 'mean'
+    
+    daily = df_temp.groupby('date').agg(agg_dict).rename(columns={'AI_Category': 'count'})
+    
+    # Ensure Strategic_Friction_Score exists
+    if 'Strategic_Friction_Score' not in daily.columns:
+        daily['Strategic_Friction_Score'] = 50
     
     # Calculate thresholds (simplified)
     metrics_config = {
@@ -2567,7 +2654,7 @@ def main():
         page = st.radio(
             "Navigation",
             ["🎯 Executive Summary", "📊 Dashboard", "📈 Analytics", 
-             "� Financial Analysis", "🏆 Benchmarking", "🔬 Root Cause",
+             "💰 Financial Analysis", "🏆 Benchmarking", "🔬 Root Cause",
              "🔍 Drift Detection", "⚠️ Alerts", "🔮 What-If Simulator",
              "📋 Action Tracker", "📽️ Presentation Mode"],
             label_visibility="collapsed"
@@ -2810,11 +2897,16 @@ def render_analytics(df):
                 textposition='outside'
             ))
             
+            # Get theme without margin
+            theme = create_plotly_theme()
+            theme.pop('margin', None)
+            
             fig.update_layout(
-                **create_plotly_theme(),
+                **theme,
                 title='Financial Impact by Category',
                 xaxis_tickangle=-45,
-                height=400
+                height=400,
+                margin=dict(l=40, r=60, t=60, b=100)  # Room for labels
             )
             
             st.plotly_chart(fig, use_container_width=True)
