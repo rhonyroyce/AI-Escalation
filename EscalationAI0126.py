@@ -25,6 +25,9 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import json
 
+# Import advanced chart generator
+from escalation_ai.visualization.advanced_charts import AdvancedChartGenerator
+
 # Suppress warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -4609,6 +4612,16 @@ def generate_plots(df, output_dir):
     except Exception as e:
         logger.warning(f"Chart 15 Skipped: {e}")
         plt.close()
+    
+    # Generate Advanced Insight Charts
+    try:
+        logger.info("[Advanced Charts] Generating SLA, Efficiency, Cost, and Executive charts...")
+        advanced_gen = AdvancedChartGenerator(df, output_dir)
+        advanced_paths = advanced_gen.generate_all_charts()
+        paths.extend(advanced_paths)
+        logger.info(f"[Advanced Charts] Generated {len(advanced_paths)} additional executive charts")
+    except Exception as e:
+        logger.warning(f"[Advanced Charts] Skipped: {e}")
    
     return paths
 
