@@ -586,7 +586,9 @@ def chart_resolution_consistency(df: pd.DataFrame) -> go.Figure:
     ))
     
     fig.update_layout(
-        **create_plotly_theme(),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter', color='#E0E0E0'),
         title=dict(text='Resolution Consistency by Category', font=dict(size=18)),
         xaxis_title='Average Resolution Time (days)',
         yaxis_title='',
