@@ -479,31 +479,36 @@ def cosine_similarity_gpu(vec1, vec2, use_gpu: bool = True):
     Uses GPU when available.
     """
     if use_gpu and _check_cuml():
-        import cupy as cp
-        vec1 = cp.asarray(vec1, dtype=cp.float32).flatten()
-        vec2 = cp.asarray(vec2, dtype=cp.float32).flatten()
-        
-        dot = cp.dot(vec1, vec2)
-        norm1 = cp.linalg.norm(vec1)
-        norm2 = cp.linalg.norm(vec2)
-        
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-        
-        return float(cp.asnumpy(dot / (norm1 * norm2)))
-    else:
-        import numpy as np
-        vec1 = np.array(vec1, dtype=np.float32).flatten()
-        vec2 = np.array(vec2, dtype=np.float32).flatten()
-        
-        dot = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-        
-        return float(dot / (norm1 * norm2))
+        try:
+            import cupy as cp
+            vec1 = cp.asarray(vec1, dtype=cp.float32).flatten()
+            vec2 = cp.asarray(vec2, dtype=cp.float32).flatten()
+            
+            dot = cp.dot(vec1, vec2)
+            norm1 = cp.linalg.norm(vec1)
+            norm2 = cp.linalg.norm(vec2)
+            
+            if norm1 == 0 or norm2 == 0:
+                return 0.0
+            
+            return float(cp.asnumpy(dot / (norm1 * norm2)))
+        except Exception as e:
+            logger.warning(f"[GPU] CuPy failed, falling back to CPU: {e}")
+            # Fall through to CPU path
+    
+    # CPU fallback
+    import numpy as np
+    vec1 = np.array(vec1, dtype=np.float32).flatten()
+    vec2 = np.array(vec2, dtype=np.float32).flatten()
+    
+    dot = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    
+    return float(dot / (norm1 * norm2))
 
 
 def batch_cosine_similarity_gpu(query_vec, matrix, use_gpu: bool = True):
@@ -512,31 +517,36 @@ def batch_cosine_similarity_gpu(query_vec, matrix, use_gpu: bool = True):
     Returns array of similarities.
     """
     if use_gpu and _check_cuml():
-        import cupy as cp
-        query = cp.asarray(query_vec, dtype=cp.float32).flatten()
-        mat = cp.asarray(matrix, dtype=cp.float32)
-        
-        # Normalize
-        query_norm = query / (cp.linalg.norm(query) + 1e-10)
-        mat_norms = cp.linalg.norm(mat, axis=1, keepdims=True) + 1e-10
-        mat_normalized = mat / mat_norms
-        
-        # Dot product
-        similarities = cp.dot(mat_normalized, query_norm)
-        
-        return cp.asnumpy(similarities)
-    else:
-        import numpy as np
-        query = np.array(query_vec, dtype=np.float32).flatten()
-        mat = np.array(matrix, dtype=np.float32)
-        
-        query_norm = query / (np.linalg.norm(query) + 1e-10)
-        mat_norms = np.linalg.norm(mat, axis=1, keepdims=True) + 1e-10
-        mat_normalized = mat / mat_norms
-        
-        similarities = np.dot(mat_normalized, query_norm)
-        
-        return similarities
+        try:
+            import cupy as cp
+            query = cp.asarray(query_vec, dtype=cp.float32).flatten()
+            mat = cp.asarray(matrix, dtype=cp.float32)
+            
+            # Normalize
+            query_norm = query / (cp.linalg.norm(query) + 1e-10)
+            mat_norms = cp.linalg.norm(mat, axis=1, keepdims=True) + 1e-10
+            mat_normalized = mat / mat_norms
+            
+            # Dot product
+            similarities = cp.dot(mat_normalized, query_norm)
+            
+            return cp.asnumpy(similarities)
+        except Exception as e:
+            logger.warning(f"[GPU] CuPy batch similarity failed, falling back to CPU: {e}")
+            # Fall through to CPU path
+    
+    # CPU fallback
+    import numpy as np
+    query = np.array(query_vec, dtype=np.float32).flatten()
+    mat = np.array(matrix, dtype=np.float32)
+    
+    query_norm = query / (np.linalg.norm(query) + 1e-10)
+    mat_norms = np.linalg.norm(mat, axis=1, keepdims=True) + 1e-10
+    mat_normalized = mat / mat_norms
+    
+    similarities = np.dot(mat_normalized, query_norm)
+    
+    return similarities
 
 
 # ==========================================
