@@ -56,6 +56,30 @@ if 'action_items' not in st.session_state:
     st.session_state.action_items = []
 
 # ============================================================================
+# ACTION ITEMS PERSISTENCE (JSON)
+# ============================================================================
+
+ACTION_ITEMS_FILE = Path(__file__).parent / 'action_items.json'
+
+def load_action_items():
+    """Load action items from JSON file."""
+    if ACTION_ITEMS_FILE.exists():
+        try:
+            with open(ACTION_ITEMS_FILE, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return None
+    return None
+
+def save_action_items(items):
+    """Save action items to JSON file."""
+    try:
+        with open(ACTION_ITEMS_FILE, 'w') as f:
+            json.dump(items, f, indent=2)
+    except IOError as e:
+        st.warning(f"Could not save action items: {e}")
+
+# ============================================================================
 # CUSTOM CSS - EXECUTIVE STYLING
 # ============================================================================
 
@@ -65,6 +89,24 @@ st.markdown("""
 
 .stApp {
     font-family: 'Inter', sans-serif;
+}
+
+/* Force Plotly charts to have adequate height and prevent overlap */
+.stPlotlyChart {
+    min-height: 400px !important;
+}
+
+.stPlotlyChart > div {
+    min-height: 400px !important;
+}
+
+/* Ensure columns don't overlap */
+.stColumns {
+    gap: 1rem;
+}
+
+.stColumn {
+    padding: 0 0.5rem;
 }
 
 /* Executive Glassmorphism cards */
@@ -301,6 +343,22 @@ st.markdown("""
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 .stDeployButton {display: none;}
+
+/* Chart container fix - prevent overlap */
+[data-testid="stPlotlyChart"] {
+    min-height: 360px;
+    max-height: 450px;
+    overflow: visible !important;
+}
+
+[data-testid="column"] {
+    overflow: visible !important;
+}
+
+/* Ensure charts scale properly */
+.js-plotly-plot {
+    width: 100% !important;
+}
 
 /* Chart styling */
 .chart-title {
@@ -572,7 +630,7 @@ def chart_friction_by_category(df):
         title=dict(text='Strategic Friction by Category', font=dict(size=16)),
         xaxis_title='Total Friction Score',
         yaxis_title='',
-        height=400,
+        height=450,
         showlegend=False
     )
     
@@ -598,9 +656,9 @@ def chart_severity_distribution(df):
     fig.update_layout(
         **create_plotly_theme(),
         title=dict(text='Severity Distribution', font=dict(size=16)),
-        height=350,
+        height=450,
         showlegend=True,
-        legend=dict(orientation='h', y=-0.1)
+        legend=dict(orientation='h', y=-0.15, x=0.5, xanchor='center')
     )
     
     # Add center text
@@ -653,7 +711,7 @@ def chart_trend_timeline(df):
     fig.update_layout(
         **create_plotly_theme(),
         title=dict(text='Escalation Trend (7-Day Moving Average)', font=dict(size=16)),
-        height=350,
+        height=450,
         legend=dict(orientation='h', y=1.1),
         hovermode='x unified'
     )
@@ -695,7 +753,7 @@ def chart_recurrence_risk(df):
     fig.update_layout(
         **create_plotly_theme(),
         title=dict(text='Avg Recurrence Risk', font=dict(size=16)),
-        height=280
+        height=450
     )
     
     return fig
@@ -723,7 +781,7 @@ def chart_resolution_distribution(df):
         title=dict(text='Resolution Time Distribution', font=dict(size=16)),
         xaxis_title='Predicted Days',
         yaxis_title='Count',
-        height=300,
+        height=400,
         showlegend=False
     )
     
@@ -1596,7 +1654,8 @@ def render_root_cause(df):
         root_cause_analysis['Friction %'] = root_cause_analysis['Strategic_Friction_Score'] / root_cause_analysis['Strategic_Friction_Score'].sum() * 100
         root_cause_analysis['Avg Cost'] = root_cause_analysis['Financial_Impact'] / root_cause_analysis['count']
         
-        fig = make_subplots(rows=1, cols=2, subplot_titles=('Friction by Root Cause', 'Cost Impact by Root Cause'))
+        fig = make_subplots(rows=1, cols=2, subplot_titles=('Friction by Root Cause', 'Cost Impact by Root Cause'),
+                            horizontal_spacing=0.15)  # Add spacing between subplots
         
         fig.add_trace(go.Bar(
             y=root_cause_analysis.index,
@@ -1616,8 +1675,9 @@ def render_root_cause(df):
         
         fig.update_layout(
             **create_plotly_theme(),
-            height=450,
-            showlegend=False
+            height=500,  # Taller to prevent overlap
+            showlegend=False,
+            margin=dict(l=150, r=40, t=60, b=40)  # More left margin for labels
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -1631,22 +1691,36 @@ def render_action_tracker(df):
     st.markdown('<p class="main-header">📋 Action Tracker</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Strategic initiatives monitoring and accountability</p>', unsafe_allow_html=True)
     
-    # Initialize action items if empty
+    # Initialize action items - load from JSON, then merge with AI recommendations
     if not st.session_state.action_items:
-        recommendations = generate_strategic_recommendations(df)
-        st.session_state.action_items = [
-            {
-                'id': i,
+        saved_items = load_action_items() or []
+        st.session_state.action_items = saved_items
+    
+    # Always generate fresh AI recommendations and merge new ones
+    recommendations = generate_strategic_recommendations(df)
+    existing_titles = {item['title'] for item in st.session_state.action_items}
+    
+    new_items_added = False
+    for rec in recommendations[:5]:
+        if rec['title'] not in existing_titles:
+            # This is a new AI recommendation - add it
+            new_id = max((item['id'] for item in st.session_state.action_items), default=-1) + 1
+            st.session_state.action_items.append({
+                'id': new_id,
                 'title': rec['title'],
                 'priority': rec['priority'],
                 'owner': 'Unassigned',
-                'due_date': (datetime.now() + timedelta(days=30 * (i + 1))).strftime('%Y-%m-%d'),
+                'due_date': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'),
                 'status': 'Not Started',
                 'progress': 0,
-                'notes': rec['description']
-            }
-            for i, rec in enumerate(recommendations[:5])
-        ]
+                'notes': rec['description'],
+                'ai_generated': True  # Mark as AI-generated
+            })
+            new_items_added = True
+    
+    if new_items_added:
+        save_action_items(st.session_state.action_items)
+        st.toast("🤖 New AI recommendations added!", icon="✨")
     
     # Summary metrics
     col1, col2, col3, col4 = st.columns(4)
@@ -1690,23 +1764,28 @@ def render_action_tracker(df):
                 'progress': 0,
                 'notes': new_notes
             })
+            save_action_items(st.session_state.action_items)
             st.rerun()
     
     # Action items list
     st.markdown("### 📝 Initiative Status")
+    
+    # Track items to delete (can't modify list while iterating)
+    items_to_delete = []
     
     for i, action in enumerate(st.session_state.action_items):
         status_class = 'completed' if action['status'] == 'Completed' else 'in-progress' if action['status'] == 'In Progress' else 'blocked' if action['status'] == 'Blocked' else ''
         priority_class = f"priority-{action['priority'].lower()}"
         
         with st.container():
-            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+            col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 0.5])
             
             with col1:
+                ai_badge = "🤖 " if action.get('ai_generated') else ""
                 st.markdown(f"""
                 <div class="action-card {status_class}">
                     <span class="{priority_class}">{action['priority']}</span>
-                    <strong style="margin-left: 12px;">{action['title']}</strong>
+                    <strong style="margin-left: 12px;">{ai_badge}{action['title']}</strong>
                     <p style="color: #888; font-size: 0.85rem; margin: 8px 0 0 0;">{action['notes'][:100]}{'...' if len(action['notes']) > 100 else ''}</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1718,17 +1797,44 @@ def render_action_tracker(df):
                     index=['Not Started', 'In Progress', 'Completed', 'Blocked'].index(action['status']),
                     key=f"status_{i}"
                 )
-                st.session_state.action_items[i]['status'] = new_status
+                if st.session_state.action_items[i]['status'] != new_status:
+                    st.session_state.action_items[i]['status'] = new_status
+                    save_action_items(st.session_state.action_items)
             
             with col3:
                 new_owner = st.text_input("Owner", value=action['owner'], key=f"owner_{i}")
-                st.session_state.action_items[i]['owner'] = new_owner
+                if st.session_state.action_items[i]['owner'] != new_owner:
+                    st.session_state.action_items[i]['owner'] = new_owner
+                    save_action_items(st.session_state.action_items)
             
             with col4:
                 progress = st.slider("Progress", 0, 100, action['progress'], key=f"progress_{i}")
-                st.session_state.action_items[i]['progress'] = progress
+                if st.session_state.action_items[i]['progress'] != progress:
+                    st.session_state.action_items[i]['progress'] = progress
+                    save_action_items(st.session_state.action_items)
+            
+            with col5:
+                st.markdown("<br>", unsafe_allow_html=True)  # Spacing
+                col_close, col_del = st.columns(2)
+                with col_close:
+                    if action['status'] != 'Completed':
+                        if st.button("✅", key=f"close_{i}", help="Mark as Completed"):
+                            st.session_state.action_items[i]['status'] = 'Completed'
+                            st.session_state.action_items[i]['progress'] = 100
+                            save_action_items(st.session_state.action_items)
+                            st.rerun()
+                with col_del:
+                    if st.button("🗑️", key=f"delete_{i}", help="Delete Initiative"):
+                        items_to_delete.append(i)
         
         st.markdown("---")
+    
+    # Process deletions after loop
+    if items_to_delete:
+        for idx in sorted(items_to_delete, reverse=True):
+            st.session_state.action_items.pop(idx)
+        save_action_items(st.session_state.action_items)
+        st.rerun()
 
 
 def render_presentation_mode(df):

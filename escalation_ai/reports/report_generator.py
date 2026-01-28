@@ -9,9 +9,10 @@ import os
 import logging
 from datetime import datetime
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, NamedStyle
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.formatting.rule import ColorScaleRule, DataBarRule
 import pandas as pd
 
 from ..core.config import (
@@ -46,8 +47,27 @@ class ExcelReportWriter:
         # Style definitions
         self.header_font = Font(bold=True, size=12, color="FFFFFF")
         self.header_fill = PatternFill(start_color="004C97", end_color="004C97", fill_type="solid")
-        self.title_font = Font(bold=True, size=18, color="004C97")
-        self.subtitle_font = Font(size=10, italic=True, color="666666")
+        self.title_font = Font(bold=True, size=22, color="004C97")
+        self.subtitle_font = Font(size=11, italic=True, color="666666")
+        
+        # Enhanced styling
+        self.thin_border = Border(
+            left=Side(style='thin', color='CCCCCC'),
+            right=Side(style='thin', color='CCCCCC'),
+            top=Side(style='thin', color='CCCCCC'),
+            bottom=Side(style='thin', color='CCCCCC')
+        )
+        self.thick_border = Border(
+            left=Side(style='medium', color='004C97'),
+            right=Side(style='medium', color='004C97'),
+            top=Side(style='medium', color='004C97'),
+            bottom=Side(style='medium', color='004C97')
+        )
+        self.kpi_fill_blue = PatternFill(start_color="E3F2FD", end_color="E3F2FD", fill_type="solid")
+        self.kpi_fill_green = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+        self.kpi_fill_red = PatternFill(start_color="FFEBEE", end_color="FFEBEE", fill_type="solid")
+        self.kpi_fill_amber = PatternFill(start_color="FFF8E1", end_color="FFF8E1", fill_type="solid")
+        self.section_font = Font(bold=True, size=13, color="004C97")
         
     def _style_header_row(self, ws, row=1, start_col=1, end_col=None):
         """Apply header styling to a row."""
@@ -61,102 +81,232 @@ class ExcelReportWriter:
             cell.alignment = Alignment(horizontal='center', wrap_text=True)
     
     def write_executive_summary(self, df, exec_summary_text):
-        """Write the Executive Summary sheet."""
+        """Write a visually enhanced Executive Summary sheet."""
         ws = self.wb.create_sheet("Executive Summary", 0)
         ws.sheet_view.showGridLines = False
         
-        report_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        report_timestamp = datetime.now().strftime("%B %d, %Y at %H:%M")
         
-        # Title
-        ws['A1'] = REPORT_TITLE
-        ws['A1'].font = self.title_font
-        ws.merge_cells('A1:H1')
+        # Set wider column widths for better visual appearance
+        ws.column_dimensions['A'].width = 3  # Left margin
+        ws.column_dimensions['B'].width = 18
+        ws.column_dimensions['C'].width = 18
+        ws.column_dimensions['D'].width = 18
+        ws.column_dimensions['E'].width = 18
+        ws.column_dimensions['F'].width = 18
+        ws.column_dimensions['G'].width = 18
+        ws.column_dimensions['H'].width = 18
+        ws.column_dimensions['I'].width = 3  # Right margin
         
-        # Subtitle
-        ws['A2'] = f"Generated: {report_timestamp} | Version: {REPORT_VERSION} | AI Model: {GEN_MODEL}"
-        ws['A2'].font = self.subtitle_font
-        ws.merge_cells('A2:H2')
+        # ═══════════════════════════════════════════════════════════════
+        # HEADER SECTION
+        # ═══════════════════════════════════════════════════════════════
+        ws.row_dimensions[1].height = 8  # Top spacing
+        ws.row_dimensions[2].height = 35  # Title row
         
-        # Key metrics header
-        ws['A4'] = "KEY METRICS AT A GLANCE"
-        ws['A4'].font = Font(bold=True, size=12, color="FFFFFF")
-        ws['A4'].fill = self.header_fill
-        ws.merge_cells('A4:H4')
+        # Title with blue background banner
+        for col in range(2, 9):
+            ws.cell(row=2, column=col).fill = self.header_fill
+        ws['B2'] = f"📊 {REPORT_TITLE}"
+        ws['B2'].font = Font(bold=True, size=20, color="FFFFFF")
+        ws['B2'].alignment = Alignment(horizontal='center', vertical='center')
+        ws.merge_cells('B2:H2')
+        
+        # Subtitle row
+        ws.row_dimensions[3].height = 22
+        ws['B3'] = f"Generated: {report_timestamp}  •  Version: {REPORT_VERSION}  •  AI Model: {GEN_MODEL}"
+        ws['B3'].font = Font(size=10, italic=True, color="666666")
+        ws['B3'].alignment = Alignment(horizontal='center', vertical='center')
+        ws.merge_cells('B3:H3')
+        
+        # ═══════════════════════════════════════════════════════════════
+        # KPI CARDS SECTION
+        # ═══════════════════════════════════════════════════════════════
+        ws.row_dimensions[4].height = 6  # Spacer
+        ws.row_dimensions[5].height = 22
+        
+        # Section header
+        ws['B5'] = "📈 KEY METRICS AT A GLANCE"
+        ws['B5'].font = Font(bold=True, size=12, color="004C97")
+        ws.merge_cells('B5:H5')
         
         # Calculate metrics
         total_tickets = len(df)
         total_friction = df['Strategic_Friction_Score'].sum() if 'Strategic_Friction_Score' in df.columns else 0
+        avg_friction = df['Strategic_Friction_Score'].mean() if 'Strategic_Friction_Score' in df.columns else 0
         critical_count = (df['Severity_Norm'] == 'Critical').sum() if 'Severity_Norm' in df.columns else 0
         total_financial = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else 0
+        avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 0
+        recurrence_rate = df['AI_Recurrence_Probability'].mean() * 100 if 'AI_Recurrence_Probability' in df.columns else 0
         
-        # Write metrics
-        metrics = [
-            ("Total Tickets", str(total_tickets)),
-            ("Friction Score", f"{total_friction:,.0f}"),
-            ("Critical Issues", str(critical_count)),
-            ("Financial Impact", f"${total_financial:,.0f}"),
+        # KPI card layout - 4 cards across
+        kpi_data = [
+            ("🎫 Total Tickets", str(total_tickets), self.kpi_fill_blue, "Records analyzed"),
+            ("⚡ Friction Score", f"{total_friction:,.0f}", self.kpi_fill_amber, f"Avg: {avg_friction:.1f}"),
+            ("🚨 Critical Issues", str(critical_count), self.kpi_fill_red, f"{critical_count/total_tickets*100:.1f}% of total"),
+            ("💰 Financial Impact", f"${total_financial:,.0f}", self.kpi_fill_green, f"${total_financial/total_tickets:.0f}/ticket"),
         ]
         
-        for i, (label, val) in enumerate(metrics):
-            col = 1 + (i * 2)
-            ws.cell(row=5, column=col).value = label
-            ws.cell(row=5, column=col).font = Font(bold=True, size=9, color="666666")
-            ws.cell(row=6, column=col).value = val
-            ws.cell(row=6, column=col).font = Font(bold=True, size=14, color="004C97")
+        # KPI rows setup
+        ws.row_dimensions[6].height = 8  # Spacer
+        ws.row_dimensions[7].height = 18  # Label row
+        ws.row_dimensions[8].height = 30  # Value row
+        ws.row_dimensions[9].height = 16  # Subtext row
         
-        # AI Synthesis header
-        ws['A10'] = "AI EXECUTIVE SYNTHESIS"
-        ws['A10'].font = Font(bold=True, size=12, color="FFFFFF")
-        ws['A10'].fill = PatternFill(start_color="D9534F", end_color="D9534F", fill_type="solid")
-        ws.merge_cells('A10:H10')
+        kpi_cols = [(2, 3), (4, 5), (6, 7), (8, 8)]  # Column ranges for each KPI
         
-        # Write synthesis with proper formatting
-        current_row = 11
+        for i, (label, value, fill, subtext) in enumerate(kpi_data):
+            start_col, end_col = kpi_cols[i][0], kpi_cols[i][-1] if len(kpi_cols[i]) > 1 else kpi_cols[i][0]
+            
+            # Apply fill to all cells in the KPI card
+            for row in [7, 8, 9]:
+                for col in range(start_col, end_col + 1):
+                    cell = ws.cell(row=row, column=col)
+                    cell.fill = fill
+                    cell.border = self.thin_border
+            
+            # Label
+            ws.cell(row=7, column=start_col).value = label
+            ws.cell(row=7, column=start_col).font = Font(bold=True, size=9, color="333333")
+            ws.cell(row=7, column=start_col).alignment = Alignment(horizontal='center', vertical='center')
+            if start_col != end_col:
+                ws.merge_cells(start_row=7, start_column=start_col, end_row=7, end_column=end_col)
+            
+            # Value
+            ws.cell(row=8, column=start_col).value = value
+            ws.cell(row=8, column=start_col).font = Font(bold=True, size=18, color="004C97")
+            ws.cell(row=8, column=start_col).alignment = Alignment(horizontal='center', vertical='center')
+            if start_col != end_col:
+                ws.merge_cells(start_row=8, start_column=start_col, end_row=8, end_column=end_col)
+            
+            # Subtext
+            ws.cell(row=9, column=start_col).value = subtext
+            ws.cell(row=9, column=start_col).font = Font(size=8, italic=True, color="666666")
+            ws.cell(row=9, column=start_col).alignment = Alignment(horizontal='center', vertical='center')
+            if start_col != end_col:
+                ws.merge_cells(start_row=9, start_column=start_col, end_row=9, end_column=end_col)
         
-        # Split by section headers (marked with ** or SECTION)
+        # ═══════════════════════════════════════════════════════════════
+        # SECONDARY METRICS ROW
+        # ═══════════════════════════════════════════════════════════════
+        ws.row_dimensions[10].height = 6  # Spacer
+        ws.row_dimensions[11].height = 22
+        
+        secondary_metrics = [
+            ("Avg Resolution", f"{avg_resolution:.1f} days"),
+            ("Recurrence Risk", f"{recurrence_rate:.1f}%"),
+            ("Categories", f"{df['AI_Category'].nunique() if 'AI_Category' in df.columns else 0}"),
+        ]
+        
+        sec_start = 2
+        for label, value in secondary_metrics:
+            cell = ws.cell(row=11, column=sec_start)
+            cell.value = f"{label}: {value}"
+            cell.font = Font(size=10, color="004C97")
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            sec_start += 2
+        
+        # ═══════════════════════════════════════════════════════════════
+        # AI EXECUTIVE SYNTHESIS
+        # ═══════════════════════════════════════════════════════════════
+        ws.row_dimensions[12].height = 10  # Spacer
+        ws.row_dimensions[13].height = 28  # Section header
+        
+        # Section header with red banner
+        for col in range(2, 9):
+            ws.cell(row=13, column=col).fill = PatternFill(start_color="D9534F", end_color="D9534F", fill_type="solid")
+        ws['B13'] = "AI EXECUTIVE SYNTHESIS"
+        ws['B13'].font = Font(bold=True, size=13, color="FFFFFF")
+        ws['B13'].alignment = Alignment(horizontal='center', vertical='center')
+        ws.merge_cells('B13:H13')
+        
+        # Process synthesis text - SIMPLIFIED approach to prevent overlap
         import re
-        sections = re.split(r'\n\n+', exec_summary_text)
+        current_row = 15
+        
+        # Clean up the entire text first
+        clean_text = exec_summary_text.strip()
+        clean_text = re.sub(r'\*\*([^*]+)\*\*', r'\1', clean_text)  # Remove bold markers
+        clean_text = re.sub(r'^#+\s*', '', clean_text, flags=re.MULTILINE)  # Remove markdown headers
+        clean_text = re.sub(r'▶\s*', '', clean_text)  # Remove arrow symbols
+        
+        # Split into logical sections (by double newlines or section markers)
+        sections = re.split(r'\n\s*\n|(?=SECTION \d)', clean_text)
         
         for section in sections:
-            if not section.strip():
+            section_text = section.strip()
+            if not section_text:
                 continue
             
-            # Check if this is a section header (starts with ** or SECTION)
-            section_text = section.strip()
-            is_header = section_text.startswith('**SECTION') or section_text.startswith('SECTION')
+            # Check if this is a section header (starts with SECTION or is short and looks like header)
+            is_header = bool(re.match(r'^SECTION\s*\d', section_text, re.IGNORECASE)) or \
+                        (len(section_text) < 60 and section_text.replace('-', '').replace(':', '').strip().isupper())
             
-            # Clean up markdown bold markers
-            section_text = re.sub(r'\*\*([^*]+)\*\*', r'\1', section_text)
-            
-            # Write the cell
-            cell = ws[f'A{current_row}']
-            cell.value = section_text
-            cell.alignment = Alignment(wrap_text=True, vertical='top')
-            ws.merge_cells(f'A{current_row}:H{current_row}')
-            
-            if is_header or 'SECTION' in section_text[:50]:
-                # Bold formatting for section headers
-                cell.font = Font(bold=True, size=11, color="004C97")
-                ws.row_dimensions[current_row].height = 18  # 0.25 inches
+            if is_header:
+                # Section header - extract just the header part
+                header_match = re.match(r'^(SECTION\s*\d+[^\n]*)', section_text, re.IGNORECASE)
+                if header_match:
+                    header_text = header_match.group(1).strip()
+                    body_text = section_text[len(header_text):].strip()
+                else:
+                    header_text = section_text.split('\n')[0].strip()
+                    body_text = '\n'.join(section_text.split('\n')[1:]).strip()
+                
+                # Write header with blue background
+                ws.row_dimensions[current_row].height = 24
+                cell = ws.cell(row=current_row, column=2)
+                cell.value = header_text[:100]  # Truncate to prevent overflow
+                cell.font = Font(bold=True, size=11, color="FFFFFF")
+                cell.fill = self.header_fill
+                cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=False)
+                ws.merge_cells(f'B{current_row}:H{current_row}')
+                current_row += 1
+                
+                # Write body text if present
+                if body_text:
+                    # Calculate appropriate row height based on text length
+                    char_per_line = 100  # Approx chars per line with merged cells
+                    num_lines = max(1, (len(body_text) // char_per_line) + body_text.count('\n') + 1)
+                    row_height = min(300, max(40, num_lines * 15))
+                    
+                    ws.row_dimensions[current_row].height = row_height
+                    cell = ws.cell(row=current_row, column=2)
+                    cell.value = body_text
+                    cell.font = Font(size=10, color="333333")
+                    cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+                    ws.merge_cells(f'B{current_row}:H{current_row}')
+                    current_row += 1
             else:
-                # Normal text
-                cell.font = Font(size=10)
-                # Calculate row height based on content length
+                # Regular body text - calculate appropriate height
                 text_length = len(section_text)
-                row_height = max(45, min(120, text_length // 3))
+                line_count = max(1, text_length // 100 + section_text.count('\n') + 1)
+                row_height = min(250, max(45, line_count * 16))
+                
                 ws.row_dimensions[current_row].height = row_height
+                cell = ws.cell(row=current_row, column=2)
+                cell.value = section_text
+                cell.font = Font(size=10, color="333333")
+                cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+                ws.merge_cells(f'B{current_row}:H{current_row}')
+                current_row += 1
             
-            current_row += 1
-            
-            # Add blank row after each section for spacing
+            # Add small gap between sections
             ws.row_dimensions[current_row].height = 8
             current_row += 1
         
-        # Set column widths
-        for col in ['A', 'C', 'E', 'G']:
-            ws.column_dimensions[col].width = 18
-        for col in ['B', 'D', 'F', 'H']:
-            ws.column_dimensions[col].width = 12
+        # Add footer
+        ws.row_dimensions[current_row].height = 15  # Spacer
+        current_row += 1
+        ws.row_dimensions[current_row].height = 18
+        ws.cell(row=current_row, column=2).value = "─" * 80
+        ws.cell(row=current_row, column=2).font = Font(color="CCCCCC")
+        ws.merge_cells(f'B{current_row}:H{current_row}')
+        
+        current_row += 1
+        ws.cell(row=current_row, column=2).value = f"Report generated by Escalation AI v{REPORT_VERSION} • {report_timestamp}"
+        ws.cell(row=current_row, column=2).font = Font(size=9, italic=True, color="999999")
+        ws.cell(row=current_row, column=2).alignment = Alignment(horizontal='center')
+        ws.merge_cells(f'B{current_row}:H{current_row}')
     
     def write_dashboard(self, df, chart_paths):
         """Write the Dashboard sheet with embedded chart images in a grid layout."""

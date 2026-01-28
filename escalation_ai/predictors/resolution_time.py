@@ -171,58 +171,97 @@ class ResolutionTimePredictor:
             return None
     
     def predict(self, row):
-        """Predict resolution time for a single ticket."""
+        """Predict resolution time for a single ticket.
+        
+        Priority order:
+        1. ML model prediction (if trained and successful)
+        2. Category statistics from training data (median)
+        3. Global statistics from training data
+        4. Calibrated heuristics (scaled to match learned data)
+        """
         category = str(row.get('AI_Category', 'Unknown'))
         
+        # Priority 1: Try ML model
         if self.is_trained and self.model is not None:
             try:
                 features = self._extract_features(row)
                 X = np.array([[features[c] for c in self.feature_columns]])
                 predicted = self.model.predict(X)[0]
                 
-                cat_std = self.category_stats.get(category, {}).get('std', 2.0)
-                confidence = max(0.3, min(0.95, 1 - (cat_std / (predicted + 1))))
-                
-                return {
-                    'predicted_days': max(0.5, round(predicted, 1)),
-                    'confidence': confidence,
-                    'method': 'ml'
-                }
+                # Sanity check: prediction should be reasonable
+                if 0.1 <= predicted <= 100:
+                    cat_std = self.category_stats.get(category, {}).get('std', 2.0)
+                    confidence = max(0.3, min(0.95, 1 - (cat_std / (predicted + 1))))
+                    
+                    return {
+                        'predicted_days': max(0.5, round(predicted, 1)),
+                        'confidence': confidence,
+                        'method': 'ml'
+                    }
             except Exception as e:
                 logger.debug(f"[Resolution Predictor] ML prediction failed: {e}")
         
+        # Priority 2: Use learned category statistics
         if category in self.category_stats:
+            cat_stat = self.category_stats[category]
+            predicted_days = cat_stat.get('median', cat_stat.get('mean', 3.0))
+            sample_count = cat_stat.get('count', 1)
+            confidence = min(0.7, 0.4 + (sample_count / 50))
+            
             return {
-                'predicted_days': round(self.category_stats[category]['median'], 1),
-                'confidence': 0.5,
+                'predicted_days': max(0.5, round(predicted_days, 1)),
+                'confidence': confidence,
                 'method': 'category_stats'
             }
         
-        # Heuristic prediction when no training data available
+        # Priority 3: Use global stats from training data for unknown category
+        if self.category_stats:
+            all_medians = [s.get('median', s.get('mean')) for s in self.category_stats.values() 
+                          if s.get('median') or s.get('mean')]
+            if all_medians:
+                global_median = np.median(all_medians)
+                return {
+                    'predicted_days': max(0.5, round(global_median, 1)),
+                    'confidence': 0.35,
+                    'method': 'global_stats'
+                }
+        
+        # Priority 4: Calibrated heuristic prediction
         return self._predict_heuristic(row, category)
     
     def _predict_heuristic(self, row, category):
         """
         Heuristic-based resolution time prediction when ML model isn't trained.
         Uses category complexity, severity, and other indicators.
+        Now heavily calibrated to actual data when available.
         """
-        # Base resolution times by category (telecom industry averages)
-        category_base_days = {
-            'OSS/NMS & Systems': 4.5,
-            'RF & Antenna Issues': 6.0,
-            'Process & Documentation': 2.5,
-            'Communication & Coordination': 2.0,
-            'Configuration & Integration': 5.0,
-            'Transmission & Backhaul': 7.0,
-            'Power & Environment': 4.0,
-            'Site Access & Logistics': 3.5,
-            'Contractor & Vendor Issues': 8.0,
-            'Hardware Issues': 5.5,
-            'Software Issues': 4.0,
-        }
-        
-        # Start with category-based estimate
-        base_days = category_base_days.get(category, 5.0)
+        # First, try to get a reasonable baseline from learned data
+        if self.category_stats:
+            # Calculate global median from all learned data
+            all_medians = [s['median'] for s in self.category_stats.values() if s.get('median')]
+            if all_medians:
+                global_median = np.median(all_medians)
+                # Use this as the base instead of high industry heuristics
+                base_days = global_median
+            else:
+                base_days = 3.0  # Conservative default if no learned data
+        else:
+            # Only use heuristic industry averages as absolute fallback
+            # These are SCALED DOWN to be more conservative
+            category_base_days = {
+                'OSS/NMS & Systems': 3.0,
+                'RF & Antenna Issues': 3.5,
+                'Process & Documentation': 1.5,
+                'Communication & Coordination': 1.0,
+                'Configuration & Integration': 3.0,
+                'Transmission & Backhaul': 4.0,
+                'Power & Environment': 2.5,
+                'Site Access & Logistics': 2.0,
+                'Contractor & Vendor Issues': 4.5,
+                'Hardware Issues': 3.0,
+                'Software Issues': 2.5,
+            }
+            base_days = category_base_days.get(category, 3.0)
         
         # Adjust for severity
         severity = str(row.get('Severity_Norm', row.get(COL_SEVERITY, 'Medium'))).lower()

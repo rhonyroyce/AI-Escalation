@@ -35,7 +35,18 @@ def setup_cuda_environment():
     """
     Auto-detect and configure CUDA environment for GPU acceleration.
     Handles Blackwell GPUs (sm_120) which require CUDA 12.8+ and NVRTC 12.8+.
+    
+    Sets up:
+    - CUDA_HOME: Path to CUDA toolkit (for nvcc, libs)
+    - CUDA_PATH: Also used by CuPy to find CUDA headers
+    - CPATH: Include path for cuda_fp16.h and other CUDA headers  
+    - LD_LIBRARY_PATH: Path to NVRTC 12.8+ library (from nvidia-cuda-nvrtc-cu12)
+    
+    Returns True if environment was modified and process needs restart.
     """
+    needs_restart = False
+    cuda_install_path = None
+    
     # Find the best available CUDA installation
     cuda_paths = [
         '/usr/local/cuda-12.9',
@@ -46,23 +57,59 @@ def setup_cuda_environment():
     
     for cuda_path in cuda_paths:
         if os.path.exists(cuda_path):
-            os.environ.setdefault('CUDA_HOME', cuda_path)
+            cuda_install_path = cuda_path
             break
+    
+    # Set CUDA_HOME, CUDA_PATH, and CPATH for CuPy NVRTC compilation
+    if cuda_install_path:
+        cuda_include = os.path.join(cuda_install_path, 'include')
+        
+        # CUDA_HOME and CUDA_PATH - both used by different tools
+        if os.environ.get('CUDA_HOME') != cuda_install_path:
+            os.environ['CUDA_HOME'] = cuda_install_path
+            needs_restart = True
+        if os.environ.get('CUDA_PATH') != cuda_install_path:
+            os.environ['CUDA_PATH'] = cuda_install_path
+            needs_restart = True
+            
+        # CPATH - C include path for NVRTC to find cuda_fp16.h, etc.
+        cpath = os.environ.get('CPATH', '')
+        if cuda_include not in cpath:
+            os.environ['CPATH'] = f"{cuda_include}:{cpath}" if cpath else cuda_include
+            needs_restart = True
     
     # Find NVRTC library in the current Python environment's nvidia packages
     # This is needed for Blackwell GPUs (sm_120) which require NVRTC 12.8+
     try:
-        import nvidia.cuda_nvrtc
-        nvrtc_lib_path = Path(nvidia.cuda_nvrtc.__file__).parent / 'lib'
-        if nvrtc_lib_path.exists():
+        import nvidia.cuda_nvrtc.lib as nvrtc_lib
+        nvrtc_lib_path = Path(nvrtc_lib.__path__[0]) if hasattr(nvrtc_lib, '__path__') else None
+        if nvrtc_lib_path is None:
+            # Try alternate method
+            import nvidia.cuda_nvrtc
+            pkg_path = getattr(nvidia.cuda_nvrtc, '__path__', None)
+            if pkg_path:
+                nvrtc_lib_path = Path(pkg_path[0]) / 'lib'
+        
+        if nvrtc_lib_path and nvrtc_lib_path.exists():
             ld_path = os.environ.get('LD_LIBRARY_PATH', '')
             nvrtc_str = str(nvrtc_lib_path)
             if nvrtc_str not in ld_path:
                 os.environ['LD_LIBRARY_PATH'] = f"{nvrtc_str}:{ld_path}"
+                needs_restart = True
     except ImportError:
         pass  # nvidia-cuda-nvrtc not installed, use system NVRTC
+    
+    return needs_restart
 
-setup_cuda_environment()
+# Check if we need to restart with updated LD_LIBRARY_PATH
+# This is required because LD_LIBRARY_PATH must be set before Python loads CUDA libraries
+if '_CUDA_ENV_SET' not in os.environ:
+    needs_restart = setup_cuda_environment()
+    if needs_restart:
+        os.environ['_CUDA_ENV_SET'] = '1'
+        # Restart Python with the updated environment
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    os.environ['_CUDA_ENV_SET'] = '1'
 
 
 # Force unbuffered output for real-time progress display

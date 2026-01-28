@@ -163,15 +163,17 @@ class SimilarTicketFinder:
         This pre-computes embeddings and builds a fast nearest neighbor index
         for efficient similarity search.
         """
-        if not self.use_gpu:
-            return
+        from tqdm import tqdm
         
-        logger.info("[Similar Ticket Finder] Building GPU similarity index...")
+        # Always build embeddings for caching, even if not using GPU for similarity search
+        logger.info("[Similar Ticket Finder] Building similarity index...")
+        print("  🧠 Pre-computing embeddings for similarity search...")
         
         embeddings = []
         ids = []
         
-        for idx, row in historical_df.iterrows():
+        for idx, row in tqdm(historical_df.iterrows(), total=len(historical_df), 
+                             desc="  Embedding tickets", ncols=80):
             text = str(row.get(COL_SUMMARY, row.get('Text', ''))).strip()
             if not text:
                 continue
@@ -185,15 +187,19 @@ class SimilarTicketFinder:
             self.index_embeddings = np.array(embeddings, dtype=np.float32)
             self.index_ids = ids
             
-            # Build GPU search index
-            self.gpu_search_index = GPUSimilaritySearch(
-                use_gpu=self.use_gpu,
-                metric='cosine',
-                n_neighbors=min(self.top_k * 2, len(embeddings))
-            )
-            self.gpu_search_index.fit(self.index_embeddings)
+            if self.use_gpu:
+                # Build GPU search index
+                self.gpu_search_index = GPUSimilaritySearch(
+                    use_gpu=self.use_gpu,
+                    metric='cosine',
+                    n_neighbors=min(self.top_k * 2, len(embeddings))
+                )
+                self.gpu_search_index.fit(self.index_embeddings)
+                print(f"  ✅ GPU index built with {len(embeddings)} embeddings")
+            else:
+                print(f"  ✅ CPU index built with {len(embeddings)} embeddings")
             
-            logger.info(f"[Similar Ticket Finder] GPU index built with {len(embeddings)} embeddings")
+            logger.info(f"[Similar Ticket Finder] Index built with {len(embeddings)} embeddings")
     
     def _cosine_similarity(self, vec1, vec2):
         """Calculate cosine similarity between two vectors (GPU-accelerated)."""
@@ -541,9 +547,15 @@ class SimilarTicketFinder:
     
     def process_all_tickets(self, df, progress_callback=None):
         """Find similar tickets for all tickets in the dataset."""
+        from tqdm import tqdm
+        
         logger.info(f"[Similar Ticket Finder] Processing {len(df)} tickets...")
         
         df = df.copy()
+        
+        # Build GPU index first for fast similarity search
+        # This pre-computes all embeddings once
+        self.build_gpu_index(df)
         
         # Initialize new columns
         df['Similar_Ticket_Count'] = 0
@@ -558,7 +570,8 @@ class SimilarTicketFinder:
         processed = 0
         total = len(df)
         
-        for idx, row in df.iterrows():
+        # Use tqdm progress bar
+        for idx, row in tqdm(df.iterrows(), total=total, desc="  Analyzing tickets", ncols=80):
             analysis = self.analyze_ticket(row, df)
             
             df.at[idx, 'Similar_Ticket_Count'] = analysis['match_count']
