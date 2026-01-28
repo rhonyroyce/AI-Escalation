@@ -28,6 +28,19 @@ import warnings
 # Suppress cuML n_bins warning (it auto-adjusts, just informational)
 warnings.filterwarnings('ignore', message='.*n_bins.*greater than.*number of samples.*')
 
+# ==========================================
+# CUDA 12.9 Environment for Blackwell GPUs (RTX 50xx series)
+# ==========================================
+if os.path.exists('/usr/local/cuda-12.9'):
+    os.environ.setdefault('CUDA_HOME', '/usr/local/cuda-12.9')
+    # Ensure NVRTC 12.9 is used for sm_120 support
+    nvrtc_path = os.path.expanduser('~/ml-gpu/lib/python3.12/site-packages/nvidia/cuda_nvrtc/lib')
+    if os.path.exists(nvrtc_path):
+        ld_path = os.environ.get('LD_LIBRARY_PATH', '')
+        if nvrtc_path not in ld_path:
+            os.environ['LD_LIBRARY_PATH'] = f"{nvrtc_path}:{ld_path}"
+
+
 # Force unbuffered output for real-time progress display
 os.environ['PYTHONUNBUFFERED'] = '1'
 
