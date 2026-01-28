@@ -20,7 +20,7 @@ from ..core.config import (
     COL_SUMMARY, COL_SEVERITY, COL_ORIGIN, COL_TYPE, COL_DATETIME,
     COL_ENGINEER, COL_LOB
 )
-from ..visualization import ChartGenerator
+from ..visualization import ChartGenerator, AdvancedChartGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -569,6 +569,9 @@ class ExcelReportWriter:
         self._generate_drift_charts(df, chart_paths)
         self._generate_threshold_charts(df, chart_paths)
         
+        # Generate advanced insight charts (SLA, efficiency, cost, executive)
+        self._generate_advanced_charts(df, chart_paths)
+        
         # Flatten for backward compatibility (also return total count)
         all_paths = []
         for category_paths in chart_paths.values():
@@ -576,6 +579,21 @@ class ExcelReportWriter:
         
         logger.info(f"Generated {len(all_paths)} charts across {len(chart_paths)} categories")
         return chart_paths
+    
+    def _generate_advanced_charts(self, df, chart_paths):
+        """Generate advanced executive insight charts."""
+        try:
+            advanced_gen = AdvancedChartGenerator(df, self.output_dir)
+            advanced_paths = advanced_gen.generate_all_charts()
+            
+            # Organize into chart_paths structure
+            chart_paths['07_sla'] = [p for p in advanced_paths if '07_sla' in p]
+            chart_paths['08_efficiency'] = [p for p in advanced_paths if '08_efficiency' in p]
+            chart_paths['09_executive'] = [p for p in advanced_paths if '09_executive' in p]
+            
+            logger.info(f"Generated {len(advanced_paths)} advanced insight charts")
+        except Exception as e:
+            logger.warning(f"Advanced charts skipped: {e}")
     
     def _generate_drift_charts(self, df, chart_paths):
         """Generate category drift detection charts."""
