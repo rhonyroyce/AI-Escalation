@@ -2297,7 +2297,7 @@ def generate_executive_pdf_report(df):
         
         summary_text = f"""
         This report provides a comprehensive analysis of escalation patterns and their business impact 
-        over the past 90 days. The analysis covers {len(df):,} escalations with a total operational 
+        over the past 90 days. The analysis covers {len(df):,} records with a total operational 
         cost of ${total_cost:,.0f} and revenue at risk of ${revenue_risk:,.0f}.
         """
         story.append(Paragraph(summary_text, body_style))
@@ -2306,9 +2306,18 @@ def generate_executive_pdf_report(df):
         # Key Metrics Table
         story.append(Paragraph("Key Performance Indicators", subheading_style))
         
+        # Count by type
+        type_col = 'tickets_data_type_1'
+        escalations_count = len(df[df[type_col].astype(str).str.contains('Escalation', case=False, na=False)]) if type_col in df.columns else len(df)
+        concerns_count = len(df[df[type_col].astype(str).str.contains('Concern', case=False, na=False)]) if type_col in df.columns else 0
+        lessons_count = len(df[df[type_col].astype(str).str.contains('Lesson', case=False, na=False)]) if type_col in df.columns else 0
+        
         kpi_data = [
             ['Metric', 'Current Value', 'Industry Benchmark', 'Status'],
-            ['Total Escalations', f'{len(df):,}', '—', '—'],
+            ['Total Records', f'{len(df):,}', '—', '—'],
+            ['Escalations', f'{escalations_count:,}', '—', '—'],
+            ['Concerns', f'{concerns_count:,}', '—', '—'],
+            ['Lessons Learned', f'{lessons_count:,}', '—', '—'],
             ['Critical Issues', f'{critical_count}', '—', 'High' if critical_count > 20 else 'Normal'],
             ['Total Operational Cost', f'${total_cost:,.0f}', '—', '—'],
             ['Revenue at Risk', f'${revenue_risk:,.0f}', '—', '—'],
@@ -2570,7 +2579,7 @@ def generate_html_report(df):
             <h1>🎯 ESCALATION AI</h1>
             <p>Executive Intelligence Report</p>
             <p>Generated: {datetime.now().strftime('%B %d, %Y at %H:%M')}</p>
-            <p>Analysis Period: 90 Days | {len(df):,} Escalations Analyzed</p>
+            <p>Analysis Period: 90 Days | {len(df):,} Records Analyzed</p>
         </div>
         
         <div class="section">
@@ -2579,7 +2588,7 @@ def generate_html_report(df):
             <div class="kpi-grid">
                 <div class="kpi-card">
                     <div class="kpi-value">{len(df):,}</div>
-                    <div class="kpi-label">Total Escalations</div>
+                    <div class="kpi-label">Total Records</div>
                 </div>
                 <div class="kpi-card alert">
                     <div class="kpi-value alert">{critical_count}</div>
@@ -2594,6 +2603,13 @@ def generate_html_report(df):
                     <div class="kpi-label">Savings Opportunity</div>
                 </div>
             </div>
+            
+            <table>
+                <tr><th>Category</th><th>Count</th><th>Description</th></tr>
+                <tr><td>📋 Escalations</td><td>{len(df[df['tickets_data_type_1'].astype(str).str.contains('Escalation', case=False, na=False)]) if 'tickets_data_type_1' in df.columns else len(df)}</td><td>Active escalation tickets</td></tr>
+                <tr><td>⚠️ Concerns</td><td>{len(df[df['tickets_data_type_1'].astype(str).str.contains('Concern', case=False, na=False)]) if 'tickets_data_type_1' in df.columns else 0}</td><td>Potential issues flagged</td></tr>
+                <tr><td>📚 Lessons Learned</td><td>{len(df[df['tickets_data_type_1'].astype(str).str.contains('Lesson', case=False, na=False)]) if 'tickets_data_type_1' in df.columns else 0}</td><td>Historical learnings</td></tr>
+            </table>
             
             <table>
                 <tr><th>Metric</th><th>Current</th><th>Benchmark</th><th>Status</th></tr>
@@ -2736,12 +2752,19 @@ def main():
                 elif export_format == "Excel Data":
                     excel_buffer = io.BytesIO()
                     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                        df.to_excel(writer, sheet_name='Escalation Data', index=False)
+                        df.to_excel(writer, sheet_name='All Records', index=False)
                         
-                        # Add summary sheet
+                        # Add summary sheet with type breakdown
+                        type_col = 'tickets_data_type_1'
+                        escalations = len(df[df[type_col].astype(str).str.contains('Escalation', case=False, na=False)]) if type_col in df.columns else len(df)
+                        concerns = len(df[df[type_col].astype(str).str.contains('Concern', case=False, na=False)]) if type_col in df.columns else 0
+                        lessons = len(df[df[type_col].astype(str).str.contains('Lesson', case=False, na=False)]) if type_col in df.columns else 0
+                        
                         summary_df = pd.DataFrame({
-                            'Metric': ['Total Escalations', 'Critical Issues', 'Avg Resolution', 'Recurrence Rate'],
-                            'Value': [len(df), len(df[df['tickets_data_severity']=='Critical']), 
+                            'Metric': ['Total Records', 'Escalations', 'Concerns', 'Lessons Learned', 
+                                       'Critical Issues', 'Avg Resolution', 'Recurrence Rate'],
+                            'Value': [len(df), escalations, concerns, lessons,
+                                     len(df[df['tickets_data_severity']=='Critical']), 
                                      f"{df['Predicted_Resolution_Days'].mean():.1f} days",
                                      f"{df['AI_Recurrence_Risk'].mean()*100:.1f}%"]
                         })
@@ -2797,12 +2820,19 @@ def render_dashboard(df):
     # KPI Row
     col1, col2, col3, col4 = st.columns(4)
     
+    # Count by ticket type
+    type_col = 'tickets_data_type_1'
+    total = len(df)
+    escalations_count = len(df[df[type_col].astype(str).str.contains('Escalation', case=False, na=False)]) if type_col in df.columns else total
+    concerns_count = len(df[df[type_col].astype(str).str.contains('Concern', case=False, na=False)]) if type_col in df.columns else 0
+    lessons_count = len(df[df[type_col].astype(str).str.contains('Lesson', case=False, na=False)]) if type_col in df.columns else 0
+    
     with col1:
-        total = len(df)
         st.markdown(f"""
         <div class="kpi-container">
             <p class="kpi-value">{total:,}</p>
-            <p class="kpi-label">Total Escalations</p>
+            <p class="kpi-label">Total Records</p>
+            <p class="kpi-delta" style="font-size: 0.7rem; color: #888;">📋 {escalations_count} Escalations | ⚠️ {concerns_count} Concerns | 📚 {lessons_count} Lessons</p>
         </div>
         """, unsafe_allow_html=True)
     

@@ -87,6 +87,46 @@ def get_gpu_info() -> dict:
     return info
 
 
+def get_optimal_embedding_batch_size() -> int:
+    """Get optimal batch size for embeddings based on GPU VRAM.
+    
+    Returns:
+        Batch size optimized for the available GPU memory:
+        - 24GB+ VRAM (RTX 5090, A100): 100 items
+        - 16-24GB VRAM (RTX 5080): 50 items  
+        - 12-16GB VRAM (RTX 5070 Ti): 20 items
+        - 8-12GB VRAM (RTX 5070): 10 items
+        - <8GB or CPU: 5 items
+    """
+    if not _check_gpu():
+        return 5
+    
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            vram_mb = int(result.stdout.strip().split('\n')[0])
+            vram_gb = vram_mb / 1024
+            
+            if vram_gb >= 24:
+                return 100  # RTX 5090, A100, etc.
+            elif vram_gb >= 16:
+                return 50   # RTX 5080, etc.
+            elif vram_gb >= 12:
+                return 20   # RTX 5070 Ti, etc.
+            elif vram_gb >= 8:
+                return 10   # RTX 5070, etc.
+            else:
+                return 5    # Lower-end GPUs
+    except Exception:
+        pass
+    
+    return 20  # Default fallback
+
+
 # ==========================================
 # GPU-ENABLED DATAFRAME OPERATIONS
 # ==========================================

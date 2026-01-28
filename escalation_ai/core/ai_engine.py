@@ -11,6 +11,7 @@ from typing import List
 import tkinter.messagebox as messagebox
 
 from escalation_ai.core.config import OLLAMA_BASE_URL, EMBED_MODEL, GEN_MODEL
+from escalation_ai.core.gpu_utils import get_optimal_embedding_batch_size
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,17 @@ class OllamaBrain:
             logger.warning(f"Embedding failed: {e}")
         return np.zeros(self.get_dim())
 
-    def get_embeddings_batch(self, texts: List[str]) -> List[np.ndarray]:
-        """Get vectors for multiple strings in one API call"""
+    def get_embeddings_batch(self, texts: List[str], batch_size: int = None) -> List[np.ndarray]:
+        """Get vectors for multiple strings in batched API calls
+        
+        Args:
+            texts: List of strings to embed
+            batch_size: Items per batch (auto-detected from GPU VRAM if None)
+        """
+        # Auto-detect optimal batch size based on GPU VRAM
+        if batch_size is None:
+            batch_size = get_optimal_embedding_batch_size()
+            logger.info(f"Auto-detected embedding batch size: {batch_size}")
         if not texts:
             return []
         
@@ -60,18 +70,31 @@ class OllamaBrain:
         if not valid_texts:
             return result
         
-        try:
-            res = requests.post(
-                f"{OLLAMA_BASE_URL}/api/embed",
-                json={"model": self.embed_model, "input": valid_texts},
-                timeout=120
-            )
-            if res.status_code == 200:
-                embeddings = res.json().get('embeddings', [])
-                for idx, vec in zip(valid_indices, embeddings):
-                    result[idx] = np.array(vec)
-        except Exception as e:
-            logger.warning(f"Batch embedding failed: {e}")
+        # Process in batches to avoid timeout
+        all_embeddings = []
+        for batch_start in range(0, len(valid_texts), batch_size):
+            batch_end = min(batch_start + batch_size, len(valid_texts))
+            batch_texts = valid_texts[batch_start:batch_end]
+            
+            try:
+                res = requests.post(
+                    f"{OLLAMA_BASE_URL}/api/embed",
+                    json={"model": self.embed_model, "input": batch_texts},
+                    timeout=600  # 10 minutes per batch for slower GPUs
+                )
+                if res.status_code == 200:
+                    batch_embeddings = res.json().get('embeddings', [])
+                    all_embeddings.extend(batch_embeddings)
+                else:
+                    logger.warning(f"Batch embedding returned status {res.status_code}")
+                    all_embeddings.extend([np.zeros(self.get_dim()).tolist() for _ in batch_texts])
+            except Exception as e:
+                logger.warning(f"Batch embedding failed: {e}")
+                all_embeddings.extend([np.zeros(self.get_dim()).tolist() for _ in batch_texts])
+        
+        # Map embeddings back to original indices
+        for idx, vec in zip(valid_indices, all_embeddings):
+            result[idx] = np.array(vec)
         
         return result
 

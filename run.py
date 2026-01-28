@@ -32,20 +32,51 @@ warnings.filterwarnings('ignore', message='.*n_bins.*greater than.*number of sam
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 # ==========================================
-# ENVIRONMENT CHECK - Require ml-gpu for GPU acceleration
+# ENVIRONMENT CHECK - Check for GPU availability
 # ==========================================
 REQUIRED_ENV = "ml-gpu"
 
-def ensure_conda_env():
-    """Check conda environment - require ml-gpu for full GPU support."""
-    current_env = os.environ.get('CONDA_DEFAULT_ENV', '')
+def check_gpu_available():
+    """Check if GPU is available via nvidia-smi."""
+    try:
+        result = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
+                               capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and result.stdout.strip():
+            return True, result.stdout.strip().split('\n')[0]
+    except:
+        pass
+    return False, None
+
+def ensure_environment():
+    """Check environment - support both conda and venv with GPU."""
+    # First check if GPU is actually available
+    gpu_available, gpu_name = check_gpu_available()
     
-    if current_env == REQUIRED_ENV:
+    # Check for conda environment
+    conda_env = os.environ.get('CONDA_DEFAULT_ENV', '')
+    
+    # Check for venv (VIRTUAL_ENV is set by venv/virtualenv activation)
+    venv_path = os.environ.get('VIRTUAL_ENV', '')
+    
+    if conda_env == REQUIRED_ENV:
         print(f"✅ Conda environment: {REQUIRED_ENV}")
+        if gpu_available:
+            print(f"✅ GPU detected: {gpu_name}")
         return True
-    elif current_env:
+    elif venv_path and REQUIRED_ENV in venv_path:
+        print(f"✅ Virtual environment: {venv_path}")
+        if gpu_available:
+            print(f"✅ GPU detected: {gpu_name}")
+        return True
+    elif gpu_available:
+        # No specific env but GPU is available - proceed
+        if venv_path:
+            print(f"✅ Virtual environment: {venv_path}")
+        print(f"✅ GPU detected: {gpu_name}")
+        return True
+    elif conda_env:
         # Wrong conda env - this will cause issues with GPU libs
-        print(f"❌ Wrong conda environment: '{current_env}'")
+        print(f"❌ Wrong conda environment: '{conda_env}'")
         print(f"   Required: {REQUIRED_ENV}")
         print()
         print(f"   Please run: conda activate {REQUIRED_ENV}")
@@ -63,13 +94,13 @@ def ensure_conda_env():
             print("\n   Exiting.")
             sys.exit(1)
     else:
-        # No conda detected - might be venv with proper packages
-        print(f"ℹ️  No conda environment detected")
-        print(f"   For GPU acceleration, use: conda activate {REQUIRED_ENV}")
+        # No conda/venv and no GPU detected
+        print(f"⚠️  No GPU detected and no {REQUIRED_ENV} environment")
+        print(f"   For GPU acceleration, ensure NVIDIA drivers are installed")
         return False
 
 # Check environment before anything else
-_gpu_env = ensure_conda_env()
+_gpu_env = ensure_environment()
 
 # ==========================================
 # GPU / VRAM DETECTION DISPLAY
