@@ -29,16 +29,40 @@ import warnings
 warnings.filterwarnings('ignore', message='.*n_bins.*greater than.*number of samples.*')
 
 # ==========================================
-# CUDA 12.9 Environment for Blackwell GPUs (RTX 50xx series)
+# CUDA Environment Setup for Blackwell GPUs (RTX 50xx series, sm_120)
 # ==========================================
-if os.path.exists('/usr/local/cuda-12.9'):
-    os.environ.setdefault('CUDA_HOME', '/usr/local/cuda-12.9')
-    # Ensure NVRTC 12.9 is used for sm_120 support
-    nvrtc_path = os.path.expanduser('~/ml-gpu/lib/python3.12/site-packages/nvidia/cuda_nvrtc/lib')
-    if os.path.exists(nvrtc_path):
-        ld_path = os.environ.get('LD_LIBRARY_PATH', '')
-        if nvrtc_path not in ld_path:
-            os.environ['LD_LIBRARY_PATH'] = f"{nvrtc_path}:{ld_path}"
+def setup_cuda_environment():
+    """
+    Auto-detect and configure CUDA environment for GPU acceleration.
+    Handles Blackwell GPUs (sm_120) which require CUDA 12.8+ and NVRTC 12.8+.
+    """
+    # Find the best available CUDA installation
+    cuda_paths = [
+        '/usr/local/cuda-12.9',
+        '/usr/local/cuda-12.8', 
+        '/usr/local/cuda-12',
+        '/usr/local/cuda',
+    ]
+    
+    for cuda_path in cuda_paths:
+        if os.path.exists(cuda_path):
+            os.environ.setdefault('CUDA_HOME', cuda_path)
+            break
+    
+    # Find NVRTC library in the current Python environment's nvidia packages
+    # This is needed for Blackwell GPUs (sm_120) which require NVRTC 12.8+
+    try:
+        import nvidia.cuda_nvrtc
+        nvrtc_lib_path = Path(nvidia.cuda_nvrtc.__file__).parent / 'lib'
+        if nvrtc_lib_path.exists():
+            ld_path = os.environ.get('LD_LIBRARY_PATH', '')
+            nvrtc_str = str(nvrtc_lib_path)
+            if nvrtc_str not in ld_path:
+                os.environ['LD_LIBRARY_PATH'] = f"{nvrtc_str}:{ld_path}"
+    except ImportError:
+        pass  # nvidia-cuda-nvrtc not installed, use system NVRTC
+
+setup_cuda_environment()
 
 
 # Force unbuffered output for real-time progress display
