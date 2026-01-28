@@ -583,13 +583,13 @@ class ExcelReportWriter:
     def _generate_advanced_charts(self, df, chart_paths):
         """Generate advanced executive insight charts."""
         try:
-            advanced_gen = AdvancedChartGenerator(df, self.output_dir)
-            advanced_paths = advanced_gen.generate_all_charts()
+            advanced_gen = AdvancedChartGenerator(self.output_dir)
+            advanced_paths = advanced_gen.generate_all_charts(df)
             
             # Organize into chart_paths structure
-            chart_paths['07_sla'] = [p for p in advanced_paths if '07_sla' in p]
-            chart_paths['08_efficiency'] = [p for p in advanced_paths if '08_efficiency' in p]
-            chart_paths['09_executive'] = [p for p in advanced_paths if '09_executive' in p]
+            chart_paths['07_sla'] = [p for p in advanced_paths if '07_sla' in str(p)]
+            chart_paths['08_efficiency'] = [p for p in advanced_paths if '08_efficiency' in str(p)]
+            chart_paths['09_executive'] = [p for p in advanced_paths if '09_executive' in str(p)]
             
             logger.info(f"Generated {len(advanced_paths)} advanced insight charts")
         except Exception as e:
