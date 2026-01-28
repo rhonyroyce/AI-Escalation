@@ -33,6 +33,13 @@ import io
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# Import advanced charts
+from escalation_ai.dashboard.advanced_plotly_charts import (
+    chart_sla_funnel, chart_engineer_quadrant, chart_cost_waterfall,
+    chart_time_heatmap, chart_aging_analysis, chart_health_gauge,
+    chart_resolution_consistency, chart_recurrence_patterns
+)
+
 # ============================================================================
 # PAGE CONFIG
 # ============================================================================
@@ -2777,8 +2784,8 @@ def main():
             "Navigation",
             ["🎯 Executive Summary", "📊 Dashboard", "📈 Analytics", 
              "💰 Financial Analysis", "🏆 Benchmarking", "🔬 Root Cause",
-             "🔍 Drift Detection", "⚠️ Alerts", "🔮 What-If Simulator",
-             "📋 Action Tracker", "📽️ Presentation Mode"],
+             "� Advanced Insights", "🔍 Drift Detection", "⚠️ Alerts", 
+             "🔮 What-If Simulator", "📋 Action Tracker", "📽️ Presentation Mode"],
             label_visibility="collapsed"
         )
         
@@ -2906,7 +2913,9 @@ def main():
         render_benchmarking(df)
     elif page == "🔬 Root Cause":
         render_root_cause(df)
-    elif page == "🔍 Drift Detection":
+    elif page == "� Advanced Insights":
+        render_advanced_insights(df)
+    elif page == "�🔍 Drift Detection":
         render_drift_page(df)
     elif page == "⚠️ Alerts":
         render_alerts_page(df)
@@ -2916,6 +2925,158 @@ def main():
         render_action_tracker(df)
     elif page == "📽️ Presentation Mode":
         render_presentation_mode(df)
+
+
+# ============================================================================
+# ADVANCED INSIGHTS PAGE
+# ============================================================================
+
+def render_advanced_insights(df):
+    """Render the Advanced Insights page with high-value visualizations."""
+    st.markdown('<p class="main-header">🚀 Advanced Insights</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">Strategic visualizations for executive decision-making</p>', unsafe_allow_html=True)
+    
+    # Create tabs for different insight categories
+    tabs = st.tabs(["📊 SLA & Aging", "👥 Engineer Efficiency", "💰 Cost Analysis", "🔄 Patterns"])
+    
+    with tabs[0]:
+        st.markdown("### SLA Compliance & Ticket Aging Analysis")
+        st.markdown("*Track resolution performance against service level agreements*")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.plotly_chart(chart_sla_funnel(df), use_container_width=True)
+        
+        with col2:
+            st.plotly_chart(chart_aging_analysis(df), use_container_width=True)
+        
+        st.markdown("---")
+        st.markdown("### Time Pattern Analysis")
+        st.markdown("*Identify peak escalation times and shift handoff issues*")
+        st.plotly_chart(chart_time_heatmap(df), use_container_width=True)
+    
+    with tabs[1]:
+        st.markdown("### Engineer Efficiency Quadrant")
+        st.markdown("*Speed vs Quality: Identify top performers and those needing support*")
+        
+        st.plotly_chart(chart_engineer_quadrant(df), use_container_width=True)
+        
+        # Quadrant legend explanation
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.markdown("""
+            <div style="background: rgba(40,167,69,0.2); padding: 15px; border-radius: 8px; border-left: 4px solid #28A745;">
+                <strong>⭐ Fast & Clean</strong><br>
+                <small>Low resolution time, low recurrence. Top performers.</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown("""
+            <div style="background: rgba(23,162,184,0.2); padding: 15px; border-radius: 8px; border-left: 4px solid #17A2B8;">
+                <strong>🐢 Slow but Thorough</strong><br>
+                <small>Higher resolution time, but quality work.</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown("""
+            <div style="background: rgba(255,193,7,0.2); padding: 15px; border-radius: 8px; border-left: 4px solid #FFC107;">
+                <strong>⚡ Fast but Sloppy</strong><br>
+                <small>Quick fixes that may recur. Need coaching.</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown("""
+            <div style="background: rgba(220,53,69,0.2); padding: 15px; border-radius: 8px; border-left: 4px solid #DC3545;">
+                <strong>🆘 Needs Support</strong><br>
+                <small>Slow and issues recur. Priority for training.</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.markdown("### Resolution Consistency")
+        st.markdown("*Categories with high variability may indicate process gaps or training needs*")
+        st.plotly_chart(chart_resolution_consistency(df), use_container_width=True)
+    
+    with tabs[2]:
+        st.markdown("### Cost Avoidance Waterfall")
+        st.markdown("*Path from current costs to achievable target through strategic interventions*")
+        
+        st.plotly_chart(chart_cost_waterfall(df), use_container_width=True)
+        
+        # Cost insights
+        st.markdown("---")
+        st.markdown("### 💡 Cost Reduction Opportunities")
+        
+        total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+        recurrence_rate = df['AI_Recurrence_Probability'].mean() if 'AI_Recurrence_Probability' in df.columns else 0.2
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            recurrence_savings = total_cost * recurrence_rate * 0.5
+            st.markdown(f"""
+            <div class="kpi-container success">
+                <h3 style="color: #28A745;">${recurrence_savings/1000:.0f}K</h3>
+                <p>Recurrence Prevention</p>
+                <small>50% of recurring issue costs</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            resolution_savings = total_cost * 0.15
+            st.markdown(f"""
+            <div class="kpi-container success">
+                <h3 style="color: #28A745;">${resolution_savings/1000:.0f}K</h3>
+                <p>Faster Resolution</p>
+                <small>15% from reduced handling time</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            process_savings = total_cost * 0.05
+            st.markdown(f"""
+            <div class="kpi-container success">
+                <h3 style="color: #28A745;">${process_savings/1000:.0f}K</h3>
+                <p>Process Improvement</p>
+                <small>5% from automation & efficiency</small>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with tabs[3]:
+        st.markdown("### Operational Health Score")
+        st.markdown("*Composite score based on recurrence, resolution time, and critical issues*")
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.plotly_chart(chart_health_gauge(df), use_container_width=True)
+        
+        with col2:
+            # Health score breakdown
+            recurrence_rate = df['AI_Recurrence_Probability'].mean() * 100 if 'AI_Recurrence_Probability' in df.columns else 15
+            resolution_days = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
+            critical_pct = (df['tickets_data_severity'] == 'Critical').mean() * 100 if 'tickets_data_severity' in df.columns else 10
+            
+            st.markdown("#### Score Components")
+            st.markdown(f"""
+            | Component | Value | Impact |
+            |-----------|-------|--------|
+            | Recurrence Rate | {recurrence_rate:.1f}% | -{ recurrence_rate * 1.5:.0f} pts |
+            | Resolution Time | {resolution_days:.1f} days | -{resolution_days * 5:.0f} pts |
+            | Critical Issues | {critical_pct:.1f}% | -{critical_pct * 0.5:.0f} pts |
+            """)
+            
+            st.info("💡 **Tip:** Focus on reducing recurrence rate for the biggest health score improvement.")
+        
+        st.markdown("---")
+        st.markdown("### Category to Recurrence Flow")
+        st.markdown("*Which categories are driving high-risk outcomes?*")
+        st.plotly_chart(chart_recurrence_patterns(df), use_container_width=True)
 
 
 def render_dashboard(df):
