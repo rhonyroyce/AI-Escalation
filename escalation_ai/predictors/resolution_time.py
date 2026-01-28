@@ -123,10 +123,14 @@ class ResolutionTimePredictor:
             if use_gpu:
                 logger.info("[Resolution Predictor] Training with GPU acceleration")
             
+            # Adjust n_estimators based on sample size (avoid cuML bins warning)
+            n_samples = len(training_data)
+            n_estimators = min(50, max(10, n_samples // 2))
+            
             self.model = GPURandomForestRegressor(
                 use_gpu=use_gpu,
-                n_estimators=50,
-                max_depth=8,
+                n_estimators=n_estimators,
+                max_depth=min(8, max(3, n_samples // 5)),  # Scale depth with samples
                 random_state=42
             )
             self.model.fit(X, y)

@@ -4,6 +4,11 @@ Configuration settings for Escalation AI.
 Contains all constants, weights, thresholds, and column mappings.
 """
 
+import subprocess
+import logging
+
+logger = logging.getLogger(__name__)
+
 # ==========================================
 # GPU / RAPIDS CONFIGURATION
 # ==========================================
@@ -11,11 +16,55 @@ USE_GPU = True  # Enable GPU acceleration when available (cuML, cuDF)
 GPU_MEMORY_LIMIT = 0.8  # Max fraction of GPU memory to use (0.0-1.0)
 
 # ==========================================
+# VRAM DETECTION & MODEL SELECTION
+# ==========================================
+def get_gpu_vram_gb():
+    """Detect GPU VRAM in GB. Returns 0 if no NVIDIA GPU found."""
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            # Get first GPU's VRAM in MB, convert to GB
+            vram_mb = int(result.stdout.strip().split('\n')[0])
+            return vram_mb / 1024
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return 0
+
+def select_models():
+    """Select AI models based on available VRAM."""
+    vram_gb = get_gpu_vram_gb()
+    
+    # Model tiers based on VRAM
+    if vram_gb >= 20:
+        # High VRAM (24GB+): Use largest models
+        embed_model = "qwen3-embedding:8b"
+        gen_model = "qwen3:30b"
+        tier = "high"
+    elif vram_gb >= 12:
+        # Medium VRAM (16GB): Use medium models
+        embed_model = "qwen3-embedding:4b"
+        gen_model = "qwen3:14b"
+        tier = "medium"
+    else:
+        # Low VRAM (<12GB) or CPU only: Use smallest models
+        embed_model = "qwen3-embedding:0.6b"
+        gen_model = "qwen3:8b"
+        tier = "low"
+    
+    logger.info(f"[Config] Detected {vram_gb:.1f}GB VRAM → {tier} tier models")
+    return embed_model, gen_model, vram_gb
+
+# Auto-detect and set models
+EMBED_MODEL, GEN_MODEL, DETECTED_VRAM_GB = select_models()
+
+# ==========================================
 # AI MODEL CONFIGURATION
 # ==========================================
 OLLAMA_BASE_URL = "http://localhost:11434"
-EMBED_MODEL = "qwen3-embedding:8b"  # Best semantic understanding for classification
-GEN_MODEL = "gemma3:27b"  # Clean professional output, no thinking tags
+# EMBED_MODEL and GEN_MODEL are set automatically above based on VRAM
 
 # ==========================================
 # STRATEGIC WEIGHTS (McKinsey Framework)

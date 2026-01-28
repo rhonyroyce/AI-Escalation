@@ -40,8 +40,62 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # ==========================================
 OLLAMA_BASE_URL = "http://localhost:11434"
-EMBED_MODEL = "qwen3-embedding:8b"  # Best semantic understanding for classification
-GEN_MODEL = "gemma3:27b"              # Clean professional output, no thinking tags
+
+# ==========================================
+# AUTOMATIC VRAM DETECTION & MODEL SELECTION
+# ==========================================
+def get_vram_gb():
+    """Detect available VRAM in GB."""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            # Get the first GPU's memory (in MB), convert to GB
+            vram_mb = int(result.stdout.strip().split('\n')[0])
+            return vram_mb / 1024
+    except Exception:
+        pass
+    return 0
+
+def get_model_config():
+    """Get model configuration based on available VRAM."""
+    vram = get_vram_gb()
+    
+    MODEL_CONFIGS = {
+        'high': {     # 24GB+ VRAM (RTX 4090, A5000, etc.)
+            'embed_model': 'qwen3-embedding:8b',
+            'gen_model': 'gemma3:27b',
+            'description': '24GB+ VRAM - Using full-size models'
+        },
+        'medium': {   # 16-20GB VRAM (RTX 4080, etc.)
+            'embed_model': 'qwen3-embedding:4b',
+            'gen_model': 'gpt-oss:20b',
+            'description': '16-20GB VRAM - Using medium models'
+        },
+        'low': {      # <16GB VRAM or CPU only
+            'embed_model': 'nomic-embed-text',
+            'gen_model': 'gemma3:4b',
+            'description': '<16GB VRAM - Using lightweight models'
+        }
+    }
+    
+    if vram >= 20:
+        config = MODEL_CONFIGS['high']
+    elif vram >= 16:
+        config = MODEL_CONFIGS['medium']
+    else:
+        config = MODEL_CONFIGS['low']
+    
+    logger.info(f"Detected {vram:.1f}GB VRAM - {config['description']}")
+    return config
+
+# Auto-select models based on VRAM
+_model_config = get_model_config()
+EMBED_MODEL = _model_config['embed_model']
+GEN_MODEL = _model_config['gen_model']
 
 # STRATEGIC WEIGHTS (McKinsey Framework)
 WEIGHTS = {

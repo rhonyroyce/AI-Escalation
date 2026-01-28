@@ -111,7 +111,7 @@ def keyword_classify(text: str) -> Optional[str]:
     return None
 
 
-def classify_rows(df: pd.DataFrame, ai) -> pd.DataFrame:
+def classify_rows(df: pd.DataFrame, ai, show_progress: bool = True) -> pd.DataFrame:
     """
     Categorize rows using AI embeddings and anchor-based similarity.
     
@@ -138,7 +138,9 @@ def classify_rows(df: pd.DataFrame, ai) -> pd.DataFrame:
     sorted_categories = sorted(anchor_centroids.keys())
     
     # Classify each row
-    for idx, vec in enumerate(tqdm(all_vecs, desc="   > Classifying")):
+    for idx, vec in enumerate(tqdm(all_vecs, desc="  Classifying tickets", unit="ticket",
+                                   disable=not show_progress, ncols=80,
+                                   bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]')):
         text = all_texts[idx]
         
         # Step 1: Try keyword-based classification first

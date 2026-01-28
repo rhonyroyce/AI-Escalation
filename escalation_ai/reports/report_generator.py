@@ -110,15 +110,47 @@ class ExcelReportWriter:
         ws['A10'].fill = PatternFill(start_color="D9534F", end_color="D9534F", fill_type="solid")
         ws.merge_cells('A10:H10')
         
-        # Write synthesis
+        # Write synthesis with proper formatting
         current_row = 11
-        for para in exec_summary_text.split('\n\n'):
-            if para.strip():
-                ws[f'A{current_row}'] = para.strip()
-                ws[f'A{current_row}'].alignment = Alignment(wrap_text=True, vertical='top')
-                ws.merge_cells(f'A{current_row}:H{current_row}')
-                ws.row_dimensions[current_row].height = 60
-                current_row += 1
+        
+        # Split by section headers (marked with ** or SECTION)
+        import re
+        sections = re.split(r'\n\n+', exec_summary_text)
+        
+        for section in sections:
+            if not section.strip():
+                continue
+            
+            # Check if this is a section header (starts with ** or SECTION)
+            section_text = section.strip()
+            is_header = section_text.startswith('**SECTION') or section_text.startswith('SECTION')
+            
+            # Clean up markdown bold markers
+            section_text = re.sub(r'\*\*([^*]+)\*\*', r'\1', section_text)
+            
+            # Write the cell
+            cell = ws[f'A{current_row}']
+            cell.value = section_text
+            cell.alignment = Alignment(wrap_text=True, vertical='top')
+            ws.merge_cells(f'A{current_row}:H{current_row}')
+            
+            if is_header or 'SECTION' in section_text[:50]:
+                # Bold formatting for section headers
+                cell.font = Font(bold=True, size=11, color="004C97")
+                ws.row_dimensions[current_row].height = 18  # 0.25 inches
+            else:
+                # Normal text
+                cell.font = Font(size=10)
+                # Calculate row height based on content length
+                text_length = len(section_text)
+                row_height = max(45, min(120, text_length // 3))
+                ws.row_dimensions[current_row].height = row_height
+            
+            current_row += 1
+            
+            # Add blank row after each section for spacing
+            ws.row_dimensions[current_row].height = 8
+            current_row += 1
         
         # Set column widths
         for col in ['A', 'C', 'E', 'G']:
@@ -150,16 +182,16 @@ class ExcelReportWriter:
         }
         
         # Grid layout settings
-        img_width = 380  # pixels - smaller to fit 3 per row
-        img_height = 228  # 60% aspect ratio
+        img_width = 350  # pixels - smaller to fit 3 per row without overlap
+        img_height = 210  # 60% aspect ratio
         cols_per_row = 3  # 3 charts per row
-        col_positions = ['A', 'F', 'K']  # Column positions for each chart in row
-        rows_per_chart = 15  # Excel rows per chart height
+        col_positions = ['A', 'G', 'M']  # Column positions for each chart in row (6 cols apart)
+        rows_per_chart = 14  # Excel rows per chart height
         header_gap_rows = 2  # Gap between header and first chart row
         
-        # Set column widths to accommodate images
-        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O']:
-            ws.column_dimensions[col].width = 8
+        # Set column widths to accommodate images with proper spacing
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R']:
+            ws.column_dimensions[col].width = 7
         
         current_row = 5
         images_embedded = 0

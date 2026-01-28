@@ -227,22 +227,32 @@ class GPURandomForestClassifier:
         return self
     
     def predict(self, X):
-        """Make predictions."""
+        """Make predictions - always returns numpy array."""
         if self.use_gpu:
             import cupy as cp
             if hasattr(X, 'values'):
                 X = X.values
             X = cp.asarray(X, dtype=cp.float32)
+            predictions = self.model.predict(X)
+            # Convert cupy array back to numpy for compatibility
+            if hasattr(predictions, 'get'):
+                return predictions.get()
+            return predictions
         
         return self.model.predict(X)
     
     def predict_proba(self, X):
-        """Get prediction probabilities."""
+        """Get prediction probabilities - always returns numpy array."""
         if self.use_gpu:
             import cupy as cp
             if hasattr(X, 'values'):
                 X = X.values
             X = cp.asarray(X, dtype=cp.float32)
+            predictions = self.model.predict_proba(X)
+            # Convert cupy array back to numpy for compatibility
+            if hasattr(predictions, 'get'):
+                return predictions.get()
+            return predictions
         
         return self.model.predict_proba(X)
     
@@ -297,12 +307,17 @@ class GPURandomForestRegressor:
         return self
     
     def predict(self, X):
-        """Make predictions."""
+        """Make predictions - always returns numpy array."""
         if self.use_gpu:
             import cupy as cp
             if hasattr(X, 'values'):
                 X = X.values
             X = cp.asarray(X, dtype=cp.float32)
+            predictions = self.model.predict(X)
+            # Convert cupy array back to numpy for compatibility
+            if hasattr(predictions, 'get'):
+                return predictions.get()
+            return predictions
         
         return self.model.predict(X)
     

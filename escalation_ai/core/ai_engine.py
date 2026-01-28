@@ -92,64 +92,120 @@ class OllamaBrain:
         return cleaned.strip()
 
     def generate_synthesis(self, context_text):
-        """Use the LLM to write a comprehensive executive summary"""
-        prompt = f"""You are a Principal Consultant at McKinsey & Company, specializing in Telecom Operations Risk Management. You have been engaged to analyze escalation data for a major telecommunications network deployment project.
+        """Use the LLM to write a comprehensive executive summary with financial analysis"""
+        prompt = f"""You are a Principal Consultant specializing in Telecom Operations Risk Management and Financial Impact Analysis. Analyze this escalation data for a telecommunications network deployment project.
 
-ROLE & EXPERTISE:
-- You are an expert in identifying systemic operational failures
-- You understand telecom infrastructure (RAN, transmission, fiber, site access)
-- You focus on strategic risks that threaten project timelines, costs, and reputation
-- You communicate with C-suite executives who need actionable insights
+CRITICAL RULES - READ CAREFULLY:
+1. ONLY use numbers, percentages, dollar amounts, and counts that appear in the DATA CONTEXT below
+2. The data includes FINANCIAL IMPACT METRICS - USE THEM in your analysis
+3. DO NOT fabricate statistics, dates, or specific incidents not in the data
+4. Every claim must be traceable to the data provided
+5. Reference actual dollar figures from the Financial Impact section
 
-ANALYSIS FRAMEWORK:
-1. PATTERN RECOGNITION: Identify recurring failure modes and root causes
-2. RISK STRATIFICATION: Distinguish between isolated incidents vs systemic issues
-3. ORGANIZATIONAL LEARNING: Assess whether past lessons are being applied
-4. BUSINESS IMPACT: Translate technical issues to business consequences
-
-DATA CONTEXT (Analyzed Escalation Report):
+DATA CONTEXT (Analyzed Escalation Report with Financial Metrics):
 {context_text}
 
 YOUR TASK:
-Produce a comprehensive Executive Risk Assessment with the following sections:
+Produce a comprehensive Executive Risk & Financial Assessment using ONLY the data provided above.
 
-1. CRITICAL ALERT (1-2 sentences): The single most urgent finding that requires immediate executive attention.
+SECTION 1 - CRITICAL ALERT (2-3 sentences):
+The single most urgent finding combining operational AND financial impact. Use actual ticket counts, percentages, AND the total financial impact figures from the data. State the direct cost exposure and revenue at risk.
 
-2. KEY FINDINGS (3-4 bullet points): Major patterns, systemic issues, or concerning trends discovered in the data.
+SECTION 2 - KEY FINDINGS (6-8 detailed observations):
+For each finding, cite specific numbers from the data:
+- Ticket counts and percentages by category
+- Financial impact by category (use the dollar figures provided)
+- Average cost per escalation and highest-cost categories
+- Severity distributions and their cost implications
+- High-cost tickets concentration (top 10% analysis)
+- Recurrence risk exposure in dollar terms
+- Friction score concentrations and cost correlation
+Explain both operational AND financial implications.
 
-3. ROOT CAUSE HYPOTHESIS: Based on the data patterns, what underlying organizational or process issues might be driving these escalations?
+SECTION 3 - FINANCIAL IMPACT ANALYSIS (2-3 paragraphs):
+Deep dive into the cost data:
+- Which categories are the biggest cost drivers? (use actual $ figures)
+- What is the labor cost vs opportunity cost breakdown?
+- How does severity correlate with financial impact?
+- What is the total revenue at risk and recurrence exposure?
+- What are the highest cost-per-ticket categories (even if low volume)?
+Connect financial patterns to operational root causes.
 
-4. RECOMMENDED ACTIONS (2-3 specific actions): Concrete steps leadership should take this week to address the risks.
+SECTION 4 - ROOT CAUSE HYPOTHESIS (2-3 paragraphs):
+Based on the data patterns, what organizational or process issues might be driving these escalations? Consider:
+- What do the category distributions and their costs suggest about systemic issues?
+- What do repeat offenses indicate about organizational learning and cost waste?
+- What do the severity patterns reveal about escalation discipline?
+- Why might certain categories have higher cost-per-ticket despite lower volume?
+Ground your hypothesis in the actual data patterns.
 
-5. RISK OUTLOOK: One sentence on what will happen if these issues are not addressed.
+SECTION 5 - STRATEGIC RECOMMENDATIONS (5-6 specific actions):
+Concrete steps leadership should take with financial justification:
+- Address the highest-cost categories (cite specific $ savings potential)
+- Tackle high cost-per-ticket categories even if low volume
+- Reduce recurrence risk exposure
+- Improve areas with highest friction scores
+- Fix process/documentation gaps
+For each recommendation, reference the financial benefit using data from the context.
+
+SECTION 6 - RISK OUTLOOK & COST PROJECTION:
+Describe likely trajectory if issues continue:
+- Which cost patterns suggest escalating financial exposure?
+- What does the recurrence risk indicate about future costs?
+- Which categories are trending toward higher financial impact?
+- What is the quarterly/annual exposure if current patterns continue? (extrapolate from the data period)
+
+SECTION 7 - EXECUTIVE BOTTOM LINE (3-4 sentences):
+Summarize the core message with specific financial stakes. State the total financial impact, revenue at risk, and the cost of inaction. Be direct about severity.
 
 FORMATTING RULES:
-- Write in clear, professional business English
-- Be specific - reference actual categories, percentages, and issue types from the data
-- Be direct and urgent where warranted
-- Do NOT use markdown formatting (no #, *, or bullet symbols)
-- Use plain text with clear section headers
-- Total length: 250-400 words
-"""
+- Format section headers in BOLD using **SECTION X - TITLE** format
+- Leave a BLANK LINE between each section for readability
+- Use dashes (-) for bullet points within sections
+- Reference actual numbers AND dollar figures from the data
+- Total length: 800-1000 words
+- Use $ figures from the Financial Impact section liberally
+
+EXAMPLE FORMAT:
+**SECTION 1 - CRITICAL ALERT**
+Content here...
+
+**SECTION 2 - KEY FINDINGS**
+- Finding 1
+- Finding 2"""
         try:
+            logger.info(f"  Requesting AI synthesis from {self.gen_model}...")
             res = requests.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
                 json={
                     "model": self.gen_model, 
                     "prompt": prompt, 
                     "stream": False,
-                    "options": {"num_predict": 800}
+                    "options": {
+                        "num_predict": 5000,  # Increased for financial analysis
+                        "temperature": 0.5,   # More factual for financial data
+                    }
                 },
-                timeout=120
+                timeout=480  # 8 minutes for comprehensive financial analysis
             )
             if res.status_code == 200:
                 raw_response = res.json()['response'].strip()
                 cleaned = self._strip_thinking_tags(raw_response)
-                return cleaned if cleaned else self._generate_fallback_summary(context_text)
+                if cleaned:
+                    logger.info(f"  ✓ AI synthesis complete ({len(cleaned)} chars)")
+                    return cleaned
+                else:
+                    logger.warning(f"  AI returned empty response after cleaning")
+                    return self._generate_fallback_summary(context_text)
+            else:
+                logger.error(f"  AI request failed with status {res.status_code}: {res.text[:200]}")
+                return self._generate_fallback_summary(context_text)
+        except requests.exceptions.Timeout:
+            logger.error(f"AI Synthesis timed out after 480s - model may be loading. Try again or use smaller model.")
+            return self._generate_fallback_summary(context_text)
         except Exception as e:
             logger.error(f"AI Synthesis Failed: {e}")
             return self._generate_fallback_summary(context_text)
-        return self._generate_fallback_summary(context_text)
 
     def _generate_fallback_summary(self, context_text):
         """Generate a basic summary when AI is unavailable"""

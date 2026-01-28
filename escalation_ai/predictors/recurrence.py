@@ -179,10 +179,15 @@ class RecurrencePredictor:
         else:
             logger.info("  [CPU] Training with sklearn GradientBoostingClassifier")
         
+        # Adjust n_estimators based on sample size (avoid cuML bins warning)
+        n_samples = len(X_train)
+        n_estimators = min(100, max(10, n_samples // 2))
+        max_depth = min(8, max(3, n_samples // 5))
+        
         self.model = GPURandomForestClassifier(
             use_gpu=use_gpu,
-            n_estimators=100,
-            max_depth=8,
+            n_estimators=n_estimators,
+            max_depth=max_depth,
             random_state=42
         )
         
