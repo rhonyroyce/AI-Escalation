@@ -489,46 +489,59 @@ footer {visibility: hidden;}
 @st.cache_data
 def load_data():
     """Load the most recent analysis data."""
-    # First try Strategic_Report.xlsx (current output format)
-    strategic_report = Path("Strategic_Report.xlsx")
-    if strategic_report.exists():
-        try:
-            df = pd.read_excel(strategic_report, sheet_name="Scored Data")
-            
-            # Map column names to expected format
-            if 'tickets_data_engineer_name' in df.columns and 'Engineer' not in df.columns:
-                df['Engineer'] = df['tickets_data_engineer_name']
-            if 'tickets_data_lob' in df.columns and 'LOB' not in df.columns:
-                df['LOB'] = df['tickets_data_lob']
-            
-            # Use AI_Recurrence_Probability as the numeric recurrence risk
-            # (AI_Recurrence_Risk in file is string like "Elevated (50-70%)")
-            if 'AI_Recurrence_Probability' in df.columns:
-                df['AI_Recurrence_Risk'] = pd.to_numeric(df['AI_Recurrence_Probability'], errors='coerce').fillna(0.15)
-            
-            # Ensure numeric columns are numeric
-            numeric_cols = ['Strategic_Friction_Score', 'Financial_Impact', 'Predicted_Resolution_Days', 
-                           'AI_Confidence', 'Resolution_Prediction_Confidence']
-            for col in numeric_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            
-            return df, "Strategic_Report.xlsx"
-        except Exception as e:
-            st.warning(f"Could not load Strategic_Report.xlsx: {e}")
-    
-    # Look for other processed Excel files
-    data_files = list(Path(".").glob("**/Escalation_Analysis_*.xlsx"))
-    
+    # Get project root directory (2 levels up from dashboard)
+    project_root = Path(__file__).parent.parent.parent
+
+    # Try multiple locations for Strategic_Report.xlsx
+    search_paths = [
+        Path("Strategic_Report.xlsx"),  # Current directory
+        project_root / "Strategic_Report.xlsx",  # Project root
+        Path.cwd() / "Strategic_Report.xlsx",  # Working directory
+    ]
+
+    for strategic_report in search_paths:
+        if strategic_report.exists():
+            try:
+                df = pd.read_excel(strategic_report, sheet_name="Scored Data")
+
+                # Map column names to expected format
+                if 'tickets_data_engineer_name' in df.columns and 'Engineer' not in df.columns:
+                    df['Engineer'] = df['tickets_data_engineer_name']
+                if 'tickets_data_lob' in df.columns and 'LOB' not in df.columns:
+                    df['LOB'] = df['tickets_data_lob']
+
+                # Use AI_Recurrence_Probability as the numeric recurrence risk
+                # (AI_Recurrence_Risk in file is string like "Elevated (50-70%)")
+                if 'AI_Recurrence_Probability' in df.columns:
+                    df['AI_Recurrence_Risk'] = pd.to_numeric(df['AI_Recurrence_Probability'], errors='coerce').fillna(0.15)
+
+                # Ensure numeric columns are numeric
+                numeric_cols = ['Strategic_Friction_Score', 'Financial_Impact', 'Predicted_Resolution_Days',
+                               'AI_Confidence', 'Resolution_Prediction_Confidence']
+                for col in numeric_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+                print(f"✅ Loaded {len(df)} records from {strategic_report}")
+                return df, str(strategic_report)
+            except Exception as e:
+                st.warning(f"Could not load {strategic_report}: {e}")
+                continue
+
+    # Look for other processed Excel files in project root
+    data_files = list(project_root.glob("Escalation_Analysis_*.xlsx"))
+
     if data_files:
         latest = max(data_files, key=lambda x: x.stat().st_mtime)
         try:
             df = pd.read_excel(latest, sheet_name="Detailed Analysis")
+            print(f"✅ Loaded {len(df)} records from {latest}")
             return df, str(latest)
         except Exception as e:
             st.warning(f"Could not load {latest}: {e}")
-    
-    # Generate sample data
+
+    # Generate sample data as fallback
+    st.warning("⚠️ No data file found. Showing sample data. Please ensure Strategic_Report.xlsx is in the project root.")
     return generate_sample_data(), "Sample Data"
 
 
