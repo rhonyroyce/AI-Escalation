@@ -89,18 +89,28 @@ def get_sample_categories():
     """
     Get the expected category classifications for sample tickets.
 
+    Uses the new 8-category system:
+    - Scheduling & Planning
+    - Documentation & Reporting
+    - Validation & QA
+    - Process Compliance
+    - Configuration & Data Mismatch
+    - Site Readiness
+    - Communication & Response
+    - Nesting & Tool Errors
+
     Returns:
         dict: Mapping of ticket index to expected category
     """
     return {
-        0: "RF & Antenna Issues",
-        1: "Power & Environment",
-        2: "Transmission & Backhaul",
-        3: "OSS/NMS & Systems",
-        4: "Weather & Natural Events",
-        5: "Transmission & Backhaul",
-        6: "Site Access & Logistics",
-        7: "Contractor & Vendor Issues",
-        8: "Configuration & Integration",
-        9: "Communication & Coordination",
+        0: "Configuration & Data Mismatch",  # RF antenna alignment
+        1: "Site Readiness",                 # Power supply failure
+        2: "Site Readiness",                 # Fiber cut - site issue
+        3: "Configuration & Data Mismatch",  # NMS config error
+        4: "Site Readiness",                 # Weather damage
+        5: "Site Readiness",                 # Backhaul/transmission
+        6: "Process Compliance",             # Site access issue
+        7: "Process Compliance",             # Vendor issue
+        8: "Configuration & Data Mismatch",  # Integration mismatch
+        9: "Communication & Response",       # Communication breakdown
     }

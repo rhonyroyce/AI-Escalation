@@ -37,7 +37,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from escalation_ai.dashboard.advanced_plotly_charts import (
     chart_sla_funnel, chart_engineer_quadrant, chart_cost_waterfall,
     chart_time_heatmap, chart_aging_analysis, chart_health_gauge,
-    chart_resolution_consistency, chart_recurrence_patterns
+    chart_resolution_consistency, chart_recurrence_patterns,
+    # Sub-category drill-down charts
+    chart_category_sunburst as advanced_category_sunburst,
+    chart_category_treemap, chart_subcategory_breakdown,
+    chart_category_financial_drilldown, chart_subcategory_comparison_table
 )
 
 # ============================================================================
@@ -549,32 +553,53 @@ def generate_sample_data():
     """Generate realistic sample data for demo."""
     np.random.seed(42)
     n = 250
-    
+
     # 8-category system for telecom escalation analysis
     categories = [
         'Scheduling & Planning', 'Documentation & Reporting', 'Validation & QA',
         'Process Compliance', 'Configuration & Data Mismatch',
         'Site Readiness', 'Communication & Response', 'Nesting & Tool Errors'
     ]
-    
-    engineers = ['Alice Chen', 'Bob Smith', 'Carlos Rodriguez', 'Diana Patel', 
+
+    # Sub-categories for each main category
+    sub_categories = {
+        'Scheduling & Planning': ['TI/Calendar Issues', 'FE Coordination', 'Closeout/Bucket Issues'],
+        'Documentation & Reporting': ['Snapshot/Screenshot Issues', 'E911/CBN Reports', 'Email/Attachment Issues'],
+        'Validation & QA': ['Precheck/Postcheck Failures', 'Measurement Issues', 'Escalation Gaps'],
+        'Process Compliance': ['SOP Violations', 'Improper Escalations', 'Release Procedure Issues'],
+        'Configuration & Data Mismatch': ['Port Matrix Issues', 'RET/TAC Naming', 'SCF/CIQ/RFDS Mismatch'],
+        'Site Readiness': ['Backhaul Issues', 'MW/Transmission Issues', 'Material/Equipment Issues'],
+        'Communication & Response': ['Delayed Responses', 'Follow-up Issues', 'Distro/Routing Issues'],
+        'Nesting & Tool Errors': ['Nesting Type Errors', 'RIOT/FCI Tool Issues', 'Market Guideline Violations']
+    }
+
+    engineers = ['Alice Chen', 'Bob Smith', 'Carlos Rodriguez', 'Diana Patel',
                  'Eric Johnson', 'Fatima Ahmed', 'George Kim', 'Hannah Lee']
-    
-    lobs = ['Network Operations', 'Field Services', 'Customer Support', 
+
+    lobs = ['Network Operations', 'Field Services', 'Customer Support',
             'Infrastructure', 'Enterprise', 'Residential']
-    
+
     regions = ['Northeast', 'Southeast', 'Midwest', 'Southwest', 'West Coast', 'Central']
-    
+
     root_causes = ['Training Gap', 'Process Failure', 'Tool Limitation', 'Resource Constraint',
                    'Vendor Issue', 'Communication Breakdown', 'Technical Debt', 'Policy Conflict']
-    
+
     # Generate dates over 90 days
     dates = pd.date_range(end=datetime.now(), periods=n, freq='8H')
-    
+
+    # Generate categories
+    cat_values = np.random.choice(categories, n, p=[0.18, 0.15, 0.14, 0.12, 0.12, 0.11, 0.10, 0.08])
+
+    # Generate sub-categories based on main category
+    sub_cat_values = [np.random.choice(sub_categories[cat]) for cat in cat_values]
+
     df = pd.DataFrame({
-        'AI_Category': np.random.choice(categories, n, p=[0.18, 0.15, 0.12, 0.12, 0.11, 0.1, 0.08, 0.08, 0.06]),
+        'AI_Category': cat_values,
+        'AI_Sub_Category': sub_cat_values,
+        'AI_Confidence': np.clip(np.random.beta(8, 2, n), 0.4, 0.99),
         'Strategic_Friction_Score': np.clip(np.random.exponential(45, n), 5, 200),
         'AI_Recurrence_Risk': np.clip(np.random.beta(2, 5, n), 0, 1),
+        'AI_Recurrence_Probability': np.clip(np.random.beta(2, 5, n), 0, 1),
         'Predicted_Resolution_Days': np.clip(np.random.exponential(2.5, n), 0.5, 15),
         'tickets_data_severity': np.random.choice(['Critical', 'Major', 'Minor'], n, p=[0.15, 0.45, 0.40]),
         'tickets_data_escalation_origin': np.random.choice(['External', 'Internal'], n, p=[0.35, 0.65]),
@@ -591,11 +616,11 @@ def generate_sample_data():
         'Customer_Tenure_Years': np.clip(np.random.exponential(3, n), 0.5, 15),
         'NPS_Impact': np.random.choice([-3, -2, -1, 0], n, p=[0.1, 0.2, 0.4, 0.3]),
     })
-    
+
     # Derived metrics
     df['Revenue_At_Risk'] = df['Contract_Value'] * df['AI_Recurrence_Risk'] * 0.15
     df['Churn_Probability'] = np.clip(df['Customer_Impact_Score'] / 100 * df['AI_Recurrence_Risk'], 0, 0.5)
-    
+
     return df
 
 
@@ -812,28 +837,52 @@ def chart_resolution_distribution(df):
 
 
 def chart_category_sunburst(df):
-    """Interactive sunburst chart of categories and severity."""
-    # Prepare data
-    sunburst_data = df.groupby(['AI_Category', 'tickets_data_severity']).size().reset_index(name='count')
-    
+    """Interactive sunburst chart of categories and sub-categories with drill-down."""
+    # Check if AI_Sub_Category column exists
+    sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
+    cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
+
+    if sub_cat_col:
+        # Category → Sub-Category drill-down
+        sunburst_data = df.groupby(['AI_Category', sub_cat_col]).size().reset_index(name='count')
+        path_cols = ['AI_Category', sub_cat_col]
+        title_text = 'Category & Sub-Category Drill-Down<br><span style="font-size:12px">Click to expand categories</span>'
+    else:
+        # Fallback to Category → Severity
+        sunburst_data = df.groupby(['AI_Category', 'tickets_data_severity']).size().reset_index(name='count')
+        path_cols = ['AI_Category', 'tickets_data_severity']
+        title_text = 'Category & Severity Breakdown'
+
+    # Add financial data if available
+    if cost_col and sub_cat_col:
+        cost_data = df.groupby(['AI_Category', sub_cat_col])[cost_col].sum().reset_index()
+        sunburst_data = sunburst_data.merge(cost_data, on=['AI_Category', sub_cat_col], how='left')
+        sunburst_data[cost_col] = sunburst_data[cost_col].fillna(0)
+
     fig = px.sunburst(
         sunburst_data,
-        path=['AI_Category', 'tickets_data_severity'],
+        path=path_cols,
         values='count',
         color='count',
         color_continuous_scale='Blues'
     )
-    
+
     fig.update_layout(
         **create_plotly_theme(),
-        title=dict(text='Category & Severity Breakdown', font=dict(size=16)),
-        height=450
+        title=dict(text=title_text, font=dict(size=16)),
+        height=500
     )
-    
-    fig.update_traces(
-        hovertemplate='<b>%{label}</b><br>Count: %{value}<extra></extra>'
-    )
-    
+
+    # Enhanced hover template
+    if cost_col and sub_cat_col:
+        fig.update_traces(
+            hovertemplate='<b>%{label}</b><br>Tickets: %{value}<extra></extra>'
+        )
+    else:
+        fig.update_traces(
+            hovertemplate='<b>%{label}</b><br>Count: %{value}<extra></extra>'
+        )
+
     return fig
 
 
@@ -3462,12 +3511,100 @@ def render_analytics(df):
     """Render the analytics page with detailed charts."""
     st.markdown('<p class="main-header">📈 Analytics</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Deep dive into escalation patterns and performance</p>', unsafe_allow_html=True)
-    
+
     tabs = st.tabs(["🎯 Categories", "👥 Engineers", "📊 Distributions", "💰 Financial"])
-    
+
     with tabs[0]:
-        st.plotly_chart(chart_category_sunburst(df), use_container_width=True)
-        st.plotly_chart(chart_friction_by_category(df), use_container_width=True)
+        # Sub-tabs for different category views
+        cat_tabs = st.tabs(["📊 Overview", "🔍 Drill-Down", "📈 Treemap", "📋 Details"])
+
+        with cat_tabs[0]:
+            # Overview - Sunburst and friction chart
+            st.plotly_chart(chart_category_sunburst(df), use_container_width=True)
+            st.plotly_chart(chart_friction_by_category(df), use_container_width=True)
+
+        with cat_tabs[1]:
+            # Drill-down - Category selector with sub-category breakdown
+            st.markdown("### Sub-Category Drill-Down")
+            st.markdown("Select a category to view detailed sub-category breakdown")
+
+            # Category selector
+            categories = ['All Categories'] + sorted(df['AI_Category'].unique().tolist())
+            selected_cat = st.selectbox("Select Category", categories, key="cat_drilldown_select")
+
+            if selected_cat == 'All Categories':
+                # Show overall sub-category breakdown
+                st.plotly_chart(chart_subcategory_breakdown(df, None), use_container_width=True)
+            else:
+                # Show breakdown for selected category
+                st.plotly_chart(chart_subcategory_breakdown(df, selected_cat), use_container_width=True)
+
+            # Sub-category comparison table
+            st.markdown("### Sub-Category Comparison")
+            comparison_df = chart_subcategory_comparison_table(df)
+            if not comparison_df.empty:
+                if selected_cat != 'All Categories':
+                    comparison_df = comparison_df[comparison_df['Category'] == selected_cat]
+                st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+
+        with cat_tabs[2]:
+            # Treemap view
+            st.markdown("### Category Treemap")
+            st.markdown("*Click on categories to drill down into sub-categories*")
+            st.plotly_chart(chart_category_treemap(df), use_container_width=True)
+
+        with cat_tabs[3]:
+            # Detailed category statistics
+            st.markdown("### Category Statistics")
+
+            # Summary table
+            if 'AI_Sub_Category' in df.columns:
+                cat_stats = df.groupby('AI_Category').agg({
+                    'AI_Sub_Category': 'count',
+                    'AI_Confidence': 'mean',
+                    'Strategic_Friction_Score': 'sum' if 'Strategic_Friction_Score' in df.columns else 'count'
+                }).round(2)
+                cat_stats.columns = ['Ticket Count', 'Avg Confidence', 'Total Friction']
+                cat_stats = cat_stats.sort_values('Ticket Count', ascending=False)
+
+                # Add financial if available
+                if 'Financial_Impact' in df.columns:
+                    fin_stats = df.groupby('AI_Category')['Financial_Impact'].sum()
+                    cat_stats['Total Impact'] = fin_stats
+                    cat_stats['Total Impact'] = cat_stats['Total Impact'].apply(lambda x: f"${x:,.0f}")
+
+                st.dataframe(cat_stats, use_container_width=True)
+
+                # Sub-category distribution within each category
+                st.markdown("### Sub-Category Distribution")
+                for cat in df['AI_Category'].unique():
+                    with st.expander(f"📁 {cat}"):
+                        cat_df = df[df['AI_Category'] == cat]
+                        sub_counts = cat_df['AI_Sub_Category'].value_counts()
+
+                        col1, col2 = st.columns([2, 1])
+                        with col1:
+                            fig = go.Figure(go.Bar(
+                                x=sub_counts.values,
+                                y=sub_counts.index,
+                                orientation='h',
+                                marker_color='#0066CC'
+                            ))
+                            fig.update_layout(
+                                **create_plotly_theme(),
+                                height=200,
+                                margin=dict(l=10, r=10, t=10, b=10),
+                                yaxis_title='',
+                                xaxis_title='Count'
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+
+                        with col2:
+                            st.metric("Total Tickets", len(cat_df))
+                            if 'Financial_Impact' in df.columns:
+                                st.metric("Total Impact", f"${cat_df['Financial_Impact'].sum():,.0f}")
+            else:
+                st.info("Sub-category data not available. Run classification with the updated system.")
     
     with tabs[1]:
         fig = chart_engineer_performance(df)
@@ -3485,42 +3622,120 @@ def render_analytics(df):
     
     with tabs[3]:
         if 'Financial_Impact' in df.columns:
-            # Financial by category
-            fin_by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
-            
-            fig = go.Figure(go.Bar(
-                x=fin_by_cat.index,
-                y=fin_by_cat.values,
-                marker=dict(
-                    color=fin_by_cat.values,
-                    colorscale='Reds'
-                ),
-                text=[f"${v/1000:.0f}K" for v in fin_by_cat.values],
-                textposition='outside'
-            ))
-            
-            # Get theme without margin
-            theme = create_plotly_theme()
-            theme.pop('margin', None)
-            
-            fig.update_layout(
-                **theme,
-                title='Financial Impact by Category',
-                xaxis_tickangle=-45,
-                height=400,
-                margin=dict(l=40, r=60, t=60, b=100)  # Room for labels
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Summary metrics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Impact", f"${df['Financial_Impact'].sum():,.0f}")
-            with col2:
-                st.metric("Average per Ticket", f"${df['Financial_Impact'].mean():,.0f}")
-            with col3:
-                st.metric("Max Single Ticket", f"${df['Financial_Impact'].max():,.0f}")
+            # Sub-tabs for financial drill-down
+            fin_tabs = st.tabs(["📊 By Category", "🔍 Sub-Category Drill-Down", "📋 Summary Table"])
+
+            with fin_tabs[0]:
+                # Financial by category
+                fin_by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
+
+                fig = go.Figure(go.Bar(
+                    x=fin_by_cat.index,
+                    y=fin_by_cat.values,
+                    marker=dict(
+                        color=fin_by_cat.values,
+                        colorscale='Reds'
+                    ),
+                    text=[f"${v/1000:.0f}K" for v in fin_by_cat.values],
+                    textposition='outside'
+                ))
+
+                # Get theme without margin
+                theme = create_plotly_theme()
+                theme.pop('margin', None)
+
+                fig.update_layout(
+                    **theme,
+                    title='Financial Impact by Category',
+                    xaxis_tickangle=-45,
+                    height=400,
+                    margin=dict(l=40, r=60, t=60, b=100)  # Room for labels
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Summary metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Impact", f"${df['Financial_Impact'].sum():,.0f}")
+                with col2:
+                    st.metric("Average per Ticket", f"${df['Financial_Impact'].mean():,.0f}")
+                with col3:
+                    st.metric("Max Single Ticket", f"${df['Financial_Impact'].max():,.0f}")
+
+            with fin_tabs[1]:
+                # Sub-category financial drill-down
+                st.markdown("### Financial Impact by Sub-Category")
+                st.markdown("*Click on categories in the chart to drill down*")
+
+                # Financial drill-down chart
+                st.plotly_chart(chart_category_financial_drilldown(df), use_container_width=True)
+
+                # Sub-category breakdown if available
+                if 'AI_Sub_Category' in df.columns:
+                    st.markdown("### Sub-Category Cost Breakdown")
+
+                    # Category selector for detailed view
+                    categories = ['All Categories'] + sorted(df['AI_Category'].unique().tolist())
+                    selected_cat = st.selectbox("Select Category for Details", categories, key="fin_cat_select")
+
+                    if selected_cat == 'All Categories':
+                        subcat_fin = df.groupby('AI_Sub_Category')['Financial_Impact'].agg(['sum', 'mean', 'count'])
+                    else:
+                        subcat_fin = df[df['AI_Category'] == selected_cat].groupby('AI_Sub_Category')['Financial_Impact'].agg(['sum', 'mean', 'count'])
+
+                    subcat_fin.columns = ['Total', 'Average', 'Count']
+                    subcat_fin = subcat_fin.sort_values('Total', ascending=False)
+
+                    # Bar chart
+                    fig = go.Figure(go.Bar(
+                        x=subcat_fin['Total'],
+                        y=subcat_fin.index,
+                        orientation='h',
+                        marker=dict(
+                            color=subcat_fin['Total'],
+                            colorscale='Reds'
+                        ),
+                        text=[f"${v:,.0f}" for v in subcat_fin['Total']],
+                        textposition='outside',
+                        hovertemplate='<b>%{y}</b><br>Total: $%{x:,.0f}<extra></extra>'
+                    ))
+
+                    theme = create_plotly_theme()
+                    theme.pop('margin', None)
+
+                    fig.update_layout(
+                        **theme,
+                        title=f'Financial Impact: {selected_cat}',
+                        height=max(300, len(subcat_fin) * 35),
+                        margin=dict(l=200, r=80, t=60, b=40)
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+
+            with fin_tabs[2]:
+                # Summary table
+                st.markdown("### Financial Summary Table")
+
+                if 'AI_Sub_Category' in df.columns:
+                    summary = df.groupby(['AI_Category', 'AI_Sub_Category']).agg({
+                        'Financial_Impact': ['sum', 'mean', 'count']
+                    }).round(2)
+                    summary.columns = ['Total Impact', 'Avg Impact', 'Ticket Count']
+                    summary = summary.reset_index()
+                    summary['Total Impact'] = summary['Total Impact'].apply(lambda x: f"${x:,.0f}")
+                    summary['Avg Impact'] = summary['Avg Impact'].apply(lambda x: f"${x:,.0f}")
+                    summary = summary.sort_values(['AI_Category', 'Ticket Count'], ascending=[True, False])
+                else:
+                    summary = df.groupby('AI_Category').agg({
+                        'Financial_Impact': ['sum', 'mean', 'count']
+                    }).round(2)
+                    summary.columns = ['Total Impact', 'Avg Impact', 'Ticket Count']
+                    summary = summary.reset_index()
+                    summary['Total Impact'] = summary['Total Impact'].apply(lambda x: f"${x:,.0f}")
+                    summary['Avg Impact'] = summary['Avg Impact'].apply(lambda x: f"${x:,.0f}")
+
+                st.dataframe(summary, use_container_width=True, hide_index=True)
         else:
             st.info("Financial impact data not available.")
 
