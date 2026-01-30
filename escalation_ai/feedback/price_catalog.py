@@ -241,14 +241,18 @@ class PriceCatalog:
         severity: str = "Medium",
         origin: str = "Technical",
         description: str = "",
-        delay_hours: float = 4.0
+        delay_hours: float = None
     ) -> Dict[str, float]:
-        """Calculate total financial impact for an escalation."""
+        """Calculate total financial impact for an escalation.
+
+        Note: delay_hours is deprecated and ignored. Delay cost is now calculated
+        as labor_hours × delay_cost_per_hour for consistency.
+        """
         if not self.is_loaded:
             self.load_catalog()
-        
+
         keyword_match = self._match_keyword_pattern(description)
-        
+
         if keyword_match:
             material_cost = keyword_match['material_cost']
             labor_hours = keyword_match['labor_hours']
@@ -262,9 +266,9 @@ class PriceCatalog:
             labor_hours = cat_costs.get('labor_hours', 6)
             hourly_rate = cat_costs.get('hourly_rate', DEFAULT_HOURLY_RATE)
             delay_cost_per_hour = cat_costs.get('delay_cost_per_hour', 300)
-        
+
         labor_cost = labor_hours * hourly_rate
-        delay_cost = delay_hours * delay_cost_per_hour
+        delay_cost = labor_hours * delay_cost_per_hour  # Use labor_hours, not delay_hours
         base_cost = material_cost + labor_cost + delay_cost
         
         severity_mult = self.severity_multipliers.get(severity.lower(), 1.0)

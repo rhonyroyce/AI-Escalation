@@ -1272,7 +1272,9 @@ def render_executive_summary(df):
     col1, col2, col3, col4 = st.columns(4)
     
     total_impact = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
-    revenue_at_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_impact * 2.5
+    # Revenue at risk should be a percentage of financial impact, not a multiplier
+    # Using 20% as reasonable estimate for churn risk impact
+    revenue_at_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_impact * 0.20
     cost_per_esc = total_impact / len(df)
     
     with col1:
@@ -1374,141 +1376,359 @@ def render_executive_summary(df):
 
 
 def render_financial_analysis(df):
-    """Render the Financial Impact Analysis page."""
+    """Render the Enhanced Financial Impact Analysis page with advanced metrics."""
+    from escalation_ai.financial import (
+        calculate_financial_metrics,
+        calculate_roi_metrics,
+        calculate_cost_avoidance,
+        calculate_efficiency_metrics,
+        calculate_financial_forecasts,
+        generate_financial_insights,
+        create_financial_waterfall,
+        create_roi_opportunity_chart,
+        create_cost_avoidance_breakdown,
+        create_cost_trend_forecast,
+        create_efficiency_scorecard,
+        create_category_cost_comparison,
+        create_engineer_cost_efficiency_matrix,
+        create_financial_kpi_cards,
+        create_insights_table
+    )
+
     st.markdown('<p class="main-header">💰 Financial Impact Analysis</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Quantified business impact and ROI opportunities</p>', unsafe_allow_html=True)
-    
+    st.markdown('<p class="sub-header">Comprehensive financial metrics, ROI analysis, and cost optimization</p>', unsafe_allow_html=True)
+
     # Ensure Financial_Impact column exists
     if 'Financial_Impact' not in df.columns:
         df = df.copy()
         df['Financial_Impact'] = df['Strategic_Friction_Score'] * 50 if 'Strategic_Friction_Score' in df.columns else 1500
-    
-    # Calculate financial metrics
-    total_cost = df['Financial_Impact'].sum()
-    revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 2.5
-    avg_cost = total_cost / len(df) if len(df) > 0 else 0
-    
-    # Cost breakdown by category
-    if 'AI_Category' in df.columns:
-        cost_by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
-    else:
-        cost_by_cat = pd.Series({'Unknown': total_cost})
-    
-    # Top Executive Metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Direct Cost", f"${total_cost:,.0f}", 
-                  delta=f"${avg_cost:.0f} per escalation")
-    
-    with col2:
-        st.metric("Revenue at Risk", f"${revenue_risk:,.0f}",
-                  delta="From churn probability", delta_color="inverse")
-    
-    with col3:
-        labor_cost = total_cost * 0.65
-        st.metric("Labor Cost", f"${labor_cost:,.0f}",
-                  delta="65% of total")
-    
-    with col4:
-        opportunity_cost = total_cost * 0.35
-        st.metric("Opportunity Cost", f"${opportunity_cost:,.0f}",
-                  delta="Productivity loss")
-    
+
+    # Calculate comprehensive metrics
+    with st.spinner('Calculating advanced financial metrics...'):
+        financial_metrics = calculate_financial_metrics(df)
+        roi_metrics = calculate_roi_metrics(df)
+        cost_avoidance = calculate_cost_avoidance(df)
+        efficiency_metrics = calculate_efficiency_metrics(df)
+        forecasts = calculate_financial_forecasts(df)
+        insights = generate_financial_insights(df)
+
+    # KPI Cards
+    st.markdown("### 📊 Key Financial Indicators")
+    kpi_data = create_financial_kpi_cards(financial_metrics)
+
+    # Display in 3x2 grid
+    for row_idx in range(2):
+        cols = st.columns(3)
+        for col_idx, col in enumerate(cols):
+            kpi_idx = row_idx * 3 + col_idx
+            if kpi_idx < len(kpi_data):
+                kpi = kpi_data[kpi_idx]
+                with col:
+                    # Proper color logic: green = good, red = bad
+                    delta_color = "off"  # Default: no color
+
+                    # Get numeric delta for proper color calculation
+                    delta_value = kpi.get('delta')
+                    delta_display = kpi.get('delta_text')
+
+                    # For costs: lower is better (inverse)
+                    if 'Cost' in kpi['title'] or 'Revenue at Risk' in kpi['title']:
+                        delta_color = "inverse"
+
+                    # For positive metrics: higher is better (normal)
+                    elif 'ROI' in kpi['title'] or 'Efficiency' in kpi['title'] or 'Avoidance' in kpi['title']:
+                        delta_color = "normal"
+
+                    # Use numeric delta if available for proper coloring, otherwise use text
+                    display_delta = delta_value if delta_value is not None else delta_display
+
+                    st.metric(
+                        label=f"{kpi['icon']} {kpi['title']}",
+                        value=kpi['value'],
+                        delta=display_delta,
+                        delta_color=delta_color
+                    )
+
     st.markdown("---")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Cost by category
-        fig = go.Figure(go.Bar(
-            x=cost_by_cat.values,
-            y=cost_by_cat.index,
-            orientation='h',
-            marker=dict(
-                color=cost_by_cat.values,
-                colorscale='Reds',
-            ),
-            text=[f"${v/1000:.0f}K" for v in cost_by_cat.values],
-            textposition='outside',
-            hovertemplate='<b>%{y}</b><br>Cost: $%{x:,.0f}<extra></extra>'
-        ))
-        
-        # Get theme without margin
-        theme = create_plotly_theme()
-        theme.pop('margin', None)
-        
-        fig.update_layout(
-            **theme,
-            title=dict(text='💸 Cost by Category', font=dict(size=18)),
-            height=400,
-            xaxis_title='Total Cost ($)',
-            margin=dict(l=150, r=80, t=60, b=40)  # More room for labels
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Cost vs Volume scatter
-        if 'AI_Category' in df.columns:
-            agg_dict = {'Financial_Impact': 'sum'}
-            if 'AI_Recurrence_Risk' in df.columns:
-                agg_dict['AI_Recurrence_Risk'] = 'mean'
-            
-            cat_analysis = df.groupby('AI_Category').agg(agg_dict)
-            cat_analysis['count'] = df.groupby('AI_Category').size()
-            
-            # Ensure AI_Recurrence_Risk exists for marker size
-            if 'AI_Recurrence_Risk' not in cat_analysis.columns:
-                cat_analysis['AI_Recurrence_Risk'] = 0.5
-            
-            fig = go.Figure(go.Scatter(
-                x=cat_analysis['count'],
-                y=cat_analysis['Financial_Impact'],
-                mode='markers+text',
-                marker=dict(
-                    size=cat_analysis['AI_Recurrence_Risk'] * 100 + 10,
-                    color=cat_analysis['Financial_Impact'],
-                    colorscale='Reds',
-                    showscale=True,
-                    colorbar=dict(title='Cost')
-                ),
-                text=cat_analysis.index,
-                textposition='top center',
-                hovertemplate='<b>%{text}</b><br>Volume: %{x}<br>Cost: $%{y:,.0f}<extra></extra>'
-            ))
-            
-            fig.update_layout(
-                **create_plotly_theme(),
-                title=dict(text='📊 Cost vs Volume Matrix', font=dict(size=18)),
-                height=400,
-                xaxis_title='Escalation Volume',
-                yaxis_title='Total Cost ($)'
-            )
-            
+
+    # Tabs for different analyses
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📊 Overview",
+        "💹 ROI Opportunities",
+        "💡 Cost Avoidance",
+        "📈 Trends & Forecast",
+        "🎯 Insights & Actions"
+    ])
+
+    with tab1:
+        st.markdown("### Financial Impact Overview")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Financial waterfall
+            try:
+                waterfall_data = {
+                    'total_cost': financial_metrics.total_cost,
+                    'recurring_issue_cost': financial_metrics.recurring_issue_cost,
+                    'preventable_cost': financial_metrics.preventable_cost,
+                    'customer_impact_cost': financial_metrics.customer_impact_cost,
+                    'sla_penalty_exposure': financial_metrics.sla_penalty_exposure
+                }
+                fig = create_financial_waterfall(waterfall_data)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating waterfall chart: {e}")
+
+        with col2:
+            # Efficiency scorecard
+            try:
+                fig = create_efficiency_scorecard(efficiency_metrics, financial_metrics)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating efficiency scorecard: {e}")
+
+        # Category cost comparison
+        st.markdown("### Cost Analysis by Category")
+        try:
+            fig = create_category_cost_comparison(df)
             st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error creating category comparison: {e}")
+
+        # Cost concentration
+        st.markdown("### Cost Concentration (Pareto Analysis)")
+        from escalation_ai.financial.visualizations import create_cost_concentration_chart
+        try:
+            fig = create_cost_concentration_chart(df)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error creating concentration chart: {e}")
+
+        st.info(f"""
+        **Cost Concentration**: {financial_metrics.cost_concentration_ratio*100:.0f}% of total costs come from the top 20% of tickets.
+        {'🔴 High concentration - focus on top cost drivers' if financial_metrics.cost_concentration_ratio > 0.8 else '🟢 Good cost distribution'}
+        """)
+
+    with tab2:
+        st.markdown("### 💹 ROI Investment Opportunities")
+
+        if roi_metrics['top_opportunities']:
+            # ROI opportunity chart
+            try:
+                fig = create_roi_opportunity_chart(roi_metrics)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating ROI chart: {e}")
+
+            # ROI opportunity table
+            st.markdown("### Top ROI Opportunities")
+            roi_df = pd.DataFrame(roi_metrics['top_opportunities']).round(2)
+            roi_df_display = pd.DataFrame({
+                'Category': roi_df['category'],
+                'Incidents': roi_df['incident_count'],
+                'Total Cost': roi_df['total_cost'].apply(lambda x: f"${x:,.0f}"),
+                'Investment': roi_df['investment_required'].apply(lambda x: f"${x:,.0f}"),
+                'Annual Savings': roi_df['annual_savings'].apply(lambda x: f"${x:,.0f}"),
+                'ROI %': roi_df['roi_percentage'].apply(lambda x: f"{x:.0f}%"),
+                'Payback (mo)': roi_df['payback_months'].apply(lambda x: f"{x:.1f}")
+            })
+
+            st.dataframe(roi_df_display, use_container_width=True, hide_index=True)
+
+            # ROI summary
+            st.success(f"""
+            **Investment Summary:**
+            - Total Investment: **${roi_metrics['total_investment_required']:,.0f}**
+            - Expected Annual Savings: **${roi_metrics['expected_annual_savings']:,.0f}**
+            - Overall ROI: **{roi_metrics['roi_percentage']:.0f}%**
+            - Payback Period: **{roi_metrics['payback_months']:.1f} months**
+            """)
         else:
-            st.info("Category data not available for Cost vs Volume analysis.")
-    
+            st.info("Not enough recurring patterns to identify ROI opportunities. Need at least 3 similar incidents per category.")
+
+    with tab3:
+        st.markdown("### 💡 Cost Avoidance Potential")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Cost avoidance breakdown
+            try:
+                fig = create_cost_avoidance_breakdown(cost_avoidance)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating cost avoidance chart: {e}")
+
+        with col2:
+            # Cost avoidance details
+            st.markdown("#### Avoidance Opportunities")
+
+            avoidance_items = [
+                ("🔄 Recurring Issues", cost_avoidance['recurring_issues'], "Fix root causes to prevent repeat incidents"),
+                ("📋 Preventable Categories", cost_avoidance['preventable_categories'], "Improve processes and documentation"),
+                ("📚 Knowledge Sharing", cost_avoidance['knowledge_sharing'], "Leverage similar ticket solutions"),
+                ("🤖 Automation", cost_avoidance['automation'], "Automate repetitive tasks")
+            ]
+
+            for label, value, description in avoidance_items:
+                st.markdown(f"""
+                <div style="padding: 15px; background: #0a1929; border-left: 4px solid #2ca02c; margin-bottom: 10px;">
+                    <div style="font-size: 1.1rem; font-weight: 600;">{label}</div>
+                    <div style="font-size: 1.5rem; color: #2ca02c; font-weight: 700;">${value:,.0f}</div>
+                    <div style="color: #999; font-size: 0.9rem;">{description}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.success(f"**Total Avoidance Potential: ${cost_avoidance['total_avoidance']:,.0f}**")
+
+    with tab4:
+        st.markdown("### 📈 Cost Trends & Financial Forecast")
+
+        # Check if we have required data
+        has_dates = any(col for col in df.columns if 'date' in col.lower() or 'time' in col.lower())
+
+        if not has_dates:
+            st.warning("""
+            **No date information available in this dataset.**
+
+            To enable trend analysis and forecasting:
+            1. Regenerate the report with the latest pipeline
+            2. Ensure your input data has an 'Issue Date' or 'Created Date' column
+
+            The current report was generated without date information.
+            """)
+
+            # Show basic cost summary instead
+            if 'AI_Category' in df.columns:
+                st.markdown("#### Current Cost Summary by Category")
+                cost_summary = df.groupby('AI_Category')['Financial_Impact'].agg(['sum', 'mean', 'count'])
+                cost_summary.columns = ['Total Cost', 'Avg Cost', 'Count']
+                cost_summary = cost_summary.sort_values('Total Cost', ascending=False)
+                st.dataframe(cost_summary.style.format({
+                    'Total Cost': '${:,.0f}',
+                    'Avg Cost': '${:,.0f}'
+                }), use_container_width=True)
+        else:
+            # Forecast chart
+            try:
+                fig = create_cost_trend_forecast(df, forecasts)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating trend forecast: {e}")
+                st.info("Try regenerating the report with the latest pipeline.")
+
+        # Forecast metrics (only show if we have forecast data)
+        if forecasts.get('monthly_projection'):
+            col1, col2, col3 = st.columns(3)
+        else:
+            st.info("Run the pipeline with date information to see forecasts.")
+            col1, col2, col3 = st.columns(3)
+
+        with col1:
+            trend_icon = "📈" if forecasts['trend'] == 'increasing' else "📉" if forecasts['trend'] == 'decreasing' else "➡️"
+            st.metric("Cost Trend", f"{trend_icon} {forecasts['trend'].title()}",
+                     delta=f"{forecasts['confidence'].title()} confidence")
+
+        with col2:
+            st.metric("30-Day Projection", f"${financial_metrics.cost_forecast_30d:,.0f}")
+
+        with col3:
+            st.metric("Annual Projection", f"${forecasts.get('annual_projection', 0):,.0f}")
+
+        # Risk scenarios
+        if forecasts.get('risk_scenarios'):
+            st.markdown("#### 📊 Financial Scenarios")
+            scenarios_df = pd.DataFrame({
+                'Scenario': ['Best Case (20% reduction)', 'Expected', 'Worst Case (30% increase)'],
+                'Annual Cost': [
+                    f"${forecasts['risk_scenarios']['best_case']:,.0f}",
+                    f"${forecasts['risk_scenarios']['expected']:,.0f}",
+                    f"${forecasts['risk_scenarios']['worst_case']:,.0f}"
+                ],
+                'Monthly': [
+                    f"${forecasts['risk_scenarios']['best_case']/12:,.0f}",
+                    f"${forecasts['risk_scenarios']['expected']/12:,.0f}",
+                    f"${forecasts['risk_scenarios']['worst_case']/12:,.0f}"
+                ]
+            })
+            st.dataframe(scenarios_df, use_container_width=True, hide_index=True)
+
+    with tab5:
+        st.markdown("### 🎯 Financial Insights & Action Items")
+
+        if insights:
+            # Display insights as cards
+            for insight in insights:
+                priority_colors = {
+                    'high': '#d62728',
+                    'medium': '#ff7f0e',
+                    'low': '#2ca02c'
+                }
+                color = priority_colors.get(insight['priority'], '#999')
+
+                st.markdown(f"""
+                <div style="padding: 20px; background: #0a1929; border-left: 5px solid {color}; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 0.8rem; color: {color}; font-weight: 600; text-transform: uppercase;">
+                                {insight['priority']} Priority
+                            </div>
+                            <div style="font-size: 1.2rem; font-weight: 700; margin: 8px 0;">
+                                {insight['title']}
+                            </div>
+                            <div style="color: #bbb; margin-bottom: 10px;">
+                                {insight['description']}
+                            </div>
+                            <div style="background: #001e3c; padding: 10px; border-radius: 5px;">
+                                <strong>💡 Recommendation:</strong> {insight['recommendation']}
+                            </div>
+                        </div>
+                        <div style="text-align: right; margin-left: 20px;">
+                            <div style="font-size: 0.8rem; color: #888;">Potential Savings</div>
+                            <div style="font-size: 1.8rem; color: #2ca02c; font-weight: 700;">
+                                ${insight.get('potential_savings', 0):,.0f}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Insights summary table
+            st.markdown("### 📋 Insights Summary Table")
+            insights_df = create_insights_table(insights)
+            st.dataframe(insights_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No significant financial insights identified. Continue monitoring.")
+
+        # Engineer efficiency matrix
+        if 'Engineer_Assigned' in df.columns and 'Resolution_Days' in df.columns:
+            st.markdown("### 👥 Engineer Cost Efficiency Analysis")
+            try:
+                fig = create_engineer_cost_efficiency_matrix(df)
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating engineer efficiency matrix: {e}")
+
+    # Bottom section: Interactive ROI Calculator
     st.markdown("---")
-    
-    # ROI Calculator
     st.markdown("### 💹 ROI Scenario Calculator")
-    
+
     col1, col2 = st.columns([1, 2])
-    
+
     with col1:
         reduction_pct = st.slider("Target Friction Reduction %", 10, 50, 25)
         investment = st.number_input("Proposed Investment ($)", 50000, 500000, 100000, step=25000)
         timeline_months = st.slider("Implementation Timeline (months)", 3, 18, 6)
-    
+
     with col2:
         # Calculate ROI
-        annual_savings = (total_cost * 4) * (reduction_pct / 100)  # Annualized from 90-day data
-        roi = ((annual_savings - investment) / investment) * 100
-        payback_months = investment / (annual_savings / 12)
+        total_cost = financial_metrics.total_cost
+        annual_savings = (total_cost * 4) * (reduction_pct / 100)  # Annualized
+        roi = ((annual_savings - investment) / investment) * 100 if investment > 0 else 0
+        payback_months = investment / (annual_savings / 12) if annual_savings > 0 else float('inf')
         npv = sum([(annual_savings - investment if i == 0 else annual_savings) / (1.08 ** i) for i in range(3)])
-        
+
         st.markdown(f"""
         <div class="exec-card">
             <h4 style="color: #00BFFF; margin-bottom: 20px;">📈 Projected Financial Outcomes</h4>
@@ -1522,7 +1742,7 @@ def render_financial_analysis(df):
                     <p style="color: #888; font-size: 0.85rem;">First Year ROI</p>
                 </div>
                 <div style="text-align: center;">
-                    <p style="font-size: 2rem; font-weight: 700; color: #FFC107; margin: 0;">{payback_months:.1f}</p>
+                    <p style="font-size: 2rem; font-weight: 700; color: #FFC107; margin: 0;">{f'{payback_months:.1f}' if payback_months != float('inf') else 'N/A'}</p>
                     <p style="color: #888; font-size: 0.85rem;">Payback (Months)</p>
                 </div>
                 <div style="text-align: center;">
@@ -2120,22 +2340,79 @@ def render_whatif_simulator(df):
 
 def render_drift_page(df):
     """Render the Category Drift Detection page."""
-    st.markdown("### 📊 Category Drift Detection")
-    st.markdown("Analyze how escalation patterns are changing over time.")
-    
-    # Split data into baseline and recent
-    df_temp = df.copy()
-    df_temp['date'] = pd.to_datetime(df_temp['tickets_data_issue_datetime'])
-    df_temp = df_temp.sort_values('date')
-    
-    split_idx = int(len(df_temp) * 0.6)
-    baseline_df = df_temp.iloc[:split_idx]
-    current_df = df_temp.iloc[split_idx:]
-    
-    # Calculate distributions
-    baseline_dist = baseline_df['AI_Category'].value_counts(normalize=True)
-    current_dist = current_df['AI_Category'].value_counts(normalize=True)
-    
+    try:
+        st.markdown("### 📊 Category Drift Detection")
+        st.markdown("Analyze how escalation patterns are changing over time.")
+
+        # Debug: Show available columns
+        if st.checkbox("Show debug info", value=False):
+            st.write("Available columns:", df.columns.tolist())
+            st.write("DataFrame shape:", df.shape)
+
+        # Find date column
+        date_col = None
+        for col in ['Issue_Date', 'Issue Date', 'tickets_data_issue_datetime', 'Created_Date', 'Date', 'Timestamp']:
+            if col in df.columns:
+                date_col = col
+                break
+
+        if not date_col:
+            st.warning("""
+            **No date information available for drift detection.**
+
+            To enable drift analysis:
+            1. Regenerate the report with the latest pipeline (`python run.py`)
+            2. Ensure your input data has an 'Issue Date' or 'Created Date' column
+
+            **Current dataset does not contain date information.**
+            """)
+
+            # Show what we DO have
+            st.info(f"Dataset contains {len(df)} records with {len(df.columns)} columns.")
+            return
+
+        # Check for AI_Category column
+        if 'AI_Category' not in df.columns:
+            st.error("Missing 'AI_Category' column required for drift detection.")
+            st.info("Available columns: " + ", ".join(df.columns.tolist()))
+            return
+
+        # Split data into baseline and recent
+        df_temp = df.copy()
+        df_temp['date'] = pd.to_datetime(df_temp[date_col], errors='coerce')
+        df_temp = df_temp.dropna(subset=['date'])
+        df_temp = df_temp.sort_values('date')
+
+        if len(df_temp) < 10:
+            st.warning(f"Not enough data points for drift detection. Found {len(df_temp)} tickets with dates (need at least 10).")
+            return
+
+        st.success(f"✓ Found {len(df_temp)} tickets with valid dates for drift analysis")
+
+        split_idx = int(len(df_temp) * 0.6)
+        baseline_df = df_temp.iloc[:split_idx]
+        current_df = df_temp.iloc[split_idx:]
+
+        # Calculate distributions
+        baseline_dist = baseline_df['AI_Category'].value_counts(normalize=True)
+        current_dist = current_df['AI_Category'].value_counts(normalize=True)
+
+    except Exception as e:
+        st.error(f"""
+        **Error in Drift Detection:**
+
+        {str(e)}
+
+        Please try:
+        1. Regenerating the report with `python run.py`
+        2. Ensuring your input data has proper date columns
+        """)
+
+        import traceback
+        if st.checkbox("Show technical details"):
+            st.code(traceback.format_exc())
+        return
+
     # Create comparison chart
     all_cats = sorted(set(baseline_dist.index) | set(current_dist.index))
     
@@ -2212,10 +2489,25 @@ def render_alerts_page(df):
     """Render the Smart Alerts page."""
     st.markdown("### ⚠️ Smart Alert Thresholds")
     st.markdown("Real-time monitoring of key metrics against dynamic thresholds.")
-    
+
+    # Find date column
+    date_col = None
+    for col in ['Issue_Date', 'Issue Date', 'tickets_data_issue_datetime', 'Created_Date', 'Date', 'Timestamp']:
+        if col in df.columns:
+            date_col = col
+            break
+
+    if not date_col:
+        st.warning("No date information available. Showing current state alerts only.")
+        date_col = None
+
     # Calculate current metrics
     df_temp = df.copy()
-    df_temp['date'] = pd.to_datetime(df_temp['tickets_data_issue_datetime']).dt.date
+    if date_col:
+        try:
+            df_temp['date'] = pd.to_datetime(df_temp[date_col], errors='coerce').dt.date
+        except:
+            date_col = None
     
     # Build agg dict with available columns
     agg_dict = {'AI_Category': 'count'}
@@ -2416,7 +2708,7 @@ def generate_executive_pdf_report(df):
         
         # Calculate key metrics
         total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
-        revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 2.5
+        revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 0.20
         avg_resolution = df['Predicted_Resolution_Days'].mean()
         recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100
         critical_count = len(df[df['tickets_data_severity'] == 'Critical'])
@@ -2635,7 +2927,7 @@ def generate_executive_pdf_report(df):
 def generate_html_report(df):
     """Generate an HTML report that can be converted to PDF."""
     total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
-    revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 2.5
+    revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 0.20
     avg_resolution = df['Predicted_Resolution_Days'].mean()
     recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100
     critical_count = len(df[df['tickets_data_severity'] == 'Critical'])
@@ -2795,9 +3087,9 @@ def main():
         
         page = st.radio(
             "Navigation",
-            ["🎯 Executive Summary", "📊 Dashboard", "📈 Analytics", 
+            ["🎯 Executive Summary", "📊 Dashboard", "📈 Analytics",
              "💰 Financial Analysis", "🏆 Benchmarking", "🔬 Root Cause",
-             "� Advanced Insights", "🔍 Drift Detection", "⚠️ Alerts", 
+             "🚀 Advanced Insights", "🔍 Drift Detection", "⚠️ Alerts",
              "🔮 What-If Simulator", "📋 Action Tracker", "📽️ Presentation Mode"],
             label_visibility="collapsed"
         )
@@ -2926,9 +3218,9 @@ def main():
         render_benchmarking(df)
     elif page == "🔬 Root Cause":
         render_root_cause(df)
-    elif page == "� Advanced Insights":
+    elif page == "🚀 Advanced Insights":
         render_advanced_insights(df)
-    elif page == "�🔍 Drift Detection":
+    elif page == "🔍 Drift Detection":
         render_drift_page(df)
     elif page == "⚠️ Alerts":
         render_alerts_page(df)

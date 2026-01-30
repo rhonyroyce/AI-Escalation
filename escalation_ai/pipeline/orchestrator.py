@@ -37,6 +37,14 @@ from ..predictors import (
     apply_similar_ticket_analysis,
     apply_resolution_time_prediction
 )
+from ..financial import (
+    calculate_financial_metrics,
+    calculate_roi_metrics,
+    calculate_cost_avoidance,
+    calculate_efficiency_metrics,
+    calculate_financial_forecasts,
+    generate_financial_insights
+)
 
 logger = logging.getLogger(__name__)
 
@@ -383,36 +391,36 @@ class EscalationPipeline:
         """Generate AI executive summary."""
         print_banner("PHASE 7: EXECUTIVE SUMMARY", "─")
         print_status("Phase 7", f"Generating insights with {GEN_MODEL}...", "✍️")
-        
+
         total_friction = self.df['Strategic_Friction_Score'].sum() if 'Strategic_Friction_Score' in self.df.columns else 0
         total_tickets = len(self.df)
-        
-        # Calculate financial metrics
-        total_financial_impact = self.df['Financial_Impact'].sum() if 'Financial_Impact' in self.df.columns else 0
-        avg_cost_per_ticket = total_financial_impact / total_tickets if total_tickets > 0 else 0
+
+        # Calculate comprehensive financial metrics
+        financial_metrics = calculate_financial_metrics(self.df)
+        roi_metrics = calculate_roi_metrics(self.df)
+        cost_avoidance = calculate_cost_avoidance(self.df)
+        efficiency_metrics = calculate_efficiency_metrics(self.df)
+        forecasts = calculate_financial_forecasts(self.df)
+        insights = generate_financial_insights(self.df)
+
+        # Store metrics for dashboard access
+        self.financial_metrics = financial_metrics
+        self.roi_metrics = roi_metrics
+        self.cost_avoidance = cost_avoidance
+        self.efficiency_metrics = efficiency_metrics
+        self.financial_forecasts = forecasts
+        self.financial_insights = insights
+
+        # Legacy metrics for backward compatibility
+        total_financial_impact = financial_metrics.total_cost
+        avg_cost_per_ticket = financial_metrics.avg_cost_per_ticket
         max_single_ticket_cost = self.df['Financial_Impact'].max() if 'Financial_Impact' in self.df.columns else 0
-        
-        # Revenue at risk (2.5x multiplier for downstream impact)
-        revenue_at_risk = total_financial_impact * 2.5
-        
-        # Labor (65%) vs opportunity cost (35%) split
+        revenue_at_risk = financial_metrics.revenue_at_risk
         labor_cost = total_financial_impact * 0.65
-        opportunity_cost = total_financial_impact * 0.35
-        
-        # High-cost tickets (top 10%)
-        high_cost_threshold = self.df['Financial_Impact'].quantile(0.9) if 'Financial_Impact' in self.df.columns else 0
-        high_cost_tickets = (self.df['Financial_Impact'] > high_cost_threshold).sum() if 'Financial_Impact' in self.df.columns else 0
-        high_cost_total = self.df[self.df['Financial_Impact'] > high_cost_threshold]['Financial_Impact'].sum() if 'Financial_Impact' in self.df.columns else 0
-        
-        # Recurrence risk financial exposure
-        recurrence_exposure = 0
-        if 'Financial_Impact' in self.df.columns and 'AI_Recurrence_Risk' in self.df.columns:
-            try:
-                fin_impact = pd.to_numeric(self.df['Financial_Impact'], errors='coerce').fillna(0)
-                recurrence_risk = pd.to_numeric(self.df['AI_Recurrence_Risk'], errors='coerce').fillna(0)
-                recurrence_exposure = (fin_impact * recurrence_risk).sum()
-            except Exception:
-                recurrence_exposure = 0
+        opportunity_cost = financial_metrics.opportunity_cost
+        high_cost_tickets = financial_metrics.high_cost_tickets_count
+        high_cost_total = self.df['Financial_Impact'].quantile(0.9) * high_cost_tickets if 'Financial_Impact' in self.df.columns else 0
+        recurrence_exposure = financial_metrics.recurrence_exposure
         
         # Build context for synthesis
         context_lines = [
@@ -448,15 +456,56 @@ class EscalationPipeline:
             "",
             f"Total Direct Financial Impact: ${total_financial_impact:,.2f}",
             f"Average Cost per Escalation: ${avg_cost_per_ticket:,.2f}",
+            f"Median Cost per Escalation: ${financial_metrics.median_cost:,.2f}",
             f"Highest Single Ticket Cost: ${max_single_ticket_cost:,.2f}",
             f"Revenue at Risk (downstream business impact): ${revenue_at_risk:,.2f}",
             f"Labor Cost Component (65%): ${labor_cost:,.2f}",
             f"Opportunity Cost Component (35%): ${opportunity_cost:,.2f}",
+            f"Customer Impact Cost (external issues): ${financial_metrics.customer_impact_cost:,.2f}",
+            f"SLA Penalty Exposure: ${financial_metrics.sla_penalty_exposure:,.2f}",
             "",
             f"High-Cost Tickets (top 10%): {high_cost_tickets} tickets = ${high_cost_total:,.2f}",
-            f"Recurrence Risk Exposure (weighted by probability): ${recurrence_exposure:,.2f}",
+            f"Cost Concentration: {financial_metrics.cost_concentration_ratio*100:.0f}% of costs from top 20% tickets",
+            f"Recurrence Risk Exposure: ${recurrence_exposure:,.2f}",
+            "",
+            "ROI & COST OPTIMIZATION",
+            f"Preventable Cost (process improvements): ${financial_metrics.preventable_cost:,.2f}",
+            f"Recurring Issue Cost (root cause fixes): ${financial_metrics.recurring_issue_cost:,.2f}",
+            f"Total Cost Avoidance Potential: ${cost_avoidance['total_avoidance']:,.2f}",
+            f"ROI Opportunity (from prevention): ${financial_metrics.roi_opportunity:,.2f}",
+            f"Cost Efficiency Score: {financial_metrics.cost_efficiency_score:.0f}/100",
         ])
-        
+
+        # Add ROI opportunities
+        if roi_metrics['top_opportunities']:
+            context_lines.append("\nTop ROI Opportunities:")
+            for opp in roi_metrics['top_opportunities'][:3]:
+                context_lines.append(
+                    f"  - {opp['category']}: Invest ${opp['investment_required']:,.0f} → "
+                    f"Save ${opp['annual_savings']:,.0f}/year (ROI: {opp['roi_percentage']:.0f}%, "
+                    f"Payback: {opp['payback_months']:.1f} months)"
+                )
+
+        # Add financial forecasts
+        if forecasts['trend'] != 'stable':
+            context_lines.extend([
+                "",
+                "FINANCIAL FORECAST",
+                f"Trend: {forecasts['trend'].upper()} (confidence: {forecasts['confidence']})",
+                f"30-Day Projection: ${financial_metrics.cost_forecast_30d:,.2f}",
+                f"90-Day Projection: ${financial_metrics.cost_forecast_90d:,.2f}",
+                f"Annual Projection: ${forecasts['annual_projection']:,.2f}",
+            ])
+
+        # Add top insights
+        if insights:
+            context_lines.append("\nKEY FINANCIAL INSIGHTS:")
+            for insight in insights[:3]:
+                context_lines.append(
+                    f"  [{insight['priority'].upper()}] {insight['title']}: "
+                    f"{insight['description']} | {insight['recommendation']}"
+                )
+
         # Financial impact by category
         if 'Financial_Impact' in self.df.columns and 'AI_Category' in self.df.columns:
             fin_by_cat = self.df.groupby('AI_Category')['Financial_Impact'].agg(['sum', 'mean', 'count']).sort_values('sum', ascending=False).head(5)
