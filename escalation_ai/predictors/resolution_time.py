@@ -246,22 +246,19 @@ class ResolutionTimePredictor:
             else:
                 base_days = 3.0  # Conservative default if no learned data
         else:
-            # Only use heuristic industry averages as absolute fallback
-            # These are SCALED DOWN to be more conservative
+            # 8-category system resolution time estimates
+            # Based on telecom escalation analysis
             category_base_days = {
-                'OSS/NMS & Systems': 3.0,
-                'RF & Antenna Issues': 3.5,
-                'Process & Documentation': 1.5,
-                'Communication & Coordination': 1.0,
-                'Configuration & Integration': 3.0,
-                'Transmission & Backhaul': 4.0,
-                'Power & Environment': 2.5,
-                'Site Access & Logistics': 2.0,
-                'Contractor & Vendor Issues': 4.5,
-                'Hardware Issues': 3.0,
-                'Software Issues': 2.5,
+                'Scheduling & Planning': 1.0,
+                'Documentation & Reporting': 0.5,
+                'Validation & QA': 1.5,
+                'Process Compliance': 1.0,
+                'Configuration & Data Mismatch': 2.5,
+                'Site Readiness': 3.0,
+                'Communication & Response': 0.5,
+                'Nesting & Tool Errors': 2.0,
             }
-            base_days = category_base_days.get(category, 3.0)
+            base_days = category_base_days.get(category, 2.0)
         
         # Adjust for severity
         severity = str(row.get('Severity_Norm', row.get(COL_SEVERITY, 'Medium'))).lower()

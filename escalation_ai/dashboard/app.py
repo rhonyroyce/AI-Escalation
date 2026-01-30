@@ -270,9 +270,10 @@ def get_sample_data() -> pd.DataFrame:
     np.random.seed(42)
     n = 200
     
-    categories = ['RF & Antenna Issues', 'Transmission & Backhaul', 'Power & Environment',
-                  'Site Access & Logistics', 'Contractor & Vendor Issues', 
-                  'Configuration & Integration', 'OSS/NMS & Systems']
+    # 8-category system for telecom escalation analysis
+    categories = ['Scheduling & Planning', 'Documentation & Reporting', 'Validation & QA',
+                  'Process Compliance', 'Configuration & Data Mismatch',
+                  'Site Readiness', 'Communication & Response', 'Nesting & Tool Errors']
     
     df = pd.DataFrame({
         'AI_Category': np.random.choice(categories, n),

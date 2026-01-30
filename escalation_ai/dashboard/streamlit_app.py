@@ -550,11 +550,11 @@ def generate_sample_data():
     np.random.seed(42)
     n = 250
     
+    # 8-category system for telecom escalation analysis
     categories = [
-        'RF & Antenna Issues', 'Transmission & Backhaul', 'Power & Environment',
-        'Site Access & Logistics', 'Contractor & Vendor Issues', 
-        'Configuration & Integration', 'OSS/NMS & Systems',
-        'Process & Documentation', 'Communication & Coordination'
+        'Scheduling & Planning', 'Documentation & Reporting', 'Validation & QA',
+        'Process Compliance', 'Configuration & Data Mismatch',
+        'Site Readiness', 'Communication & Response', 'Nesting & Tool Errors'
     ]
     
     engineers = ['Alice Chen', 'Bob Smith', 'Carlos Rodriguez', 'Diana Patel', 

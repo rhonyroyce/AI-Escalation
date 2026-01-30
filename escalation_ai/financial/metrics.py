@@ -453,12 +453,13 @@ def calculate_cost_avoidance(df: pd.DataFrame) -> Dict[str, float]:
     # Knowledge sharing (tickets with similar historical issues)
     avoidance['knowledge_sharing'] = _calculate_cost_avoidance(df)
 
-    # Automation potential (repetitive categories)
+    # Automation potential (repetitive categories in 8-category system)
     if 'AI_Category' in df.columns:
         automatable_categories = [
-            'Configuration & Integration',
-            'OSS/NMS & Systems',
-            'Process & Documentation'
+            'Scheduling & Planning',
+            'Documentation & Reporting',
+            'Process Compliance',
+            'Nesting & Tool Errors'
         ]
         auto_mask = df['AI_Category'].isin(automatable_categories)
         avoidance['automation'] = df[auto_mask]['Financial_Impact'].sum() * 0.5

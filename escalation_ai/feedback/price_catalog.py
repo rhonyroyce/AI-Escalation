@@ -64,19 +64,17 @@ class PriceCatalog:
             category_headers = ["Category", "Material_Cost", "Labor_Hours", "Hourly_Rate", "Delay_Cost_Per_Hour", "Notes"]
             ws_category.append(category_headers)
             
+            # 8-category system optimized for telecom escalation analysis
             category_data = [
-                ["RF & Antenna Systems", 2500, 8, 150, 500, "Antenna repairs, RF optimization"],
-                ["Transmission & Backhaul", 3000, 12, 175, 750, "Fiber, microwave, transport"],
-                ["Power & Environment", 1500, 6, 125, 400, "Battery, rectifier, HVAC"],
-                ["Site Access & Logistics", 500, 4, 100, 200, "Keys, permits, scheduling"],
-                ["Contractor & Vendor Issues", 1000, 8, 125, 350, "Third-party coordination"],
-                ["Configuration & Integration", 800, 10, 150, 450, "Software, parameters"],
-                ["OSS/NMS & Systems", 600, 6, 175, 400, "Monitoring, alarms"],
-                ["Process & Documentation", 200, 4, 100, 150, "MOPs, procedures"],
-                ["Communication & Coordination", 100, 2, 100, 100, "Updates, notifications"],
-                ["Weather & Natural Events", 5000, 16, 150, 1000, "Storm damage, disasters"],
-                ["Third-Party & External", 2000, 8, 125, 500, "Utility, landlord issues"],
-                ["Unclassified", 1000, 6, 125, 300, "Default for unknown"],
+                ["Scheduling & Planning", 300, 2, 100, 150, "TI scheduling, FE coordination"],
+                ["Documentation & Reporting", 200, 3, 100, 100, "Snapshots, E911, CBN reports"],
+                ["Validation & QA", 500, 4, 125, 250, "Precheck, postcheck, VSWR validation"],
+                ["Process Compliance", 400, 3, 125, 200, "SOP adherence, escalation process"],
+                ["Configuration & Data Mismatch", 800, 6, 150, 400, "Port matrix, RET, TAC mismatch"],
+                ["Site Readiness", 1500, 8, 150, 500, "BH actualization, MW readiness"],
+                ["Communication & Response", 200, 2, 100, 150, "Delayed replies, follow-ups"],
+                ["Nesting & Tool Errors", 600, 5, 125, 300, "NSA/NSI nesting, RIOT, FCI tools"],
+                ["Unclassified", 500, 4, 125, 200, "Default for unknown"],
             ]
             
             for row in category_data:
@@ -91,11 +89,14 @@ class PriceCatalog:
             keyword_headers = ["Keyword_Pattern", "Category_Override", "Material_Cost", "Labor_Hours", "Priority", "Notes"]
             ws_keywords.append(keyword_headers)
             
+            # Keyword patterns for cost overrides based on 8-category system
             keyword_data = [
-                [".*antenna.*replace.*", "RF & Antenna Systems", 8000, 16, 1, "Full antenna replacement"],
-                [".*fiber.*cut.*", "Transmission & Backhaul", 5000, 24, 1, "Emergency fiber repair"],
-                [".*battery.*fail.*", "Power & Environment", 3000, 8, 2, "Battery bank replacement"],
-                [".*generator.*", "Power & Environment", 2000, 12, 2, "Generator issues"],
+                [".*BH.*not.*actual.*", "Site Readiness", 2000, 12, 1, "Backhaul not actualized"],
+                [".*port.*matrix.*mismatch.*", "Configuration & Data Mismatch", 1500, 8, 1, "Port matrix issues"],
+                [".*RET.*naming.*", "Configuration & Data Mismatch", 1200, 6, 2, "RET naming errors"],
+                [".*not.*schedul.*", "Scheduling & Planning", 500, 4, 2, "Scheduling issues"],
+                [".*snapshot.*missing.*", "Documentation & Reporting", 300, 2, 3, "Missing documentation"],
+                [".*RIOT.*red.*", "Nesting & Tool Errors", 800, 5, 2, "RIOT validation failure"],
             ]
             
             for row in keyword_data:

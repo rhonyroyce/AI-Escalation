@@ -140,74 +140,255 @@ MC_BLUE = '#004C97'
 
 # ==========================================
 # CATEGORIZATION ANCHORS
-# Comprehensive 11-category system for telecom escalations
+# 8-category system optimized for telecom escalation analysis
+# Based on 300+ error sample analysis
 # ==========================================
 ANCHORS = {
-    # Equipment & Infrastructure
-    "RF & Antenna Issues": [
-        "antenna misalignment", "vswr alarm", "rru fault", "radio failure", 
-        "sector down", "rf interference", "antenna swap", "feeder cable",
-        "bbu fault", "baseband", "carrier down", "cell outage"
+    "Scheduling & Planning": [
+        "schedule", "TI", "Ti", "planned", "unplanned", "calendar",
+        "date", "time", "weekend", "holiday", "closeout", "close out",
+        "not schedule", "not scheduled", "schedule missing", "no schedule",
+        "without schedule", "TI entry missing", "not in TI", "not in Ti",
+        "FE on site", "FE logged", "logged for IX", "logged for support",
+        "ticket in closeout", "moved to closeout", "wrong bucket"
     ],
-    "Transmission & Backhaul": [
-        "fiber cut", "microwave link down", "transmission failure", "mw fade",
-        "ethernet fault", "capacity exhaust", "latency", "packet loss",
-        "backhaul", "transport", "ipsec", "vpn down", "circuit down"
+    "Documentation & Reporting": [
+        "snapshot", "snap", "screenshot", "missing", "wrong", "incorrect",
+        "attachment", "logs", "report", "email", "mail", "subject",
+        "CBN", "E911", "RTT", "EOD", "summary", "table",
+        "missing snapshot", "wrong site ID", "different site",
+        "forgot to attach", "forgot to paste", "CBN output missing",
+        "incomplete snapshot", "wrong attachment", "PSAP contact missing"
     ],
-    "Power & Environment": [
-        "power outage", "battery failure", "rectifier fault", "generator issue",
-        "ac failure", "high temperature", "equipment smoke", "cooling failure",
-        "ups fault", "breaker trip", "fuel empty", "solar panel", "cabinet alarm"
+    "Validation & QA": [
+        "missed", "miss", "check", "validation", "verify", "audit",
+        "precheck", "postcheck", "VSWR", "RSSI", "RTWP", "KPI",
+        "pass", "fail", "detected", "captured", "escalated",
+        "missed to check", "missed to report", "missed to capture",
+        "not detected", "wrong pass fail", "incomplete validation",
+        "degradation not detected", "issue not escalated"
     ],
-    
-    # Access & Field Operations
-    "Site Access & Logistics": [
-        "keys missing", "gate locked", "access denied", "landlord issue",
-        "permit expired", "security clearance", "escort required", "site unsafe",
-        "site inaccessible", "road blocked", "no access", "tower climb"
+    "Process Compliance": [
+        "process", "SOP", "guideline", "escalate", "NTAC", "distro",
+        "approval", "without", "skip", "bypass", "procedure", "step",
+        "released without", "supported without", "without BH actualized",
+        "escalated to NTAC", "wrong distro", "not following process",
+        "skipped step", "bypassed validation", "improper escalation"
     ],
-    "Contractor & Vendor Issues": [
-        "crew no show", "wrong crew", "incomplete work", "material shortage",
-        "vendor delay", "subcontractor issue", "quality defect", "rework required",
-        "parts missing", "tool shortage", "training gap", "crew late"
+    "Configuration & Data Mismatch": [
+        "mismatch", "port matrix", "PMX", "SCF", "CIQ", "RFDS", "TAC",
+        "RET", "naming", "One-T", "OneT", "configuration", "config",
+        "port matrix mismatch", "RET naming issue", "RET naming wrong",
+        "TAC mismatch", "SCF mismatch", "CIQ mismatch", "RFDS mismatch",
+        "need updated port matrix", "RET swap", "RIOT red", "not matching"
     ],
-    
-    # Technical & Software
-    "Configuration & Integration": [
-        "parameter mismatch", "wrong ip", "integration error", "script failed",
-        "alarm suppressed", "neighbor list", "handover failure", "config rollback",
-        "software bug", "feature activation", "license issue", "template error"
+    "Site Readiness": [
+        "BH", "backhaul", "actualized", "ready", "MW", "microwave",
+        "material", "missing", "SFP", "cancelled", "down", "pending",
+        "BH not actualized", "backhaul not ready", "BH not ready",
+        "MW not ready", "microwave not ready", "site not ready",
+        "material missing", "SFP missing", "site was down",
+        "cancelled due to", "transmission not ready"
     ],
-    "OSS/NMS & Systems": [
-        "oss fault", "nms unreachable", "provisioning error", "database sync",
-        "element manager", "snmp trap", "discovery failed", "inventory mismatch",
-        "mediation", "ticketing system", "monitoring gap", "correlation failure",
-        "nesting", "nest extension", "nsi", "si nesting", "cell planning", 
-        "network planning", "pci conflict", "antenna tilt", "coverage optimization"
+    "Communication & Response": [
+        "delay", "delayed", "reply", "response", "waiting", "waited",
+        "hours", "follow-up", "reminder", "communicated", "query",
+        "delayed reply", "delayed response", "delay in reply",
+        "waited for hours", "FE waited", "GC query not replied",
+        "no reply from", "follow-up required", "communication gap"
     ],
-    
-    # Process & Communication
-    "Process & Documentation": [
-        "paperwork missing", "approval delay", "incorrect data", "process gap",
-        "sow mismatch", "change window", "notification failure", "handoff issue",
-        "documentation error", "method statement", "safety violation", "audit finding"
-    ],
-    "Communication & Coordination": [
-        "miscommunication", "escalation delay", "wrong contact", "no response",
-        "scheduling conflict", "timezone issue", "language barrier", "email missed",
-        "handover gap", "shift change", "notification delay", "stakeholder"
-    ],
-    
-    # External Factors
-    "Weather & Natural Events": [
-        "flood", "hurricane", "storm", "lightning", "extreme heat", "ice", 
-        "wind damage", "earthquake", "wildfire", "snow", "fog", "monsoon"
-    ],
-    "Third-Party & External": [
-        "theft", "vandalism", "fiber cut by third party", "construction damage",
-        "utility outage", "road closure", "civil unrest", "regulatory hold",
-        "permit rejection", "zoning issue", "public complaint", "legal dispute"
+    "Nesting & Tool Errors": [
+        "nest", "nested", "nesting", "NSA", "SA", "NSI", "SI",
+        "RIOT", "FCI", "TI", "tool", "updated", "market", "guideline",
+        "nested as NSA", "nested as SA", "nested as NSI",
+        "wrong nest type", "nest extended", "nest extension",
+        "not allowed in market", "RIOT mismatch", "tool not updated",
+        "FCI not updated", "site not unnested", "OSS mismatch"
     ]
+}
+
+# ==========================================
+# CATEGORY KEYWORDS - Extended taxonomy for hybrid classification
+# Includes primary keywords, semantic phrases, and regex patterns
+# ==========================================
+CATEGORY_KEYWORDS = {
+    "Scheduling & Planning": {
+        "primary": [
+            "schedule", "TI", "Ti", "planned", "unplanned", "calendar",
+            "date", "time", "weekend", "holiday", "closeout", "close out"
+        ],
+        "phrases": [
+            "not schedule", "not scheduled", "schedule missing", "no schedule",
+            "without schedule", "TI entry missing", "not in TI", "not in Ti",
+            "schedule not followed", "incorrect schedule", "FE on site",
+            "FE logged", "logged for IX", "logged for support", "logged for TS",
+            "ticket in closeout", "moved to closeout", "wrong bucket",
+            "site not schedule for", "FE logged in for integration",
+            "not schedule on weekend", "schedule after FE logged",
+            "site was not schedule in Ti for integration",
+            "ticket was in closeout FE logged"
+        ],
+        "patterns": [
+            r"site.*not.*schedul",
+            r"FE.*logged.*not.*schedul",
+            r"Ti.*entry.*missing",
+            r"ticket.*closeout",
+            r"not.*schedul.*Ti"
+        ]
+    },
+    "Documentation & Reporting": {
+        "primary": [
+            "snapshot", "snap", "screenshot", "missing", "wrong", "incorrect",
+            "attachment", "logs", "report", "email", "mail", "subject",
+            "CBN", "E911", "RTT", "EOD", "summary", "table"
+        ],
+        "phrases": [
+            "missing snapshot", "snapshot missing", "wrong site ID",
+            "different site", "forgot to attach", "forgot to paste",
+            "missing in mail", "CBN output missing", "incomplete snapshot",
+            "wrong attachment", "missing logs", "PSAP contact missing",
+            "summary table missing", "Live CT missing", "E911 Go mail",
+            "E911 complete mail", "detailed site view", "lemming snap",
+            "engineer forgot to paste", "Table with PSAP missing"
+        ],
+        "patterns": [
+            r"missing.*snapshot",
+            r"wrong.*site.*ID",
+            r"snapshot.*missing",
+            r"E911.*missing",
+            r"CBN.*missing"
+        ]
+    },
+    "Validation & QA": {
+        "primary": [
+            "missed", "miss", "check", "validation", "verify", "audit",
+            "precheck", "postcheck", "VSWR", "RSSI", "RTWP", "KPI",
+            "pass", "fail", "detected", "captured", "escalated"
+        ],
+        "phrases": [
+            "missed to check", "missed to report", "missed to capture",
+            "missed to create", "missed to escalate", "not detected",
+            "not identified", "wrong pass fail", "incomplete validation",
+            "degradation not detected", "issue not escalated",
+            "alarm captured but not", "cells in unsync", "RSSI imbalance",
+            "engineer missed", "overlooked during", "not verified",
+            "VSWR marked as Fail but actual Pass"
+        ],
+        "patterns": [
+            r"missed.*to.*check",
+            r"not.*detected",
+            r"missed.*report",
+            r"incomplete.*validation",
+            r"wrong.*pass.*fail"
+        ]
+    },
+    "Process Compliance": {
+        "primary": [
+            "process", "SOP", "guideline", "escalate", "NTAC", "distro",
+            "approval", "without", "skip", "bypass", "procedure", "step"
+        ],
+        "phrases": [
+            "released without", "supported without", "without BH actualized",
+            "without backhaul", "escalated to NTAC", "wrong distro",
+            "not following process", "skipped step", "bypassed validation",
+            "proceeded without", "wrong bucket", "improper escalation",
+            "not supposed to", "against guideline", "ticket in wrong",
+            "escalated to NTAC while not supposed to",
+            "escalated to different vendor", "not following SOP"
+        ],
+        "patterns": [
+            r"without.*BH.*actual",
+            r"without.*backhaul",
+            r"escalat.*NTAC",
+            r"wrong.*distro",
+            r"releas.*without"
+        ]
+    },
+    "Configuration & Data Mismatch": {
+        "primary": [
+            "mismatch", "port matrix", "PMX", "SCF", "CIQ", "RFDS", "TAC",
+            "RET", "naming", "One-T", "OneT", "configuration", "config"
+        ],
+        "phrases": [
+            "port matrix mismatch", "RET naming issue", "RET naming wrong",
+            "TAC mismatch", "SCF mismatch", "CIQ mismatch", "RFDS mismatch",
+            "need updated port matrix", "as per site configuration",
+            "as per port matrix", "detected on site but", "RET swap",
+            "extra 2 in naming", "I missing", "N66 not present",
+            "RIOT red", "not matching", "doesn't match",
+            "SCF and RFDS mismatch", "CIQ and SCF not matching"
+        ],
+        "patterns": [
+            r"port.*matrix.*mismatch",
+            r"RET.*naming",
+            r"TAC.*mismatch",
+            r"SCF.*CIQ.*mismatch",
+            r"need.*updated.*port"
+        ]
+    },
+    "Site Readiness": {
+        "primary": [
+            "BH", "backhaul", "actualized", "ready", "MW", "microwave",
+            "material", "missing", "SFP", "cancelled", "down", "pending"
+        ],
+        "phrases": [
+            "BH not actualized", "backhaul not ready", "BH not ready",
+            "MW not ready", "microwave not ready", "site not ready",
+            "material missing", "SFP missing", "site was down",
+            "cancelled due to", "could not be integrated", "FE on site but BH",
+            "pending actualization", "BH acceptance pending", "transmission not ready",
+            "BH not ready in MB", "MW link was not ready"
+        ],
+        "patterns": [
+            r"BH.*not.*actual",
+            r"backhaul.*not.*ready",
+            r"MW.*not.*ready",
+            r"material.*missing",
+            r"site.*not.*ready"
+        ]
+    },
+    "Communication & Response": {
+        "primary": [
+            "delay", "delayed", "reply", "response", "waiting", "waited",
+            "hours", "follow-up", "reminder", "communicated", "query"
+        ],
+        "phrases": [
+            "delayed reply", "delayed response", "delay in reply",
+            "waited for hours", "FE waited", "GC query not replied",
+            "replied when PM asked", "no reply from", "follow-up required",
+            "multiple follow-ups", "not communicated", "communication gap",
+            "wrong distro", "proactive update missing", "questioned over delays",
+            "replied back when PM asked", "reminder sent"
+        ],
+        "patterns": [
+            r"delay.*reply",
+            r"delay.*response",
+            r"waited.*hours",
+            r"no.*reply",
+            r"communication.*gap"
+        ]
+    },
+    "Nesting & Tool Errors": {
+        "primary": [
+            "nest", "nested", "nesting", "NSA", "SA", "NSI", "SI",
+            "RIOT", "FCI", "TI", "tool", "updated", "market", "guideline"
+        ],
+        "phrases": [
+            "nested as NSA", "nested as SA", "nested as NSI",
+            "wrong nest type", "nest extended", "nest extension",
+            "not allowed in market", "market guideline", "RIOT red",
+            "RIOT mismatch", "tool not updated", "FCI not updated",
+            "site not unnested", "lemming validation", "without RIOT",
+            "TAC mismatch RIOT", "RF config mismatch", "OSS mismatch"
+        ],
+        "patterns": [
+            r"nested.*as.*NSA",
+            r"nested.*as.*NSI",
+            r"RIOT.*red",
+            r"nest.*extend",
+            r"not.*allow.*market"
+        ]
+    }
 }
 
 # ==========================================

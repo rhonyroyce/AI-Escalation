@@ -544,10 +544,10 @@ class EscalationPipeline:
     def run_all_phases(self):
         """Run all pipeline phases in sequence."""
         total_phases = 6
-        
+
         print_banner(f"RUNNING ANALYSIS PIPELINE ({len(self.df):,} tickets)", "═")
         print()
-        
+
         self.prepare_text()
         self.run_classification()       # Phase 1
         self.run_scoring()              # Phase 2
@@ -555,10 +555,30 @@ class EscalationPipeline:
         self.run_recurrence_prediction() # Phase 4
         self.run_similar_ticket_analysis() # Phase 5
         self.run_resolution_time_prediction() # Phase 6
-        
+
+        # Save classifications to feedback file for human-in-the-loop review
+        # This preserves existing user corrections and adds new tickets
+        self._save_feedback_for_review()
+
         print_banner("ALL PHASES COMPLETE", "═")
-        
+
         return self.df
+
+    def _save_feedback_for_review(self):
+        """Save current classifications to feedback file for human review."""
+        try:
+            # Determine output directory (use file's directory or current directory)
+            if self.file_path:
+                output_dir = os.path.dirname(self.file_path)
+            else:
+                output_dir = os.getcwd()
+
+            print_status("feedback", "Updating classification feedback file for human review...", "📝")
+            feedback_path = self.feedback_learner.save_for_review(self.df, output_dir)
+            print_status("feedback", f"Feedback file updated: {os.path.basename(feedback_path)}", "✅")
+        except Exception as e:
+            logger.warning(f"Could not save feedback file: {e}")
+            print_status("feedback", f"Warning: Could not save feedback file: {e}", "⚠️")
     
     def get_results(self):
         """Get the processed dataframe."""
