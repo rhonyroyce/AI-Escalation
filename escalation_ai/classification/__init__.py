@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 from tqdm import tqdm
 
 from ..core.config import (
-    ANCHORS, CATEGORY_KEYWORDS, MIN_CLASSIFICATION_CONFIDENCE, USE_GPU
+    ANCHORS, CATEGORY_KEYWORDS, SUB_CATEGORIES, MIN_CLASSIFICATION_CONFIDENCE, USE_GPU
 )
 from ..core.gpu_utils import (
     batch_cosine_similarity_gpu,
@@ -172,6 +172,43 @@ def keyword_classify(text: str) -> Optional[Tuple[str, float]]:
     return None
 
 
+def get_sub_category(text: str, category: str) -> str:
+    """
+    Determine the sub-category within a main category based on keyword matching.
+
+    Args:
+        text: The ticket text
+        category: The main category assigned
+
+    Returns:
+        Sub-category name or "General" if no specific match
+    """
+    if not text or not category:
+        return "General"
+
+    if category not in SUB_CATEGORIES:
+        return "General"
+
+    text_lower = str(text).lower()
+    sub_cats = SUB_CATEGORIES[category]
+
+    best_sub = "General"
+    best_score = 0
+
+    for sub_name, keywords in sub_cats.items():
+        score = 0
+        for kw in keywords:
+            if kw.lower() in text_lower:
+                # Longer keywords get higher weight
+                score += len(kw.split())
+
+        if score > best_score:
+            best_score = score
+            best_sub = sub_name
+
+    return best_sub
+
+
 def classify_rows(df: pd.DataFrame, ai, show_progress: bool = True) -> pd.DataFrame:
     """
     Categorize rows using hybrid keyword + embedding classification.
@@ -288,12 +325,24 @@ def classify_rows(df: pd.DataFrame, ai, show_progress: bool = True) -> pd.DataFr
     df['AI_Category'] = cats
     df['AI_Confidence'] = scores
 
+    # Compute sub-categories based on the assigned category
+    logger.info("Assigning sub-categories...")
+    sub_cats = []
+    for idx, row in df.iterrows():
+        text = all_texts[idx] if idx < len(all_texts) else ""
+        category = cats[idx] if idx < len(cats) else "Unclassified"
+        sub_cat = get_sub_category(text, category)
+        sub_cats.append(sub_cat)
+
+    df['AI_Sub_Category'] = sub_cats
+
     # Log classification method distribution
     logger.info(f"Classification complete:")
     logger.info(f"  - Pattern matches: {pattern_count}")
     logger.info(f"  - Keyword matches: {keyword_count}")
     logger.info(f"  - Embedding matches: {embedding_count}")
     logger.info(f"Category distribution: {df['AI_Category'].value_counts().to_dict()}")
+    logger.info(f"Sub-category distribution: {df['AI_Sub_Category'].value_counts().head(10).to_dict()}")
 
     return df
 

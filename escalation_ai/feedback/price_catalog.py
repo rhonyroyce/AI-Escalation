@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
-from ..core.config import PRICE_CATALOG_FILE, DEFAULT_HOURLY_RATE, DEFAULT_DELAY_COST
+from ..core.config import PRICE_CATALOG_FILE, DEFAULT_HOURLY_RATE, DEFAULT_DELAY_COST, SUB_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +83,57 @@ class PriceCatalog:
             self._style_header(ws_category, len(category_headers))
             ws_category.column_dimensions['A'].width = 30
             ws_category.column_dimensions['F'].width = 35
-            
-            # Sheet 3: Keyword Patterns
+
+            # Sheet 3: Sub-Category Costs
+            ws_subcat = wb.create_sheet("Sub-Category Costs")
+            subcat_headers = ["Category", "Sub_Category", "Material_Cost", "Labor_Hours", "Hourly_Rate", "Notes"]
+            ws_subcat.append(subcat_headers)
+
+            # Sub-category costs based on 8-category system
+            subcat_data = [
+                # Scheduling & Planning
+                ["Scheduling & Planning", "TI/Calendar Issues", 300, 2, 100, "TI entry errors"],
+                ["Scheduling & Planning", "FE Coordination", 350, 3, 100, "FE site coordination"],
+                ["Scheduling & Planning", "Closeout/Bucket Issues", 250, 2, 100, "Ticket bucket errors"],
+                # Documentation & Reporting
+                ["Documentation & Reporting", "Snapshot/Screenshot Issues", 150, 2, 100, "Missing snapshots"],
+                ["Documentation & Reporting", "E911/CBN Reports", 300, 3, 100, "Report generation errors"],
+                ["Documentation & Reporting", "Email/Attachment Issues", 100, 1, 100, "Attachment problems"],
+                # Validation & QA
+                ["Validation & QA", "Precheck/Postcheck Failures", 500, 4, 125, "Validation failures"],
+                ["Validation & QA", "Measurement Issues", 600, 5, 125, "VSWR/RSSI issues"],
+                ["Validation & QA", "Escalation Gaps", 450, 4, 125, "Missed escalations"],
+                # Process Compliance
+                ["Process Compliance", "SOP Violations", 400, 3, 125, "SOP not followed"],
+                ["Process Compliance", "Improper Escalations", 500, 4, 125, "Wrong escalation path"],
+                ["Process Compliance", "Release Procedure Issues", 600, 5, 125, "Release without validation"],
+                # Configuration & Data Mismatch
+                ["Configuration & Data Mismatch", "Port Matrix Issues", 900, 6, 150, "PMX mismatch"],
+                ["Configuration & Data Mismatch", "RET/TAC Naming", 750, 5, 150, "Naming convention errors"],
+                ["Configuration & Data Mismatch", "SCF/CIQ/RFDS Mismatch", 850, 6, 150, "Config file mismatch"],
+                # Site Readiness
+                ["Site Readiness", "Backhaul Issues", 1800, 10, 150, "BH not actualized"],
+                ["Site Readiness", "MW/Transmission Issues", 1600, 8, 150, "MW link not ready"],
+                ["Site Readiness", "Material/Equipment Issues", 1200, 6, 150, "Missing materials"],
+                # Communication & Response
+                ["Communication & Response", "Delayed Responses", 200, 2, 100, "Late replies"],
+                ["Communication & Response", "Follow-up Issues", 250, 3, 100, "Follow-up gaps"],
+                ["Communication & Response", "Distro/Routing Issues", 150, 2, 100, "Wrong distribution"],
+                # Nesting & Tool Errors
+                ["Nesting & Tool Errors", "Nesting Type Errors", 600, 5, 125, "NSA/NSI wrong type"],
+                ["Nesting & Tool Errors", "RIOT/FCI Tool Issues", 700, 5, 125, "Tool validation failures"],
+                ["Nesting & Tool Errors", "Market Guideline Violations", 500, 4, 125, "Market rules violated"],
+            ]
+
+            for row in subcat_data:
+                ws_subcat.append(row)
+
+            self._style_header(ws_subcat, len(subcat_headers))
+            ws_subcat.column_dimensions['A'].width = 30
+            ws_subcat.column_dimensions['B'].width = 25
+            ws_subcat.column_dimensions['F'].width = 30
+
+            # Sheet 4: Keyword Patterns
             ws_keywords = wb.create_sheet("Keyword Patterns")
             keyword_headers = ["Keyword_Pattern", "Category_Override", "Material_Cost", "Labor_Hours", "Priority", "Notes"]
             ws_keywords.append(keyword_headers)

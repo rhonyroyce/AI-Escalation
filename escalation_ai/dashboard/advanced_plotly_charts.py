@@ -611,49 +611,49 @@ def chart_recurrence_patterns(df: pd.DataFrame) -> go.Figure:
         fig = go.Figure()
         fig.add_annotation(text="Category data required", x=0.5, y=0.5)
         return fig
-    
+
     # Get recurrence risk column
     rec_col = 'AI_Recurrence_Probability' if 'AI_Recurrence_Probability' in df.columns else 'AI_Recurrence_Risk'
-    
+
     if rec_col not in df.columns:
         fig = go.Figure()
         fig.add_annotation(text="Recurrence data required", x=0.5, y=0.5)
         return fig
-    
+
     # Categorize recurrence risk
     df_temp = df.copy()
     df_temp['rec_level'] = pd.cut(
-        df_temp[rec_col], 
-        bins=[0, 0.2, 0.5, 1.0], 
+        df_temp[rec_col],
+        bins=[0, 0.2, 0.5, 1.0],
         labels=['Low Risk', 'Medium Risk', 'High Risk']
     )
-    
+
     # Create flow data
     flow_data = df_temp.groupby(['AI_Category', 'rec_level']).size().reset_index(name='count')
     flow_data = flow_data.dropna()
-    
+
     # Get unique categories and risk levels
     categories = flow_data['AI_Category'].unique().tolist()
     risk_levels = ['Low Risk', 'Medium Risk', 'High Risk']
-    
+
     # Create node labels
     all_nodes = categories + risk_levels
-    
+
     # Create source, target, value lists for Sankey
     source = []
     target = []
     value = []
-    
+
     for _, row in flow_data.iterrows():
         cat_idx = all_nodes.index(row['AI_Category'])
         risk_idx = all_nodes.index(row['rec_level'])
         source.append(cat_idx)
         target.append(risk_idx)
         value.append(row['count'])
-    
+
     # Colors
     node_colors = ['#0066CC'] * len(categories) + ['#28A745', '#FFC107', '#DC3545']
-    
+
     fig = go.Figure(go.Sankey(
         node=dict(
             pad=15,
@@ -669,11 +669,427 @@ def chart_recurrence_patterns(df: pd.DataFrame) -> go.Figure:
             color='rgba(100, 150, 200, 0.4)'
         )
     ))
-    
+
     fig.update_layout(
         **create_plotly_theme(),
         title=dict(text='Category to Recurrence Risk Flow', font=dict(size=18)),
         height=500
     )
-    
+
     return fig
+
+
+# =============================================================================
+# CATEGORY/SUB-CATEGORY DRILL-DOWN CHARTS
+# =============================================================================
+
+def chart_category_sunburst(df: pd.DataFrame) -> go.Figure:
+    """
+    Interactive Sunburst chart for Category → Sub-Category drill-down.
+    Click on a category to see its sub-categories with ticket counts and financial data.
+    """
+    if 'AI_Category' not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="Category data required", x=0.5, y=0.5)
+        fig.update_layout(**create_plotly_theme(), height=500)
+        return fig
+
+    # Check for sub-category column
+    sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
+    cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
+
+    # Build hierarchy data
+    labels = ['All Escalations']
+    parents = ['']
+    values = [len(df)]
+    colors = ['#003366']
+    custom_data = [{'count': len(df), 'cost': df[cost_col].sum() if cost_col else 0}]
+
+    # Color palette for categories
+    cat_colors = {
+        'Scheduling & Planning': '#1f77b4',
+        'Documentation & Reporting': '#ff7f0e',
+        'Validation & QA': '#2ca02c',
+        'Process Compliance': '#d62728',
+        'Configuration & Data Mismatch': '#9467bd',
+        'Site Readiness': '#8c564b',
+        'Communication & Response': '#e377c2',
+        'Nesting & Tool Errors': '#7f7f7f',
+        'Unclassified': '#bcbd22'
+    }
+
+    # Add categories
+    cat_counts = df['AI_Category'].value_counts()
+    for cat in cat_counts.index:
+        cat_df = df[df['AI_Category'] == cat]
+        cat_count = len(cat_df)
+        cat_cost = cat_df[cost_col].sum() if cost_col else 0
+
+        labels.append(cat)
+        parents.append('All Escalations')
+        values.append(cat_count)
+        colors.append(cat_colors.get(cat, '#17becf'))
+        custom_data.append({'count': cat_count, 'cost': cat_cost})
+
+        # Add sub-categories if available
+        if sub_cat_col and sub_cat_col in df.columns:
+            sub_counts = cat_df[sub_cat_col].value_counts()
+            for sub_cat in sub_counts.index:
+                if sub_cat and sub_cat != 'General':
+                    sub_df = cat_df[cat_df[sub_cat_col] == sub_cat]
+                    sub_count = len(sub_df)
+                    sub_cost = sub_df[cost_col].sum() if cost_col else 0
+
+                    labels.append(sub_cat)
+                    parents.append(cat)
+                    values.append(sub_count)
+                    # Lighter shade for sub-categories
+                    base_color = cat_colors.get(cat, '#17becf')
+                    colors.append(base_color + '99')  # Add transparency
+                    custom_data.append({'count': sub_count, 'cost': sub_cost})
+
+    # Build hover text
+    hover_texts = []
+    for data in custom_data:
+        if cost_col:
+            hover_texts.append(f"Tickets: {data['count']:,}<br>Financial Impact: ${data['cost']:,.0f}")
+        else:
+            hover_texts.append(f"Tickets: {data['count']:,}")
+
+    fig = go.Figure(go.Sunburst(
+        labels=labels,
+        parents=parents,
+        values=values,
+        branchvalues='total',
+        marker=dict(colors=colors),
+        hovertext=hover_texts,
+        hoverinfo='label+text+percent parent',
+        insidetextorientation='radial'
+    ))
+
+    fig.update_layout(
+        **create_plotly_theme(),
+        title=dict(
+            text='Category & Sub-Category Drill-Down<br><span style="font-size:12px">Click to expand categories</span>',
+            font=dict(size=18)
+        ),
+        height=550
+    )
+
+    return fig
+
+
+def chart_category_treemap(df: pd.DataFrame) -> go.Figure:
+    """
+    Interactive Treemap for Category → Sub-Category hierarchy.
+    Shows proportional sizing by ticket count with financial impact on hover.
+    """
+    if 'AI_Category' not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="Category data required", x=0.5, y=0.5)
+        fig.update_layout(**create_plotly_theme(), height=500)
+        return fig
+
+    sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
+    cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
+
+    # Build data for treemap
+    ids = []
+    labels = []
+    parents = []
+    values = []
+    costs = []
+
+    # Add categories and sub-categories
+    for cat in df['AI_Category'].unique():
+        cat_df = df[df['AI_Category'] == cat]
+        cat_count = len(cat_df)
+        cat_cost = cat_df[cost_col].sum() if cost_col else 0
+
+        ids.append(cat)
+        labels.append(cat)
+        parents.append('')
+        values.append(cat_count)
+        costs.append(cat_cost)
+
+        # Add sub-categories
+        if sub_cat_col and sub_cat_col in df.columns:
+            for sub_cat in cat_df[sub_cat_col].unique():
+                if sub_cat and sub_cat != 'General':
+                    sub_df = cat_df[cat_df[sub_cat_col] == sub_cat]
+                    sub_count = len(sub_df)
+                    sub_cost = sub_df[cost_col].sum() if cost_col else 0
+
+                    ids.append(f"{cat}/{sub_cat}")
+                    labels.append(sub_cat)
+                    parents.append(cat)
+                    values.append(sub_count)
+                    costs.append(sub_cost)
+
+    # Create hover text with financial data
+    hover_texts = []
+    for i, (label, count, cost) in enumerate(zip(labels, values, costs)):
+        if cost_col:
+            avg_cost = cost / count if count > 0 else 0
+            hover_texts.append(
+                f"<b>{label}</b><br>"
+                f"Tickets: {count:,}<br>"
+                f"Total Impact: ${cost:,.0f}<br>"
+                f"Avg per Ticket: ${avg_cost:,.0f}"
+            )
+        else:
+            hover_texts.append(f"<b>{label}</b><br>Tickets: {count:,}")
+
+    fig = go.Figure(go.Treemap(
+        ids=ids,
+        labels=labels,
+        parents=parents,
+        values=values,
+        branchvalues='total',
+        hovertext=hover_texts,
+        hoverinfo='text',
+        textinfo='label+value+percent parent',
+        marker=dict(
+            colors=costs if cost_col else values,
+            colorscale='RdYlGn_r',
+            showscale=True,
+            colorbar=dict(title='Financial<br>Impact ($)')
+        ),
+        pathbar=dict(visible=True)
+    ))
+
+    fig.update_layout(
+        **create_plotly_theme(),
+        title=dict(
+            text='Category Treemap with Sub-Category Drill-Down<br><span style="font-size:12px">Click to zoom into categories</span>',
+            font=dict(size=18)
+        ),
+        height=550
+    )
+
+    return fig
+
+
+def chart_subcategory_breakdown(df: pd.DataFrame, selected_category: str = None) -> go.Figure:
+    """
+    Detailed sub-category breakdown for a selected category.
+    Shows ticket count, financial impact, and recurrence rate for each sub-category.
+    """
+    if 'AI_Category' not in df.columns or 'AI_Sub_Category' not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="Category and Sub-Category data required", x=0.5, y=0.5)
+        fig.update_layout(**create_plotly_theme(), height=450)
+        return fig
+
+    # Filter to selected category if provided
+    if selected_category:
+        df_filtered = df[df['AI_Category'] == selected_category].copy()
+        title_text = f'Sub-Category Breakdown: {selected_category}'
+    else:
+        df_filtered = df.copy()
+        title_text = 'Sub-Category Breakdown (All Categories)'
+
+    if len(df_filtered) == 0:
+        fig = go.Figure()
+        fig.add_annotation(text=f"No data for category: {selected_category}", x=0.5, y=0.5)
+        return fig
+
+    # Aggregate by sub-category
+    cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
+    rec_col = 'AI_Recurrence_Probability' if 'AI_Recurrence_Probability' in df.columns else None
+
+    agg_dict = {'AI_Sub_Category': 'count'}
+    if cost_col:
+        agg_dict[cost_col] = 'sum'
+    if rec_col:
+        agg_dict[rec_col] = 'mean'
+
+    sub_stats = df_filtered.groupby('AI_Sub_Category').agg(agg_dict)
+    sub_stats.columns = ['Count'] + (['Total_Cost'] if cost_col else []) + (['Recurrence'] if rec_col else [])
+    sub_stats = sub_stats.sort_values('Count', ascending=False).head(15)
+
+    fig = make_subplots(
+        rows=1, cols=3 if cost_col and rec_col else (2 if cost_col or rec_col else 1),
+        subplot_titles=['Ticket Count', 'Financial Impact ($)', 'Recurrence Rate (%)'][:3 if cost_col and rec_col else (2 if cost_col or rec_col else 1)],
+        horizontal_spacing=0.12
+    )
+
+    # Ticket count bars
+    fig.add_trace(
+        go.Bar(
+            y=sub_stats.index,
+            x=sub_stats['Count'],
+            orientation='h',
+            marker=dict(color='#0066CC'),
+            text=sub_stats['Count'],
+            textposition='auto',
+            name='Count',
+            hovertemplate='<b>%{y}</b><br>Tickets: %{x:,}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+
+    col_idx = 2
+
+    # Financial impact bars
+    if cost_col and 'Total_Cost' in sub_stats.columns:
+        fig.add_trace(
+            go.Bar(
+                y=sub_stats.index,
+                x=sub_stats['Total_Cost'],
+                orientation='h',
+                marker=dict(color='#DC3545'),
+                text=[f'${v:,.0f}' for v in sub_stats['Total_Cost']],
+                textposition='auto',
+                name='Cost',
+                hovertemplate='<b>%{y}</b><br>Impact: $%{x:,.0f}<extra></extra>'
+            ),
+            row=1, col=col_idx
+        )
+        col_idx += 1
+
+    # Recurrence rate bars
+    if rec_col and 'Recurrence' in sub_stats.columns:
+        fig.add_trace(
+            go.Bar(
+                y=sub_stats.index,
+                x=sub_stats['Recurrence'] * 100,
+                orientation='h',
+                marker=dict(
+                    color=sub_stats['Recurrence'] * 100,
+                    colorscale='RdYlGn_r',
+                    showscale=False
+                ),
+                text=[f'{v:.0f}%' for v in sub_stats['Recurrence'] * 100],
+                textposition='auto',
+                name='Recurrence',
+                hovertemplate='<b>%{y}</b><br>Recurrence: %{x:.1f}%<extra></extra>'
+            ),
+            row=1, col=col_idx
+        )
+
+    fig.update_layout(
+        **create_plotly_theme(),
+        title=dict(text=title_text, font=dict(size=18)),
+        height=500,
+        showlegend=False
+    )
+
+    return fig
+
+
+def chart_category_financial_drilldown(df: pd.DataFrame) -> go.Figure:
+    """
+    Financial analysis with category/sub-category drill-down.
+    Bar chart showing financial metrics by category with expandable sub-categories.
+    """
+    if 'AI_Category' not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="Category data required", x=0.5, y=0.5)
+        return fig
+
+    cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
+    sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
+
+    if not cost_col:
+        # Generate estimated costs
+        df = df.copy()
+        df['Financial_Impact'] = 850  # Default cost per escalation
+        cost_col = 'Financial_Impact'
+
+    # Category-level aggregation
+    cat_stats = df.groupby('AI_Category').agg({
+        cost_col: ['sum', 'mean', 'count']
+    }).round(2)
+    cat_stats.columns = ['Total_Cost', 'Avg_Cost', 'Count']
+    cat_stats = cat_stats.sort_values('Total_Cost', ascending=True)
+
+    fig = go.Figure()
+
+    # Main category bars
+    fig.add_trace(go.Bar(
+        y=cat_stats.index,
+        x=cat_stats['Total_Cost'],
+        orientation='h',
+        name='Total Financial Impact',
+        marker=dict(color='#0066CC', line=dict(color='white', width=1)),
+        text=[f"${v:,.0f}" for v in cat_stats['Total_Cost']],
+        textposition='outside',
+        hovertemplate=(
+            '<b>%{y}</b><br>'
+            'Total Impact: $%{x:,.0f}<br>'
+            f'Tickets: %{{customdata[0]:,}}<br>'
+            f'Avg/Ticket: $%{{customdata[1]:,.0f}}<extra></extra>'
+        ),
+        customdata=list(zip(cat_stats['Count'], cat_stats['Avg_Cost']))
+    ))
+
+    fig.update_layout(
+        **create_plotly_theme(),
+        title=dict(
+            text='Financial Impact by Category<br><span style="font-size:12px">Hover for details • Use sunburst/treemap for sub-category drill-down</span>',
+            font=dict(size=18)
+        ),
+        xaxis_title='Total Financial Impact ($)',
+        yaxis_title='',
+        height=450,
+        margin=dict(l=200, r=80, t=80, b=40),
+        showlegend=False
+    )
+
+    # Format x-axis as currency
+    fig.update_xaxes(tickprefix='$', tickformat=',.0f')
+
+    return fig
+
+
+def chart_subcategory_comparison_table(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Generate a comparison table DataFrame for sub-categories.
+    Returns a styled DataFrame that can be displayed in Streamlit.
+    """
+    if 'AI_Category' not in df.columns or 'AI_Sub_Category' not in df.columns:
+        return pd.DataFrame()
+
+    cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
+    rec_col = 'AI_Recurrence_Probability' if 'AI_Recurrence_Probability' in df.columns else None
+
+    # Aggregate data
+    agg_dict = {
+        'AI_Sub_Category': 'count'
+    }
+    if cost_col:
+        agg_dict[cost_col] = ['sum', 'mean']
+    if rec_col:
+        agg_dict[rec_col] = 'mean'
+
+    sub_stats = df.groupby(['AI_Category', 'AI_Sub_Category']).agg(agg_dict)
+    sub_stats.columns = ['_'.join(col).strip('_') for col in sub_stats.columns.values]
+    sub_stats = sub_stats.reset_index()
+
+    # Rename columns for clarity
+    rename_map = {
+        'AI_Category': 'Category',
+        'AI_Sub_Category': 'Sub-Category',
+        'AI_Sub_Category_count': 'Tickets'
+    }
+    if cost_col:
+        rename_map[f'{cost_col}_sum'] = 'Total Impact'
+        rename_map[f'{cost_col}_mean'] = 'Avg Impact'
+    if rec_col:
+        rename_map[f'{rec_col}_mean'] = 'Recurrence %'
+
+    sub_stats = sub_stats.rename(columns=rename_map)
+
+    # Format columns
+    if 'Total Impact' in sub_stats.columns:
+        sub_stats['Total Impact'] = sub_stats['Total Impact'].apply(lambda x: f'${x:,.0f}')
+    if 'Avg Impact' in sub_stats.columns:
+        sub_stats['Avg Impact'] = sub_stats['Avg Impact'].apply(lambda x: f'${x:,.0f}')
+    if 'Recurrence %' in sub_stats.columns:
+        sub_stats['Recurrence %'] = sub_stats['Recurrence %'].apply(lambda x: f'{x*100:.1f}%')
+
+    # Sort by category then by tickets
+    sub_stats = sub_stats.sort_values(['Category', 'Tickets'], ascending=[True, False])
+
+    return sub_stats

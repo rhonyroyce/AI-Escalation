@@ -140,7 +140,7 @@ MC_BLUE = '#004C97'
 
 # ==========================================
 # CATEGORIZATION ANCHORS
-# 8-category system optimized for telecom escalation analysis
+# 8-category system with sub-categories optimized for telecom escalation analysis
 # Based on 300+ error sample analysis
 # ==========================================
 ANCHORS = {
@@ -205,6 +205,124 @@ ANCHORS = {
         "not allowed in market", "RIOT mismatch", "tool not updated",
         "FCI not updated", "site not unnested", "OSS mismatch"
     ]
+}
+
+# ==========================================
+# SUB-CATEGORIES - Granular classification within each category
+# ==========================================
+SUB_CATEGORIES = {
+    "Scheduling & Planning": {
+        "TI/Calendar Issues": [
+            "TI", "Ti", "calendar", "TI entry missing", "not in TI", "not in Ti",
+            "schedule missing", "no schedule", "not schedule in Ti"
+        ],
+        "FE Coordination": [
+            "FE on site", "FE logged", "logged for IX", "logged for support",
+            "FE logged in for integration", "without schedule"
+        ],
+        "Closeout/Bucket Issues": [
+            "closeout", "close out", "ticket in closeout", "moved to closeout",
+            "wrong bucket", "ticket was in closeout"
+        ]
+    },
+    "Documentation & Reporting": {
+        "Snapshot/Screenshot Issues": [
+            "snapshot", "snap", "screenshot", "missing snapshot", "snapshot missing",
+            "incomplete snapshot", "lemming snap", "detailed site view"
+        ],
+        "E911/CBN Reports": [
+            "CBN", "E911", "CBN output missing", "E911 Go mail", "E911 complete mail",
+            "PSAP contact missing", "Table with PSAP missing", "Live CT missing"
+        ],
+        "Email/Attachment Issues": [
+            "attachment", "email", "mail", "subject", "wrong site ID",
+            "different site", "forgot to attach", "forgot to paste", "wrong attachment"
+        ]
+    },
+    "Validation & QA": {
+        "Precheck/Postcheck Failures": [
+            "precheck", "postcheck", "validation", "incomplete validation",
+            "missed to check", "engineer missed", "not verified"
+        ],
+        "Measurement Issues": [
+            "VSWR", "RSSI", "RTWP", "KPI", "pass", "fail", "wrong pass fail",
+            "VSWR marked as Fail but actual Pass", "RSSI imbalance", "degradation"
+        ],
+        "Escalation Gaps": [
+            "escalated", "issue not escalated", "missed to escalate",
+            "alarm captured but not", "not detected", "overlooked during"
+        ]
+    },
+    "Process Compliance": {
+        "SOP Violations": [
+            "SOP", "process", "guideline", "not following process", "not following SOP",
+            "against guideline", "procedure", "skipped step"
+        ],
+        "Improper Escalations": [
+            "escalate", "NTAC", "escalated to NTAC", "improper escalation",
+            "escalated to NTAC while not supposed to", "escalated to different vendor"
+        ],
+        "Release Procedure Issues": [
+            "released without", "supported without", "without BH actualized",
+            "without backhaul", "bypassed validation", "proceeded without"
+        ]
+    },
+    "Configuration & Data Mismatch": {
+        "Port Matrix Issues": [
+            "port matrix", "PMX", "port matrix mismatch", "need updated port matrix",
+            "as per port matrix", "detected on site but port matrix"
+        ],
+        "RET/TAC Naming": [
+            "RET", "TAC", "naming", "RET naming issue", "RET naming wrong",
+            "TAC mismatch", "RET swap", "extra 2 in naming", "I missing"
+        ],
+        "SCF/CIQ/RFDS Mismatch": [
+            "SCF", "CIQ", "RFDS", "SCF mismatch", "CIQ mismatch", "RFDS mismatch",
+            "SCF and RFDS mismatch", "CIQ and SCF not matching", "config mismatch"
+        ]
+    },
+    "Site Readiness": {
+        "Backhaul Issues": [
+            "BH", "backhaul", "actualized", "BH not actualized", "backhaul not ready",
+            "BH not ready", "BH not ready in MB", "pending actualization", "BH acceptance pending"
+        ],
+        "MW/Transmission Issues": [
+            "MW", "microwave", "MW not ready", "microwave not ready",
+            "MW link was not ready", "transmission not ready"
+        ],
+        "Material/Equipment Issues": [
+            "material", "SFP", "material missing", "SFP missing",
+            "site was down", "cancelled due to", "could not be integrated"
+        ]
+    },
+    "Communication & Response": {
+        "Delayed Responses": [
+            "delay", "delayed", "delayed reply", "delayed response", "delay in reply",
+            "waited for hours", "FE waited", "questioned over delays"
+        ],
+        "Follow-up Issues": [
+            "follow-up", "reminder", "follow-up required", "multiple follow-ups",
+            "reminder sent", "no reply from", "GC query not replied"
+        ],
+        "Distro/Routing Issues": [
+            "distro", "wrong distro", "communication gap", "not communicated",
+            "proactive update missing"
+        ]
+    },
+    "Nesting & Tool Errors": {
+        "Nesting Type Errors": [
+            "nested", "nesting", "NSA", "NSI", "nested as NSA", "nested as SA",
+            "nested as NSI", "wrong nest type", "site not unnested"
+        ],
+        "RIOT/FCI Tool Issues": [
+            "RIOT", "FCI", "RIOT red", "RIOT mismatch", "tool not updated",
+            "FCI not updated", "without RIOT", "TAC mismatch RIOT"
+        ],
+        "Market Guideline Violations": [
+            "market", "guideline", "not allowed in market", "market guideline",
+            "nest extended", "nest extension"
+        ]
+    }
 }
 
 # ==========================================

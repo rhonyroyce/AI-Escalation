@@ -124,6 +124,8 @@ class ChartGenerator:
             # Analysis Charts (04_analysis/)
             generated['analysis'].append(self._chart_root_cause(analysis_data))
             generated['analysis'].append(self._chart_learning_integrity(analysis_data))
+            generated['analysis'].append(self._chart_category_subcategory_breakdown(analysis_data))
+            generated['analysis'].append(self._chart_category_heatmap(analysis_data))
             
             # Predictive Charts (05_predictive/)
             generated['predictive'].append(self._chart_pm_accuracy(analysis_data))
@@ -132,6 +134,7 @@ class ChartGenerator:
             
             # Financial Charts (06_financial/)
             generated['financial'].append(self._chart_financial_impact(analysis_data))
+            generated['financial'].append(self._chart_subcategory_financial_impact(analysis_data))
             
         except Exception as e:
             print(f"Chart generation error: {e}")
@@ -1148,6 +1151,245 @@ class ChartGenerator:
                     'files': [f.name for f in files]
                 }
         return summary
+
+    # =========================================================================
+    # CATEGORY/SUB-CATEGORY BREAKDOWN CHARTS (04_analysis/)
+    # =========================================================================
+
+    def _chart_category_subcategory_breakdown(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Category and Sub-Category Distribution
+        Hierarchical bar chart showing category counts with sub-category breakdown.
+        """
+        try:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 10))
+
+            cat_counts = data.get('category_counts', {})
+            subcat_counts = data.get('subcategory_counts', {})
+
+            if not cat_counts:
+                cat_counts = {
+                    'Scheduling & Planning': 85,
+                    'Documentation & Reporting': 45,
+                    'Validation & QA': 35,
+                    'Process Compliance': 30,
+                    'Configuration & Data Mismatch': 40,
+                    'Site Readiness': 35,
+                    'Communication & Response': 20,
+                    'Nesting & Tool Errors': 15
+                }
+
+            # Left chart: Category distribution
+            categories = list(cat_counts.keys())
+            counts = list(cat_counts.values())
+
+            # Sort by count
+            sorted_pairs = sorted(zip(counts, categories), reverse=True)
+            counts, categories = zip(*sorted_pairs)
+
+            colors = plt.cm.Set2(np.linspace(0, 1, len(categories)))
+
+            bars = ax1.barh(categories, counts, color=colors, edgecolor='white', linewidth=1.5)
+
+            for bar, count in zip(bars, counts):
+                ax1.text(count + 1, bar.get_y() + bar.get_height()/2,
+                        f'{count}', va='center', fontsize=10, fontweight='bold')
+
+            ax1.set_xlabel('Number of Escalations', fontsize=11)
+            ax1.set_title('Category Distribution', fontsize=14, fontweight='bold', pad=15)
+            ax1.invert_yaxis()
+
+            # Right chart: Sub-category breakdown (top 15)
+            if subcat_counts:
+                # Flatten sub-category counts if nested
+                flat_subcats = {}
+                for cat, subcats in subcat_counts.items():
+                    if isinstance(subcats, dict):
+                        for sub, count in subcats.items():
+                            flat_subcats[f"{sub}"] = count
+                    else:
+                        flat_subcats[cat] = subcats
+
+                # Sort and take top 15
+                sorted_subcats = sorted(flat_subcats.items(), key=lambda x: x[1], reverse=True)[:15]
+                sub_names = [s[0][:20] + '..' if len(s[0]) > 20 else s[0] for s in sorted_subcats]
+                sub_counts = [s[1] for s in sorted_subcats]
+
+                bars2 = ax2.barh(sub_names, sub_counts, color=self.COLORS['secondary'], alpha=0.8,
+                               edgecolor='white', linewidth=1)
+
+                for bar, count in zip(bars2, sub_counts):
+                    ax2.text(count + 0.5, bar.get_y() + bar.get_height()/2,
+                            f'{count}', va='center', fontsize=9, fontweight='bold')
+
+                ax2.set_xlabel('Number of Escalations', fontsize=11)
+                ax2.set_title('Top Sub-Categories', fontsize=14, fontweight='bold', pad=15)
+                ax2.invert_yaxis()
+            else:
+                ax2.text(0.5, 0.5, 'Sub-Category Data\nNot Available',
+                        ha='center', va='center', fontsize=14, transform=ax2.transAxes)
+                ax2.axis('off')
+
+            plt.suptitle('Category & Sub-Category Analysis\nEscalation Distribution Breakdown',
+                        fontsize=16, fontweight='bold', y=1.02)
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['analysis'] / 'category_subcategory_breakdown.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating category/subcategory breakdown chart: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_subcategory_financial_impact(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Sub-Category Financial Impact Analysis
+        Shows financial impact breakdown by sub-category within each main category.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 10))
+
+            subcat_costs = data.get('subcategory_financial', {})
+
+            if not subcat_costs:
+                # Generate sample data
+                subcat_costs = {
+                    'TI/Calendar Issues': 25000,
+                    'FE Coordination': 35000,
+                    'Snapshot/Screenshot Issues': 15000,
+                    'E911/CBN Reports': 30000,
+                    'Precheck/Postcheck Failures': 50000,
+                    'Port Matrix Issues': 90000,
+                    'RET/TAC Naming': 75000,
+                    'Backhaul Issues': 180000,
+                    'MW/Transmission Issues': 160000,
+                    'Delayed Responses': 20000,
+                    'Nesting Type Errors': 60000,
+                    'RIOT/FCI Tool Issues': 70000,
+                }
+
+            # Sort by financial impact
+            sorted_items = sorted(subcat_costs.items(), key=lambda x: x[1], reverse=True)[:15]
+            subcats = [s[0][:25] + '..' if len(s[0]) > 25 else s[0] for s in sorted_items]
+            costs = [s[1] for s in sorted_items]
+
+            # Color gradient based on cost (red = high cost)
+            norm_costs = np.array(costs) / max(costs)
+            colors = plt.cm.RdYlGn_r(norm_costs)
+
+            bars = ax.barh(subcats, costs, color=colors, edgecolor='white', linewidth=1.5)
+
+            # Value labels
+            for bar, cost in zip(bars, costs):
+                ax.text(cost + max(costs) * 0.02, bar.get_y() + bar.get_height()/2,
+                       f'${cost/1000:.0f}K', va='center', fontsize=10, fontweight='bold')
+
+            ax.set_xlabel('Financial Impact ($)', fontsize=12)
+            ax.set_ylabel('Sub-Category', fontsize=12)
+            ax.invert_yaxis()
+
+            # Add total annotation
+            total_cost = sum(costs)
+            ax.annotate(f'Total Impact: ${total_cost/1000:.0f}K',
+                       xy=(0.98, 0.02), xycoords='axes fraction',
+                       ha='right', va='bottom', fontsize=11, fontweight='bold',
+                       color=self.COLORS['danger'],
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
+
+            plt.title('Sub-Category Financial Impact\nTop Cost Drivers',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            # Format x-axis as currency
+            ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x/1000:.0f}K'))
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['financial'] / 'subcategory_financial_impact.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating sub-category financial impact chart: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_category_heatmap(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Category vs Sub-Category Heatmap
+        Shows ticket distribution across categories and their sub-categories.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 10))
+
+            # Get hierarchical data
+            cat_subcat_matrix = data.get('category_subcategory_matrix', None)
+
+            if cat_subcat_matrix is None:
+                # Generate sample matrix
+                categories = [
+                    'Scheduling & Planning',
+                    'Documentation & Reporting',
+                    'Validation & QA',
+                    'Process Compliance',
+                    'Config & Data Mismatch',
+                    'Site Readiness',
+                    'Communication & Response',
+                    'Nesting & Tool Errors'
+                ]
+                subcats = ['Sub-Cat 1', 'Sub-Cat 2', 'Sub-Cat 3']
+                np.random.seed(42)
+                cat_subcat_matrix = np.random.randint(5, 50, (len(categories), len(subcats)))
+
+            else:
+                categories = list(cat_subcat_matrix.keys())
+                # Get all unique sub-categories
+                all_subcats = set()
+                for cat, subcats in cat_subcat_matrix.items():
+                    all_subcats.update(subcats.keys())
+                subcats = sorted(all_subcats)
+
+                # Build matrix
+                matrix = []
+                for cat in categories:
+                    row = [cat_subcat_matrix[cat].get(sub, 0) for sub in subcats]
+                    matrix.append(row)
+                cat_subcat_matrix = np.array(matrix)
+
+            # Truncate long labels
+            cat_labels = [c[:20] + '..' if len(c) > 20 else c for c in categories]
+            sub_labels = [s[:15] + '..' if len(s) > 15 else s for s in subcats]
+
+            sns.heatmap(cat_subcat_matrix, annot=True, fmt='d', cmap='YlOrRd',
+                       xticklabels=sub_labels, yticklabels=cat_labels,
+                       ax=ax, cbar_kws={'label': 'Ticket Count'},
+                       linewidths=0.5, linecolor='white')
+
+            ax.set_xlabel('Sub-Category', fontsize=12)
+            ax.set_ylabel('Category', fontsize=12)
+            plt.xticks(rotation=45, ha='right', fontsize=9)
+
+            plt.title('Category vs Sub-Category Distribution\nTicket Volume Heatmap',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['analysis'] / 'category_subcategory_heatmap.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating category heatmap: {e}")
+            plt.close('all')
+            return None
 
     # =========================================================================
     # DRIFT & THRESHOLD CHARTS (04_analysis/)

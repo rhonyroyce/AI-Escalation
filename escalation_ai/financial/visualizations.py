@@ -810,3 +810,234 @@ def create_cost_concentration_chart(df: pd.DataFrame) -> go.Figure:
     )
 
     return fig
+
+
+# =============================================================================
+# SUB-CATEGORY FINANCIAL DRILL-DOWN CHARTS
+# =============================================================================
+
+def create_subcategory_financial_breakdown(df: pd.DataFrame) -> go.Figure:
+    """
+    Create financial breakdown by sub-category with category grouping.
+    Interactive chart showing costs at the sub-category level.
+    """
+    if 'AI_Category' not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="Category data required", x=0.5, y=0.5, showarrow=False)
+        fig.update_layout(title="Sub-Category Financial Breakdown", height=500)
+        return fig
+
+    sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
+    cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
+
+    if not cost_col:
+        # Estimate costs
+        df = df.copy()
+        df['Financial_Impact'] = 850
+        cost_col = 'Financial_Impact'
+
+    if sub_cat_col:
+        # Aggregate by category and sub-category
+        subcat_stats = df.groupby(['AI_Category', sub_cat_col]).agg({
+            cost_col: ['sum', 'mean', 'count']
+        }).round(2)
+        subcat_stats.columns = ['Total_Cost', 'Avg_Cost', 'Count']
+        subcat_stats = subcat_stats.reset_index()
+        subcat_stats = subcat_stats.sort_values('Total_Cost', ascending=True)
+
+        # Create grouped bar chart
+        fig = go.Figure()
+
+        # Get unique categories for color mapping
+        categories = subcat_stats['AI_Category'].unique()
+        color_map = {
+            'Scheduling & Planning': '#1f77b4',
+            'Documentation & Reporting': '#ff7f0e',
+            'Validation & QA': '#2ca02c',
+            'Process Compliance': '#d62728',
+            'Configuration & Data Mismatch': '#9467bd',
+            'Site Readiness': '#8c564b',
+            'Communication & Response': '#e377c2',
+            'Nesting & Tool Errors': '#7f7f7f'
+        }
+
+        for cat in categories:
+            cat_data = subcat_stats[subcat_stats['AI_Category'] == cat]
+            fig.add_trace(go.Bar(
+                y=cat_data[sub_cat_col],
+                x=cat_data['Total_Cost'],
+                name=cat[:20] + '..' if len(cat) > 20 else cat,
+                orientation='h',
+                marker_color=color_map.get(cat, '#17becf'),
+                text=[f"${v:,.0f}" for v in cat_data['Total_Cost']],
+                textposition='outside',
+                hovertemplate=(
+                    '<b>%{y}</b><br>'
+                    f'Category: {cat}<br>'
+                    'Total Cost: $%{x:,.0f}<br>'
+                    '<extra></extra>'
+                )
+            ))
+
+        fig.update_layout(
+            title="Financial Impact by Sub-Category",
+            xaxis_title="Total Financial Impact ($)",
+            yaxis_title="",
+            height=600,
+            template="plotly_white",
+            barmode='stack',
+            legend=dict(orientation='h', y=-0.2),
+            margin=dict(l=200, r=80, t=80, b=100)
+        )
+
+        fig.update_xaxes(tickprefix='$', tickformat=',.0f')
+
+    else:
+        # Fallback to category-only view
+        cat_stats = df.groupby('AI_Category')[cost_col].agg(['sum', 'mean', 'count'])
+        cat_stats.columns = ['Total_Cost', 'Avg_Cost', 'Count']
+        cat_stats = cat_stats.sort_values('Total_Cost', ascending=True)
+
+        fig = go.Figure(go.Bar(
+            y=cat_stats.index,
+            x=cat_stats['Total_Cost'],
+            orientation='h',
+            marker_color='#1f77b4',
+            text=[f"${v:,.0f}" for v in cat_stats['Total_Cost']],
+            textposition='outside',
+            hovertemplate='<b>%{y}</b><br>Total Cost: $%{x:,.0f}<extra></extra>'
+        ))
+
+        fig.update_layout(
+            title="Financial Impact by Category<br><span style='font-size:12px'>(Sub-category data not available)</span>",
+            xaxis_title="Total Financial Impact ($)",
+            yaxis_title="",
+            height=500,
+            template="plotly_white",
+            margin=dict(l=200, r=80, t=80, b=40)
+        )
+
+        fig.update_xaxes(tickprefix='$', tickformat=',.0f')
+
+    return fig
+
+
+def create_subcategory_cost_treemap(df: pd.DataFrame) -> go.Figure:
+    """
+    Create hierarchical treemap showing financial impact by category and sub-category.
+    Allows drill-down from category to sub-category level.
+    """
+    if 'AI_Category' not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="Category data required", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
+    cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
+
+    if not cost_col:
+        df = df.copy()
+        df['Financial_Impact'] = 850
+        cost_col = 'Financial_Impact'
+
+    # Build hierarchy data
+    ids = []
+    labels = []
+    parents = []
+    values = []
+
+    # Add categories
+    for cat in df['AI_Category'].unique():
+        cat_df = df[df['AI_Category'] == cat]
+        cat_cost = cat_df[cost_col].sum()
+
+        ids.append(cat)
+        labels.append(cat)
+        parents.append('')
+        values.append(cat_cost)
+
+        # Add sub-categories if available
+        if sub_cat_col:
+            for sub_cat in cat_df[sub_cat_col].unique():
+                if sub_cat and sub_cat != 'General':
+                    sub_df = cat_df[cat_df[sub_cat_col] == sub_cat]
+                    sub_cost = sub_df[cost_col].sum()
+
+                    ids.append(f"{cat}/{sub_cat}")
+                    labels.append(sub_cat)
+                    parents.append(cat)
+                    values.append(sub_cost)
+
+    fig = go.Figure(go.Treemap(
+        ids=ids,
+        labels=labels,
+        parents=parents,
+        values=values,
+        branchvalues='total',
+        textinfo='label+value+percent parent',
+        marker=dict(
+            colors=values,
+            colorscale='RdYlGn_r',
+            showscale=True,
+            colorbar=dict(title='Cost ($)')
+        ),
+        hovertemplate='<b>%{label}</b><br>Cost: $%{value:,.0f}<br>%{percentParent:.1%} of parent<extra></extra>',
+        pathbar=dict(visible=True)
+    ))
+
+    total_cost = sum(v for v, p in zip(values, parents) if p == '')
+
+    fig.update_layout(
+        title=f"Financial Impact Drill-Down<br><span style='font-size:14px'>Total: ${total_cost:,.0f} | Click to explore sub-categories</span>",
+        height=600,
+        template="plotly_white"
+    )
+
+    return fig
+
+
+def create_category_financial_summary_table(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Generate summary table with category and sub-category financial metrics.
+    Returns a DataFrame suitable for display in dashboards.
+    """
+    if 'AI_Category' not in df.columns:
+        return pd.DataFrame()
+
+    sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
+    cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
+
+    if not cost_col:
+        df = df.copy()
+        df['Financial_Impact'] = 850
+        cost_col = 'Financial_Impact'
+
+    # Build summary
+    if sub_cat_col:
+        summary = df.groupby(['AI_Category', sub_cat_col]).agg({
+            cost_col: ['sum', 'mean', 'count']
+        }).round(2)
+        summary.columns = ['Total Impact', 'Avg Impact', 'Ticket Count']
+        summary = summary.reset_index()
+        summary = summary.rename(columns={
+            'AI_Category': 'Category',
+            sub_cat_col: 'Sub-Category'
+        })
+    else:
+        summary = df.groupby('AI_Category').agg({
+            cost_col: ['sum', 'mean', 'count']
+        }).round(2)
+        summary.columns = ['Total Impact', 'Avg Impact', 'Ticket Count']
+        summary = summary.reset_index()
+        summary = summary.rename(columns={'AI_Category': 'Category'})
+        summary['Sub-Category'] = 'All'
+
+    # Format currency columns
+    summary['Total Impact'] = summary['Total Impact'].apply(lambda x: f'${x:,.0f}')
+    summary['Avg Impact'] = summary['Avg Impact'].apply(lambda x: f'${x:,.0f}')
+
+    # Sort by total impact (need to convert back for sorting)
+    summary['_sort'] = summary['Total Impact'].str.replace('[$,]', '', regex=True).astype(float)
+    summary = summary.sort_values('_sort', ascending=False).drop('_sort', axis=1)
+
+    return summary

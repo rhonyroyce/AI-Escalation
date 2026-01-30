@@ -14,7 +14,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from ..core.config import (
-    FEEDBACK_FILE, FEEDBACK_WEIGHT, ANCHORS, 
+    FEEDBACK_FILE, FEEDBACK_WEIGHT, ANCHORS, SUB_CATEGORIES,
     REPORT_VERSION, MIN_CLASSIFICATION_CONFIDENCE
 )
 
@@ -255,6 +255,7 @@ class FeedbackLearning:
                 'ID': row_id,
                 'Text': text_truncated,
                 'AI_Category': row.get('AI_Category', 'Unclassified'),
+                'AI_Sub_Category': row.get('AI_Sub_Category', 'General'),
                 'AI_Confidence': round(float(row.get('AI_Confidence', 0)), 3),
                 'Root_Cause_Category': row.get('Root_Cause_Category', 'Unclassified'),
                 'PM_Recurrence_Risk': row.get('PM_Recurrence_Risk_Norm', 'Unknown'),
@@ -276,6 +277,17 @@ class FeedbackLearning:
             'Example_Keywords': [', '.join(kw[:5]) for kw in all_categories.values()]
         })
 
+        # Build sub-category reference
+        sub_cat_rows = []
+        for cat, sub_cats in SUB_CATEGORIES.items():
+            for sub_cat, keywords in sub_cats.items():
+                sub_cat_rows.append({
+                    'Category': cat,
+                    'Sub_Category': sub_cat,
+                    'Keywords': ', '.join(keywords[:5])
+                })
+        sub_categories_df = pd.DataFrame(sub_cat_rows)
+
         with pd.ExcelWriter(export_path, engine='openpyxl') as writer:
             # Instructions sheet
             instructions_df = self._create_instructions_df(all_categories)
@@ -286,6 +298,9 @@ class FeedbackLearning:
 
             # Category reference sheet
             categories_df.to_excel(writer, sheet_name='Category Reference', index=False)
+
+            # Sub-Category reference sheet
+            sub_categories_df.to_excel(writer, sheet_name='Sub-Category Reference', index=False)
 
             # Format the workbook with dropdown referencing Category Reference
             self._format_feedback_workbook(writer, df_feedback, all_categories)
@@ -302,6 +317,9 @@ class FeedbackLearning:
 
                 # Category reference sheet
                 categories_df.to_excel(wd_writer, sheet_name='Category Reference', index=False)
+
+                # Sub-Category reference sheet
+                sub_categories_df.to_excel(wd_writer, sheet_name='Sub-Category Reference', index=False)
 
                 # Apply formatting
                 self._format_feedback_workbook(wd_writer, df_feedback, all_categories)
