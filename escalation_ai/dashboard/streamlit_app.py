@@ -561,16 +561,26 @@ def generate_sample_data():
         'Site Readiness', 'Communication & Response', 'Nesting & Tool Errors'
     ]
 
-    # Sub-categories for each main category
+    # Sub-categories for each main category (detailed sub-types from Embedding.md)
     sub_categories = {
-        'Scheduling & Planning': ['TI/Calendar Issues', 'FE Coordination', 'Closeout/Bucket Issues'],
-        'Documentation & Reporting': ['Snapshot/Screenshot Issues', 'E911/CBN Reports', 'Email/Attachment Issues'],
-        'Validation & QA': ['Precheck/Postcheck Failures', 'Measurement Issues', 'Escalation Gaps'],
-        'Process Compliance': ['SOP Violations', 'Improper Escalations', 'Release Procedure Issues'],
-        'Configuration & Data Mismatch': ['Port Matrix Issues', 'RET/TAC Naming', 'SCF/CIQ/RFDS Mismatch'],
-        'Site Readiness': ['Backhaul Issues', 'MW/Transmission Issues', 'Material/Equipment Issues'],
-        'Communication & Response': ['Delayed Responses', 'Follow-up Issues', 'Distro/Routing Issues'],
-        'Nesting & Tool Errors': ['Nesting Type Errors', 'RIOT/FCI Tool Issues', 'Market Guideline Violations']
+        'Scheduling & Planning': ['No TI Entry', 'Schedule Not Followed', 'Weekend Schedule Issue',
+                                   'Ticket Status Issue', 'Premature Scheduling'],
+        'Documentation & Reporting': ['Missing Snapshot', 'Missing Attachment', 'Incorrect Reporting',
+                                       'Wrong Site ID', 'Incomplete Snapshot', 'Missing Information',
+                                       'Wrong Attachment', 'Incorrect Status'],
+        'Validation & QA': ['Incomplete Validation', 'Missed Issue', 'Missed Check', 'No Escalation',
+                            'Missed Degradation', 'Wrong Tool Usage', 'Incomplete Testing'],
+        'Process Compliance': ['Process Violation', 'Wrong Escalation', 'Wrong Bucket', 'Missed Step',
+                               'Missing Ticket', 'Process Non-Compliance'],
+        'Configuration & Data Mismatch': ['Port Matrix Mismatch', 'RET Naming', 'RET Swap',
+                                           'TAC Mismatch', 'CIQ/SCF Mismatch', 'RFDS Mismatch',
+                                           'Missing Documents', 'Config Error'],
+        'Site Readiness': ['BH Not Ready', 'MW Not Ready', 'Material Missing', 'Site Down',
+                           'BH Status Issue', 'Site Complexity'],
+        'Communication & Response': ['Delayed Response', 'Delayed Deliverable', 'No Proactive Update',
+                                      'No Communication', 'Training Issue'],
+        'Nesting & Tool Errors': ['Wrong Nest Type', 'Improper Extension', 'Missing Nesting',
+                                   'HW Issue', 'Rework', 'Post-OA Degradation', 'Delayed Audit']
     }
 
     engineers = ['Alice Chen', 'Bob Smith', 'Carlos Rodriguez', 'Diana Patel',

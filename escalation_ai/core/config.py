@@ -208,119 +208,389 @@ ANCHORS = {
 }
 
 # ==========================================
-# SUB-CATEGORIES - Granular classification within each category
+# SUB-CATEGORIES - Detailed sub-types from Embedding.md analysis
+# Based on 300+ error sample classification
 # ==========================================
 SUB_CATEGORIES = {
     "Scheduling & Planning": {
-        "TI/Calendar Issues": [
-            "TI", "Ti", "calendar", "TI entry missing", "not in TI", "not in Ti",
-            "schedule missing", "no schedule", "not schedule in Ti"
+        "No TI Entry": [
+            "not schedule in Ti", "TI entry missing", "not in TI", "not in Ti",
+            "schedule missing in Ti", "no TI entry", "Ti entry missing",
+            "Site not schedule in Ti", "not schedule for integration in Ti",
+            "FE on site for integration", "site was not schedule"
         ],
-        "FE Coordination": [
-            "FE on site", "FE logged", "logged for IX", "logged for support",
-            "FE logged in for integration", "without schedule"
+        "Schedule Not Followed": [
+            "schedule not followed", "Site schedule for", "but FE logged",
+            "FE didn't login", "schedule for IX on", "but FE didn't",
+            "Incorrect Schedule", "site schedule", "FE logged on"
         ],
-        "Closeout/Bucket Issues": [
-            "closeout", "close out", "ticket in closeout", "moved to closeout",
-            "wrong bucket", "ticket was in closeout"
+        "Weekend Schedule Issue": [
+            "weekend", "not site schedule on weekend", "over weekend",
+            "not schedule on weekend", "site schedule on weekend"
+        ],
+        "Ticket Status Issue": [
+            "closeout", "close out", "ticket in closeout", "Ticket was in closeout",
+            "moved to closeout", "ticket moved", "Ticket is in closeout",
+            "closeout bucket", "moved from closeout"
+        ],
+        "Premature Scheduling": [
+            "without microwave ready", "without BH ready", "BH not ready",
+            "schedule without", "MW not ready", "site not ready"
         ]
     },
     "Documentation & Reporting": {
-        "Snapshot/Screenshot Issues": [
-            "snapshot", "snap", "screenshot", "missing snapshot", "snapshot missing",
-            "incomplete snapshot", "lemming snap", "detailed site view"
+        "Missing Snapshot": [
+            "snapshot missing", "missing snapshot", "CBN snapshot missing",
+            "snapshot is missing", "snap missing", "lemming snap missing",
+            "validation snapshot missing", "CBN output snapshot missing"
         ],
-        "E911/CBN Reports": [
-            "CBN", "E911", "CBN output missing", "E911 Go mail", "E911 complete mail",
-            "PSAP contact missing", "Table with PSAP missing", "Live CT missing"
+        "Missing Attachment": [
+            "missed to attach", "forgot to attach", "missing attachment",
+            "not attached", "attachment missing", "Pre-check logs"
         ],
-        "Email/Attachment Issues": [
-            "attachment", "email", "mail", "subject", "wrong site ID",
-            "different site", "forgot to attach", "forgot to paste", "wrong attachment"
+        "Incorrect Reporting": [
+            "incorrectly", "RTT from IX vendor was also wrong",
+            "didn't provide a clear view", "wrong which", "reporting"
+        ],
+        "Missing Logs": [
+            "forgets to paste", "manual logs", "missing logs",
+            "no logs populated", "logs missing"
+        ],
+        "Wrong Attachment": [
+            "wrong attachment", "wrongly attached", "different site",
+            "another site", "Detailed site view snap"
+        ],
+        "Wrong Site ID": [
+            "wrong site ID", "different site id", "Wrong site id",
+            "mistakenly placed a different site", "site ID missing",
+            "Different site ID", "Different mail ID"
+        ],
+        "Incorrect Status": [
+            "marked VSWR as Fail", "actual status is", "incorrect information",
+            "marked as Pass", "but actual", "incorrect status",
+            "Live call test details", "mentioned in summary"
+        ],
+        "Incomplete Snapshot": [
+            "Incomplete lemming snapshot", "incomplete snapshot",
+            "only 2 sectors", "sector was missing", "In-complete"
+        ],
+        "Data Mismatch": [
+            "mentioned different", "as compared to", "mismatch",
+            "Count of sectors mentioned different"
+        ],
+        "Missing Information": [
+            "PSAP contact missing", "Table with PSAP", "missing",
+            "not available", "missing in mail", "summary table missing",
+            "Live CT missing", "Live CT CBN output"
+        ],
+        "Wrong Subject": [
+            "subject line", "Subject should have been", "wrong subject"
+        ],
+        "Process Skip": [
+            "without sending", "E911 completion mail circulated",
+            "without E911 Go mail", "skipped"
+        ],
+        "Missing Deliverable": [
+            "RTT wasn't released", "EOD released", "not released",
+            "released later"
         ]
     },
     "Validation & QA": {
-        "Precheck/Postcheck Failures": [
-            "precheck", "postcheck", "validation", "incomplete validation",
-            "missed to check", "engineer missed", "not verified"
+        "Premature Checkout": [
+            "checked out GC", "Logged the GC out", "cells were locked",
+            "premature checkout", "early checkout"
         ],
-        "Measurement Issues": [
-            "VSWR", "RSSI", "RTWP", "KPI", "pass", "fail", "wrong pass fail",
-            "VSWR marked as Fail but actual Pass", "RSSI imbalance", "degradation"
+        "Incomplete Validation": [
+            "without checking", "IX precheck without", "not updated",
+            "incomplete validation", "BH fields", "MagentaBuilt"
         ],
-        "Escalation Gaps": [
-            "escalated", "issue not escalated", "missed to escalate",
-            "alarm captured but not", "not detected", "overlooked during"
+        "Invalid CR": [
+            "Invalid CR", "invalid CR manually", "wrong CR"
+        ],
+        "Ignored Anomaly": [
+            "anomaly detection", "left max tilt", "even though it was captured",
+            "ignored anomaly", "max tilt values"
+        ],
+        "Missed Issue": [
+            "did not report", "Miss to capture", "missed to create",
+            "Engineer did not identified", "missed to attach",
+            "missed to report", "fiber issue", "SFP issue"
+        ],
+        "Wrong Denial": [
+            "denied for Anchor site", "IX precheck denied",
+            "wrong BH validation", "BH was already actualized"
+        ],
+        "Missed Activation": [
+            "VONR is not activated", "not activated", "missed activation"
+        ],
+        "Missed Check": [
+            "Miss to check", "Cell Status Verification",
+            "cells were in Unsync", "missed to check"
+        ],
+        "No Escalation": [
+            "not escalated", "but not escalated", "no escalation",
+            "captured but not escalated"
+        ],
+        "Wrong KPIs": [
+            "different set of KPIs", "wrong KPIs", "not aligned with the agreed"
+        ],
+        "Missed Degradation": [
+            "degradation was not detected", "locked and showing zero traffic",
+            "missed degradation", "not detected during"
+        ],
+        "Skipped Validation": [
+            "moved to Post check without", "skipped validation",
+            "without Riot lemming validation"
+        ],
+        "Wrong Tool Usage": [
+            "AEHC swap report", "tool will only flag", "wrong tool",
+            "Does Not Recognize Physical Swap"
+        ],
+        "Premature Denial": [
+            "IX support was denied", "despite BH status", "citing the reason",
+            "TI record was not updated", "denied support"
+        ],
+        "Incomplete Testing": [
+            "missing L21 Gamma", "VoNR testing", "call test",
+            "calls were completed and passed", "incomplete testing"
+        ],
+        "Missed Call Test": [
+            "AWS3 E911 call test", "missed", "released full RTT",
+            "caught during audit", "schedule FE for call test"
+        ],
+        "No Reversion": [
+            "did not revert", "original values", "no reversion",
+            "tilt settings", "not reverted"
+        ],
+        "Missed Tech": [
+            "N6 was missed", "missed to add", "NSD site", "revisit for CT"
         ]
     },
     "Process Compliance": {
-        "SOP Violations": [
-            "SOP", "process", "guideline", "not following process", "not following SOP",
-            "against guideline", "procedure", "skipped step"
+        "Missed Step": [
+            "missed to share", "missed to unlock", "Engineer missed",
+            "missed step", "didn't lock the cells"
         ],
-        "Improper Escalations": [
-            "escalate", "NTAC", "escalated to NTAC", "improper escalation",
-            "escalated to NTAC while not supposed to", "escalated to different vendor"
+        "No Escalation": [
+            "not escalated to concerned", "created the issue ticket but not",
+            "no escalation", "not escalated"
         ],
-        "Release Procedure Issues": [
-            "released without", "supported without", "without BH actualized",
-            "without backhaul", "bypassed validation", "proceeded without"
+        "Wrong Escalation": [
+            "escalated to different vendor", "wrong distro",
+            "escalated to NTAC", "which is raised by client",
+            "wrong escalation", "should not reach NTAC"
+        ],
+        "Wrong Bucket": [
+            "not in correct bucket", "wrong bucket", "Preliminary design",
+            "Ticket is not created", "ticket was in Design phase"
+        ],
+        "Process Violation": [
+            "IX supported without", "without Backhaul acceptance",
+            "released by PAG BO without", "BH not actualized",
+            "process violation", "without backhaul"
+        ],
+        "Missing Ticket": [
+            "ticket not created", "Ticket is not created", "PAG ticket",
+            "not created for the site", "missing ticket"
+        ],
+        "Wrong Nest State": [
+            "sector swap started by GC with site nested in NSI",
+            "wrong nest state", "nested in"
+        ],
+        "Wrong File Used": [
+            "some other file was used", "wrong file", "correct SCF",
+            "during integration some other"
+        ],
+        "Missed Guidance": [
+            "could have informed FE", "if PSAP was busy",
+            "whitelisted in lieu of", "missed guidance"
+        ],
+        "Process Non-Compliance": [
+            "adhere to the guidelines", "inquiries from",
+            "Tool Request Submission Process", "non-compliance"
         ]
     },
     "Configuration & Data Mismatch": {
-        "Port Matrix Issues": [
-            "port matrix", "PMX", "port matrix mismatch", "need updated port matrix",
-            "as per port matrix", "detected on site but port matrix"
+        "RET Naming": [
+            "RET naming issue", "RET naming", "extra '2'",
+            "inadvertently removed I", "RET naming mismatch",
+            "naming having an extra", "I missing", "naming is incorrect"
         ],
-        "RET/TAC Naming": [
-            "RET", "TAC", "naming", "RET naming issue", "RET naming wrong",
-            "TAC mismatch", "RET swap", "extra 2 in naming", "I missing"
+        "RET Swap": [
+            "RET naming swap", "swapped", "RET swap",
+            "controlling unit", "Beta & Gamma"
         ],
-        "SCF/CIQ/RFDS Mismatch": [
-            "SCF", "CIQ", "RFDS", "SCF mismatch", "CIQ mismatch", "RFDS mismatch",
-            "SCF and RFDS mismatch", "CIQ and SCF not matching", "config mismatch"
+        "RET Parameter": [
+            "RET found Max", "max tilt", "RET parameter"
+        ],
+        "Port Matrix Mismatch": [
+            "port matrix", "Port Matrix", "PMX", "Incorrect Port matrix",
+            "port matrix mismatch", "as per port matrix", "wrong port matrix",
+            "2 RET's defined per sector", "3 RET's per sector",
+            "need updated port matrix", "Port Matrix is missing"
+        ],
+        "CIQ/SCF Mismatch": [
+            "CIQ and SCF", "SCF mismatch", "CIQ mismatch",
+            "Mismatch in Spectrum sheet", "SCF provided with",
+            "CIQ provided not matching"
+        ],
+        "TAC Mismatch": [
+            "TAC mismatch", "TAC showing mismatched", "RIOT red",
+            "TAC was", "MB TAC", "RF Config and OSS"
+        ],
+        "RFDS Mismatch": [
+            "RFDS", "Mismatch of SCF", "RFDS mismatch",
+            "SCF and RFDS mismatch", "RFDS not mention"
+        ],
+        "One-T Mismatch": [
+            "One-T", "OneT", "One-T not yet updated",
+            "One-T mismatch", "IP exports", "non-SRAN"
+        ],
+        "Design Mismatch": [
+            "Design change", "HW available on site", "ASIA",
+            "RFDS with ASIB", "design mismatch"
+        ],
+        "Missing Documents": [
+            "RFDS & Port Matrix is missing", "Port Matrix is missing in TI",
+            "missing in TI", "missing documents"
+        ],
+        "Config Error": [
+            "Config Error", "configuration error", "error due to",
+            "NRPLMNSET not define", "enbid", "not define in SCF"
+        ],
+        "Missing Config": [
+            "BWP missing", "feature was not activated", "missing config",
+            "MOCN", "Scripts were not implemented", "external neighbour"
+        ],
+        "IP Mismatch": [
+            "IP mismatch", "Gateway IP different", "wrong ip",
+            "IP different", "One-T and SCF"
+        ],
+        "Spectrum Mismatch": [
+            "ARFCN and bandwidth", "spectrum plan", "spectrum mismatch"
         ]
     },
     "Site Readiness": {
-        "Backhaul Issues": [
-            "BH", "backhaul", "actualized", "BH not actualized", "backhaul not ready",
-            "BH not ready", "BH not ready in MB", "pending actualization", "BH acceptance pending"
+        "BH Not Ready": [
+            "BH not ready", "backhaul not ready", "BH was not ready",
+            "backhaul acceptance", "BH readiness pending", "BH not actualized",
+            "BH actualization", "backhaul readiness"
         ],
-        "MW/Transmission Issues": [
-            "MW", "microwave", "MW not ready", "microwave not ready",
-            "MW link was not ready", "transmission not ready"
+        "MW Not Ready": [
+            "MW not ready", "microwave not ready", "Microwave link was not ready",
+            "MW link was not ready", "incomplete microwave"
         ],
-        "Material/Equipment Issues": [
-            "material", "SFP", "material missing", "SFP missing",
-            "site was down", "cancelled due to", "could not be integrated"
+        "Material Missing": [
+            "material missing", "SFP missing", "AMID not available",
+            "missing material", "Material", "didn't had material"
+        ],
+        "Site Down": [
+            "site was down", "shut down", "Site was shut down",
+            "couldn't lock the live cells", "site down"
+        ],
+        "Site Complexity": [
+            "middle of a microwave chain", "downstream sites",
+            "didn't have CRs", "generator", "complexity", "aborted"
+        ],
+        "iNTP Not Ready": [
+            "iNTP still not completed", "iNTP not ready"
+        ],
+        "BH Check Error": [
+            "BH readiness", "checked wrongly", "BH Check Error",
+            "wrong method", "mistake"
+        ],
+        "BH Status Issue": [
+            "BH Actualization filled as pending", "BH pending in field",
+            "BH status", "status issue"
         ]
     },
     "Communication & Response": {
-        "Delayed Responses": [
-            "delay", "delayed", "delayed reply", "delayed response", "delay in reply",
-            "waited for hours", "FE waited", "questioned over delays"
+        "Delayed Response": [
+            "Delay in reply", "Delayed reply", "delayed response",
+            "GC query", "Replied back", "when PM asked",
+            "delayed reply to GC", "delayed reply to FE"
         ],
-        "Follow-up Issues": [
-            "follow-up", "reminder", "follow-up required", "multiple follow-ups",
-            "reminder sent", "no reply from", "GC query not replied"
+        "Delayed Deliverable": [
+            "FE waited", "waiting for", "hrs to get EOD",
+            "3hrs", "4hrs", "delayed deliverable"
         ],
-        "Distro/Routing Issues": [
-            "distro", "wrong distro", "communication gap", "not communicated",
-            "proactive update missing"
+        "No Proactive Update": [
+            "pro-actively", "questioned why", "such queries",
+            "getting questioned over delays", "proactive update"
+        ],
+        "No Proactive Communication": [
+            "could have communicated", "not completed on Friday",
+            "Had to cancel", "Else could have", "proactive communication"
+        ],
+        "Repeated Queries": [
+            "same queries", "new IX BO engg", "each day",
+            "unnecessary delays", "repeated queries"
+        ],
+        "No Communication": [
+            "No information", "schedule from PM to FE",
+            "not communicated", "no communication"
+        ],
+        "Training Issue": [
+            "FE doesn't know", "Competency issue", "even after explaining",
+            "training issue", "doesn't know how"
         ]
     },
     "Nesting & Tool Errors": {
-        "Nesting Type Errors": [
-            "nested", "nesting", "NSA", "NSI", "nested as NSA", "nested as SA",
-            "nested as NSI", "wrong nest type", "site not unnested"
+        "Wrong Nest Type": [
+            "nested as NSA", "nested as SA", "nested as NSI",
+            "wrong nest type", "which is not allowed", "NSA", "NSI",
+            "only SA is allowed", "nested NSI from SI"
         ],
-        "RIOT/FCI Tool Issues": [
-            "RIOT", "FCI", "RIOT red", "RIOT mismatch", "tool not updated",
-            "FCI not updated", "without RIOT", "TAC mismatch RIOT"
+        "Improper Extension": [
+            "nest extended", "extended the nest", "nest extension",
+            "during Follow Up", "improper extension"
         ],
-        "Market Guideline Violations": [
-            "market", "guideline", "not allowed in market", "market guideline",
-            "nest extended", "nest extension"
+        "Missing Nesting": [
+            "not Nested", "was not added in Nesting tool",
+            "without Nesting", "missing nesting"
+        ],
+        "Parameter Impact": [
+            "NR UL traffic volume reduction", "shifted to LTE",
+            "post site modification", "parameter impact"
+        ],
+        "KPI Impact": [
+            "TPUT decrease", "Cluster KPI", "KPI impact",
+            "degraded", "post"
+        ],
+        "Neighbor Impact": [
+            "starts to deviate", "MS2 site", "on-aired",
+            "neighbor impact"
+        ],
+        "Missed Activation": [
+            "VONR was not activated", "despite requested",
+            "only NRPCI was shared", "missed activation"
+        ],
+        "Post-OA Degradation": [
+            "congestion", "low Throughput", "AFR", "DCR degraded",
+            "HSI low speed", "after site replacement", "post-OA"
+        ],
+        "Alarm Naming": [
+            "External alarm", "naming is incorrect", "SURGE SUPPRESSOR",
+            "alarm naming"
+        ],
+        "Delayed Audit": [
+            "Audit after 5days", "delay in Audit", "delayed audit"
+        ],
+        "Rework": [
+            "rework", "PM again requesting", "why", "was deleted",
+            "no clarity", "SCF prep and IX work"
+        ],
+        "HW Issue": [
+            "GPS SFP", "PTP sync issue", "RET Antenna control failure",
+            "hardware fault", "antenna will be replaced", "HW issue"
+        ],
+        "Premature Unlock": [
+            "unlocked the cells", "change the cell status to UUU",
+            "pending with call test", "premature unlock"
+        ],
+        "External Cancel": [
+            "Site was cancelled", "TMO didnt want", "Holiday week",
+            "external cancel"
         ]
     }
 }

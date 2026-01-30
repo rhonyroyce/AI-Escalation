@@ -89,40 +89,68 @@ class PriceCatalog:
             subcat_headers = ["Category", "Sub_Category", "Material_Cost", "Labor_Hours", "Hourly_Rate", "Notes"]
             ws_subcat.append(subcat_headers)
 
-            # Sub-category costs based on 8-category system
+            # Sub-category costs based on detailed Embedding.md sub-types
             subcat_data = [
-                # Scheduling & Planning
-                ["Scheduling & Planning", "TI/Calendar Issues", 300, 2, 100, "TI entry errors"],
-                ["Scheduling & Planning", "FE Coordination", 350, 3, 100, "FE site coordination"],
-                ["Scheduling & Planning", "Closeout/Bucket Issues", 250, 2, 100, "Ticket bucket errors"],
-                # Documentation & Reporting
-                ["Documentation & Reporting", "Snapshot/Screenshot Issues", 150, 2, 100, "Missing snapshots"],
-                ["Documentation & Reporting", "E911/CBN Reports", 300, 3, 100, "Report generation errors"],
-                ["Documentation & Reporting", "Email/Attachment Issues", 100, 1, 100, "Attachment problems"],
-                # Validation & QA
-                ["Validation & QA", "Precheck/Postcheck Failures", 500, 4, 125, "Validation failures"],
-                ["Validation & QA", "Measurement Issues", 600, 5, 125, "VSWR/RSSI issues"],
-                ["Validation & QA", "Escalation Gaps", 450, 4, 125, "Missed escalations"],
-                # Process Compliance
-                ["Process Compliance", "SOP Violations", 400, 3, 125, "SOP not followed"],
-                ["Process Compliance", "Improper Escalations", 500, 4, 125, "Wrong escalation path"],
-                ["Process Compliance", "Release Procedure Issues", 600, 5, 125, "Release without validation"],
-                # Configuration & Data Mismatch
-                ["Configuration & Data Mismatch", "Port Matrix Issues", 900, 6, 150, "PMX mismatch"],
-                ["Configuration & Data Mismatch", "RET/TAC Naming", 750, 5, 150, "Naming convention errors"],
-                ["Configuration & Data Mismatch", "SCF/CIQ/RFDS Mismatch", 850, 6, 150, "Config file mismatch"],
-                # Site Readiness
-                ["Site Readiness", "Backhaul Issues", 1800, 10, 150, "BH not actualized"],
-                ["Site Readiness", "MW/Transmission Issues", 1600, 8, 150, "MW link not ready"],
-                ["Site Readiness", "Material/Equipment Issues", 1200, 6, 150, "Missing materials"],
-                # Communication & Response
-                ["Communication & Response", "Delayed Responses", 200, 2, 100, "Late replies"],
-                ["Communication & Response", "Follow-up Issues", 250, 3, 100, "Follow-up gaps"],
-                ["Communication & Response", "Distro/Routing Issues", 150, 2, 100, "Wrong distribution"],
-                # Nesting & Tool Errors
-                ["Nesting & Tool Errors", "Nesting Type Errors", 600, 5, 125, "NSA/NSI wrong type"],
-                ["Nesting & Tool Errors", "RIOT/FCI Tool Issues", 700, 5, 125, "Tool validation failures"],
-                ["Nesting & Tool Errors", "Market Guideline Violations", 500, 4, 125, "Market rules violated"],
+                # Scheduling & Planning (5 sub-types)
+                ["Scheduling & Planning", "No TI Entry", 350, 3, 100, "Site not scheduled in TI"],
+                ["Scheduling & Planning", "Schedule Not Followed", 300, 2, 100, "FE logged on wrong day"],
+                ["Scheduling & Planning", "Weekend Schedule Issue", 400, 3, 100, "Weekend scheduling error"],
+                ["Scheduling & Planning", "Ticket Status Issue", 250, 2, 100, "Ticket in wrong bucket/closeout"],
+                ["Scheduling & Planning", "Premature Scheduling", 500, 4, 100, "Scheduled without BH/MW ready"],
+                # Documentation & Reporting (8 sub-types)
+                ["Documentation & Reporting", "Missing Snapshot", 150, 2, 100, "CBN/validation snapshot missing"],
+                ["Documentation & Reporting", "Missing Attachment", 100, 1, 100, "Pre-check logs not attached"],
+                ["Documentation & Reporting", "Incorrect Reporting", 200, 2, 100, "RTT/data incorrectly reported"],
+                ["Documentation & Reporting", "Wrong Site ID", 250, 2, 100, "Different site ID in mail"],
+                ["Documentation & Reporting", "Incomplete Snapshot", 150, 2, 100, "Lemming snap missing sectors"],
+                ["Documentation & Reporting", "Missing Information", 200, 2, 100, "PSAP/Live CT details missing"],
+                ["Documentation & Reporting", "Wrong Attachment", 150, 1, 100, "Wrong file attached"],
+                ["Documentation & Reporting", "Incorrect Status", 300, 3, 100, "Pass/Fail status wrong"],
+                # Validation & QA (7 sub-types)
+                ["Validation & QA", "Incomplete Validation", 500, 4, 125, "BH fields not checked"],
+                ["Validation & QA", "Missed Issue", 600, 5, 125, "SFP/fiber issue not identified"],
+                ["Validation & QA", "Missed Check", 450, 4, 125, "Cell status not verified"],
+                ["Validation & QA", "No Escalation", 400, 3, 125, "Issue captured but not escalated"],
+                ["Validation & QA", "Missed Degradation", 700, 6, 125, "KPI degradation not detected"],
+                ["Validation & QA", "Wrong Tool Usage", 350, 3, 125, "AEHC swap report misused"],
+                ["Validation & QA", "Incomplete Testing", 500, 4, 125, "E911/VoNR testing incomplete"],
+                # Process Compliance (6 sub-types)
+                ["Process Compliance", "Process Violation", 600, 5, 125, "IX without BH actualized"],
+                ["Process Compliance", "Wrong Escalation", 500, 4, 125, "Escalated to wrong vendor/NTAC"],
+                ["Process Compliance", "Wrong Bucket", 400, 3, 125, "Ticket in preliminary design"],
+                ["Process Compliance", "Missed Step", 450, 4, 125, "Forgot to unlock/share precheck"],
+                ["Process Compliance", "Missing Ticket", 350, 3, 125, "PAG ticket not created"],
+                ["Process Compliance", "Process Non-Compliance", 550, 4, 125, "Guidelines not followed"],
+                # Configuration & Data Mismatch (8 sub-types)
+                ["Configuration & Data Mismatch", "Port Matrix Mismatch", 900, 6, 150, "RET count mismatch with PMX"],
+                ["Configuration & Data Mismatch", "RET Naming", 750, 5, 150, "Extra/missing letter in naming"],
+                ["Configuration & Data Mismatch", "RET Swap", 800, 6, 150, "Alpha/Beta RET swapped"],
+                ["Configuration & Data Mismatch", "TAC Mismatch", 700, 5, 150, "TAC causing RIOT red"],
+                ["Configuration & Data Mismatch", "CIQ/SCF Mismatch", 850, 6, 150, "CIQ and SCF not matching"],
+                ["Configuration & Data Mismatch", "RFDS Mismatch", 800, 6, 150, "RFDS and SCF mismatch"],
+                ["Configuration & Data Mismatch", "Missing Documents", 500, 4, 150, "RFDS/Port Matrix missing in TI"],
+                ["Configuration & Data Mismatch", "Config Error", 600, 5, 150, "NRPLMNSET/BWP not defined"],
+                # Site Readiness (6 sub-types)
+                ["Site Readiness", "BH Not Ready", 1800, 10, 150, "Backhaul not actualized in MB"],
+                ["Site Readiness", "MW Not Ready", 1600, 8, 150, "Microwave link not ready"],
+                ["Site Readiness", "Material Missing", 1200, 6, 150, "SFP/AMID not available"],
+                ["Site Readiness", "Site Down", 1400, 8, 150, "Site shut down during IX"],
+                ["Site Readiness", "BH Status Issue", 1000, 6, 150, "BH status incorrectly filled"],
+                ["Site Readiness", "Site Complexity", 1500, 8, 150, "MW chain/generator issues"],
+                # Communication & Response (5 sub-types)
+                ["Communication & Response", "Delayed Response", 200, 2, 100, "Late reply to GC/FE query"],
+                ["Communication & Response", "Delayed Deliverable", 300, 3, 100, "FE waited 3-4hrs for EOD"],
+                ["Communication & Response", "No Proactive Update", 250, 2, 100, "Not answering delay queries"],
+                ["Communication & Response", "No Communication", 200, 2, 100, "Schedule not communicated to FE"],
+                ["Communication & Response", "Training Issue", 350, 3, 100, "FE competency/knowledge gap"],
+                # Nesting & Tool Errors (7 sub-types)
+                ["Nesting & Tool Errors", "Wrong Nest Type", 600, 5, 125, "Nested as NSA when SA required"],
+                ["Nesting & Tool Errors", "Improper Extension", 550, 4, 125, "Nest extended during follow-up"],
+                ["Nesting & Tool Errors", "Missing Nesting", 500, 4, 125, "Site not nested before activity"],
+                ["Nesting & Tool Errors", "HW Issue", 800, 6, 125, "GPS SFP/RET antenna failure"],
+                ["Nesting & Tool Errors", "Rework", 700, 6, 125, "SCF prep and IX rework needed"],
+                ["Nesting & Tool Errors", "Post-OA Degradation", 900, 7, 125, "Congestion/DCR after on-air"],
+                ["Nesting & Tool Errors", "Delayed Audit", 400, 3, 125, "Audit done 5 days late"],
             ]
 
             for row in subcat_data:
