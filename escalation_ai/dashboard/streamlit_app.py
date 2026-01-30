@@ -1221,6 +1221,229 @@ def chart_benchmark_gauge(metric_name, current_value, benchmark_data, unit=''):
     return fig
 
 # ============================================================================
+# SYSTEMIC ISSUES ANALYSIS
+# ============================================================================
+
+# Recommended fixes mapping based on sub-category analysis
+SYSTEMIC_ISSUE_FIXES = {
+    # Scheduling & Planning sub-categories
+    "No TI Entry": {
+        "root_cause": "PM/FE coordination gap; reactive scheduling",
+        "fix": "Enforce TI entry 24hrs before FE dispatch; auto-block support if no TI record"
+    },
+    "Schedule Not Followed": {
+        "root_cause": "Communication breakdown; schedule changes not propagated",
+        "fix": "Implement real-time schedule sync between TI and FE dispatch systems"
+    },
+    "Weekend Schedule Issue": {
+        "root_cause": "Weekend coverage gaps; approval workflow delays",
+        "fix": "Pre-approve weekend schedules on Thursday; dedicated weekend coordinator"
+    },
+    "Ticket Status Issue": {
+        "root_cause": "Ticket lifecycle mismanagement; bucket confusion",
+        "fix": "Auto-validate ticket status before FE dispatch; status change notifications"
+    },
+    "Premature Scheduling": {
+        "root_cause": "BH/MW readiness not verified before scheduling",
+        "fix": "Hard dependency check: no schedule without BH actualization confirmed"
+    },
+
+    # Documentation & Reporting sub-categories
+    "Missing Snapshot": {
+        "root_cause": "Manual process reliance; no validation gate",
+        "fix": "Implement mandatory snapshot upload with form validation before submission"
+    },
+    "Missing Attachment": {
+        "root_cause": "Checklist not enforced; time pressure",
+        "fix": "Required attachment checklist with blocking validation; template pre-population"
+    },
+    "Wrong Site ID": {
+        "root_cause": "Manual entry errors; copy-paste mistakes",
+        "fix": "Auto-populate site ID from ticket; validation against site database"
+    },
+    "Incomplete Snapshot": {
+        "root_cause": "Training gap; unclear requirements",
+        "fix": "Snapshot completeness checker with sector count validation"
+    },
+    "Missing Information": {
+        "root_cause": "Template gaps; unclear requirements",
+        "fix": "Dynamic form with required fields based on ticket type"
+    },
+
+    # Configuration & Data Mismatch sub-categories
+    "Port Matrix Mismatch": {
+        "root_cause": "Outdated documents; no version control",
+        "fix": "Implement PMX validation gate in precheck; flag mismatches automatically"
+    },
+    "RET Naming": {
+        "root_cause": "Manual naming errors; inconsistent conventions",
+        "fix": "Automated RET naming validation against site config; naming convention enforcer"
+    },
+    "TAC Mismatch": {
+        "root_cause": "Config drift between tools; manual updates",
+        "fix": "Real-time TAC sync between RIOT and OSS; alert on mismatch"
+    },
+    "CIQ/SCF Mismatch": {
+        "root_cause": "Multiple document versions; no single source of truth",
+        "fix": "Centralized config repository with version control; auto-diff on updates"
+    },
+
+    # Site Readiness sub-categories
+    "BH Not Ready": {
+        "root_cause": "Pressure to support despite readiness gaps",
+        "fix": "Hard-stop in workflow - no precheck release without MB actualization confirmed"
+    },
+    "MW Not Ready": {
+        "root_cause": "MW team coordination gap; status not updated",
+        "fix": "MW readiness API check before scheduling; real-time status dashboard"
+    },
+    "Material Missing": {
+        "root_cause": "Inventory tracking gaps; last-minute discoveries",
+        "fix": "Material availability check 48hrs before scheduled date; auto-postpone if missing"
+    },
+
+    # Process Compliance sub-categories
+    "Process Violation": {
+        "root_cause": "Schedule pressure overriding compliance",
+        "fix": "System-enforced workflow gates; no bypass without manager approval audit trail"
+    },
+    "Wrong Escalation": {
+        "root_cause": "Unclear escalation paths; distro list confusion",
+        "fix": "Smart escalation routing based on ticket type; dynamic distro selection"
+    },
+    "Missing Ticket": {
+        "root_cause": "Manual ticket creation; process shortcuts",
+        "fix": "Auto-ticket creation triggers; mandatory ticket linkage validation"
+    },
+
+    # Validation & QA sub-categories
+    "Missed Issue": {
+        "root_cause": "Checklist fatigue; time pressure",
+        "fix": "AI-assisted anomaly detection; automated red-flag alerts"
+    },
+    "Incomplete Validation": {
+        "root_cause": "Partial checks; validation shortcuts",
+        "fix": "Mandatory validation checklist with photo evidence; no progress without completion"
+    },
+    "Skipped Validation": {
+        "root_cause": "Process shortcuts under pressure",
+        "fix": "Workflow enforcement - validation step cannot be bypassed"
+    },
+
+    # Communication & Response sub-categories
+    "Delayed Response": {
+        "root_cause": "No SLA tracking; workload imbalance",
+        "fix": "Response time SLA alerts at 50%, 75%, 90% thresholds; auto-escalation"
+    },
+    "No Proactive Communication": {
+        "root_cause": "Reactive culture; no communication standards",
+        "fix": "Mandatory status updates every 2hrs for active tickets; auto-reminders"
+    },
+
+    # Nesting & Tool Errors sub-categories
+    "Wrong Nest Type": {
+        "root_cause": "Market guideline confusion; tool limitations",
+        "fix": "Market-specific nest type validation; block invalid combinations"
+    },
+    "Missing Nesting": {
+        "root_cause": "Manual nesting process; oversight",
+        "fix": "Auto-nest trigger on ticket creation; nesting status validation gate"
+    }
+}
+
+
+def get_top_systemic_issues(df, top_n: int = 3):
+    """
+    Analyze data to identify top systemic issues with root causes and recommended fixes.
+
+    Returns a list of dicts with: rank, issue, root_cause, recommended_fix, impact_count, financial_impact
+    """
+    issues = []
+
+    # Check if we have sub-category data
+    if 'AI_Sub_Category' not in df.columns or 'AI_Category' not in df.columns:
+        # Fallback to category-level analysis
+        if 'AI_Category' in df.columns:
+            cat_counts = df['AI_Category'].value_counts()
+            for i, (cat, count) in enumerate(cat_counts.head(top_n).items()):
+                cost = df[df['AI_Category'] == cat]['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else count * 850
+                issues.append({
+                    'rank': i + 1,
+                    'issue': cat,
+                    'root_cause': "Multiple contributing factors identified",
+                    'recommended_fix': f"Establish {cat} improvement initiative; conduct root cause deep-dive",
+                    'count': count,
+                    'financial_impact': cost
+                })
+        return issues
+
+    # Sub-category level analysis
+    subcat_stats = df.groupby(['AI_Category', 'AI_Sub_Category']).agg({
+        'AI_Category': 'count'
+    }).rename(columns={'AI_Category': 'count'})
+
+    if 'Financial_Impact' in df.columns:
+        financial_stats = df.groupby(['AI_Category', 'AI_Sub_Category'])['Financial_Impact'].sum()
+        subcat_stats['financial_impact'] = financial_stats
+    else:
+        subcat_stats['financial_impact'] = subcat_stats['count'] * 850
+
+    subcat_stats = subcat_stats.reset_index()
+    subcat_stats = subcat_stats.sort_values('count', ascending=False)
+
+    # Get top N issues
+    for i, row in subcat_stats.head(top_n).iterrows():
+        sub_cat = row['AI_Sub_Category']
+        category = row['AI_Category']
+
+        # Get fix from mapping or generate generic
+        if sub_cat in SYSTEMIC_ISSUE_FIXES:
+            fix_info = SYSTEMIC_ISSUE_FIXES[sub_cat]
+            root_cause = fix_info['root_cause']
+            recommended_fix = fix_info['fix']
+        else:
+            # Generate generic fix based on category
+            root_cause = f"Process gap in {category}"
+            recommended_fix = f"Review {sub_cat} procedures; implement validation controls"
+
+        issues.append({
+            'rank': len(issues) + 1,
+            'issue': sub_cat,
+            'category': category,
+            'root_cause': root_cause,
+            'recommended_fix': recommended_fix,
+            'count': row['count'],
+            'financial_impact': row['financial_impact']
+        })
+
+    return issues
+
+
+def generate_systemic_issue_initiatives(df):
+    """
+    Generate action items from top systemic issues for the Initiative Status.
+    Returns list of initiative dicts ready to add to action_items.
+    """
+    issues = get_top_systemic_issues(df, top_n=5)
+    initiatives = []
+
+    for issue in issues:
+        priority = 'P1' if issue['rank'] <= 2 else 'P2'
+
+        initiatives.append({
+            'title': f"Fix: {issue['issue']}",
+            'priority': priority,
+            'description': f"Root Cause: {issue['root_cause']}\n\nRecommended Fix: {issue['recommended_fix']}\n\nImpact: {issue['count']} tickets, ${issue['financial_impact']:,.0f}",
+            'impact': f"{issue['count']} tickets, ${issue['financial_impact']:,.0f} impact",
+            'confidence': 90 if issue['rank'] == 1 else 85,
+            'timeline': '30 days' if priority == 'P1' else '60 days',
+            'from_systemic_analysis': True
+        })
+
+    return initiatives
+
+
+# ============================================================================
 # WHAT-IF SIMULATOR
 # ============================================================================
 
@@ -1989,18 +2212,122 @@ def render_action_tracker(df):
     """Render the Action Tracker page."""
     st.markdown('<p class="main-header">📋 Action Tracker</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Strategic initiatives monitoring and accountability</p>', unsafe_allow_html=True)
-    
+
+    # =========================================================================
+    # TOP 5 SYSTEMIC ISSUES TABLE
+    # =========================================================================
+    st.markdown("### 🎯 Top 5 Systemic Issues")
+    st.markdown("*Data-driven analysis of highest-impact recurring problems with recommended fixes*")
+
+    systemic_issues = get_top_systemic_issues(df, top_n=5)
+
+    if systemic_issues:
+        # Create styled table
+        issues_data = []
+        for issue in systemic_issues:
+            issues_data.append({
+                'Rank': issue['rank'],
+                'Issue': issue['issue'],
+                'Root Cause': issue['root_cause'],
+                'Recommended Fix': issue['recommended_fix'],
+                'Tickets': issue['count'],
+                'Impact': f"${issue['financial_impact']:,.0f}"
+            })
+
+        issues_df = pd.DataFrame(issues_data)
+
+        # Custom styling for the table
+        st.markdown("""
+        <style>
+        .systemic-table {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 10px;
+            padding: 5px;
+        }
+        .systemic-table th {
+            background-color: #0f3460 !important;
+            color: #e94560 !important;
+            font-weight: bold;
+            text-align: left;
+        }
+        .systemic-table td {
+            color: #eee !important;
+            border-bottom: 1px solid #333;
+        }
+        .systemic-table tr:hover td {
+            background-color: #1f4068 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        st.dataframe(
+            issues_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Rank": st.column_config.NumberColumn("Rank", width="small"),
+                "Issue": st.column_config.TextColumn("Issue", width="medium"),
+                "Root Cause": st.column_config.TextColumn("Root Cause", width="large"),
+                "Recommended Fix": st.column_config.TextColumn("Recommended Fix", width="large"),
+                "Tickets": st.column_config.NumberColumn("Tickets", width="small"),
+                "Impact": st.column_config.TextColumn("Impact", width="small"),
+            }
+        )
+
+        # Quick action buttons to convert issues to initiatives
+        st.markdown("##### Quick Actions")
+        col_actions = st.columns(5)
+        for idx, issue in enumerate(systemic_issues):
+            with col_actions[idx]:
+                btn_key = f"add_issue_{idx}_{issue['issue'][:10]}"
+                if st.button(f"➕ #{issue['rank']}", key=btn_key, help=f"Add '{issue['issue']}' to initiatives"):
+                    # Check if already exists
+                    existing_titles = {item['title'] for item in st.session_state.action_items}
+                    new_title = f"Fix: {issue['issue']}"
+                    if new_title not in existing_titles:
+                        new_id = max((item['id'] for item in st.session_state.action_items), default=-1) + 1
+                        st.session_state.action_items.append({
+                            'id': new_id,
+                            'title': new_title,
+                            'priority': 'P1' if issue['rank'] <= 2 else 'P2',
+                            'owner': 'Unassigned',
+                            'due_date': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'),
+                            'status': 'Not Started',
+                            'progress': 0,
+                            'notes': f"Root Cause: {issue['root_cause']}\n\nRecommended Fix: {issue['recommended_fix']}\n\nImpact: {issue['count']} tickets, ${issue['financial_impact']:,.0f}",
+                            'ai_generated': True,
+                            'from_systemic': True
+                        })
+                        save_action_items(st.session_state.action_items)
+                        st.toast(f"Added '{issue['issue']}' to initiatives!", icon="✅")
+                        st.rerun()
+                    else:
+                        st.toast(f"'{issue['issue']}' already in initiatives", icon="ℹ️")
+    else:
+        st.info("No systemic issues identified. Run classification pipeline with sub-category analysis enabled.")
+
+    st.markdown("---")
+
+    # =========================================================================
+    # INITIATIVE MANAGEMENT
+    # =========================================================================
+
     # Initialize action items - load from JSON, then merge with AI recommendations
     if not st.session_state.action_items:
         saved_items = load_action_items() or []
         st.session_state.action_items = saved_items
-    
+
     # Always generate fresh AI recommendations and merge new ones
     recommendations = generate_strategic_recommendations(df)
+
+    # Also get systemic issue initiatives
+    systemic_initiatives = generate_systemic_issue_initiatives(df)
+    all_recommendations = recommendations[:3] + systemic_initiatives[:2]  # Mix both types
+
     existing_titles = {item['title'] for item in st.session_state.action_items}
-    
+
     new_items_added = False
-    for rec in recommendations[:5]:
+    for rec in all_recommendations:
         if rec['title'] not in existing_titles:
             # This is a new AI recommendation - add it
             new_id = max((item['id'] for item in st.session_state.action_items), default=-1) + 1
@@ -2013,22 +2340,23 @@ def render_action_tracker(df):
                 'status': 'Not Started',
                 'progress': 0,
                 'notes': rec['description'],
-                'ai_generated': True  # Mark as AI-generated
+                'ai_generated': True,
+                'from_systemic': rec.get('from_systemic_analysis', False)
             })
             new_items_added = True
-    
+
     if new_items_added:
         save_action_items(st.session_state.action_items)
         st.toast("🤖 New AI recommendations added!", icon="✨")
-    
+
     # Summary metrics
     col1, col2, col3, col4 = st.columns(4)
-    
+
     total_actions = len(st.session_state.action_items)
     completed = sum(1 for a in st.session_state.action_items if a['status'] == 'Completed')
     in_progress = sum(1 for a in st.session_state.action_items if a['status'] == 'In Progress')
     blocked = sum(1 for a in st.session_state.action_items if a['status'] == 'Blocked')
-    
+
     with col1:
         st.metric("Total Initiatives", total_actions)
     with col2:
@@ -2037,9 +2365,9 @@ def render_action_tracker(df):
         st.metric("In Progress", in_progress)
     with col4:
         st.metric("Blocked", blocked, delta_color="inverse" if blocked > 0 else "normal")
-    
+
     st.markdown("---")
-    
+
     # Add new action
     with st.expander("➕ Add New Initiative"):
         col1, col2 = st.columns(2)
