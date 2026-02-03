@@ -1025,7 +1025,10 @@ def chart_category_financial_drilldown(df: pd.DataFrame) -> go.Figure:
     ))
 
     fig.update_layout(
-        **create_plotly_theme(),
+        **{
+            **create_plotly_theme(),
+            'margin': dict(l=200, r=80, t=80, b=40),
+        },
         title=dict(
             text='Financial Impact by Category<br><span style="font-size:12px">Hover for details • Use sunburst/treemap for sub-category drill-down</span>',
             font=dict(size=18)
@@ -1033,7 +1036,6 @@ def chart_category_financial_drilldown(df: pd.DataFrame) -> go.Figure:
         xaxis_title='Total Financial Impact ($)',
         yaxis_title='',
         height=450,
-        margin=dict(l=200, r=80, t=80, b=40),
         showlegend=False
     )
 
