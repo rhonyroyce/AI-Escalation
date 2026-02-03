@@ -3900,12 +3900,20 @@ def render_analytics(df):
 
             # Summary table
             if 'AI_Sub_Category' in df.columns:
-                cat_stats = df.groupby('AI_Category').agg({
-                    'AI_Sub_Category': 'count',
-                    'AI_Confidence': 'mean',
-                    'Strategic_Friction_Score': 'sum' if 'Strategic_Friction_Score' in df.columns else 'count'
-                }).round(2)
-                cat_stats.columns = ['Ticket Count', 'Avg Confidence', 'Total Friction']
+                # Build aggregation dict dynamically based on available columns
+                agg_dict = {'AI_Sub_Category': 'count'}
+                col_names = ['Ticket Count']
+
+                if 'AI_Confidence' in df.columns:
+                    agg_dict['AI_Confidence'] = 'mean'
+                    col_names.append('Avg Confidence')
+
+                if 'Strategic_Friction_Score' in df.columns:
+                    agg_dict['Strategic_Friction_Score'] = 'sum'
+                    col_names.append('Total Friction')
+
+                cat_stats = df.groupby('AI_Category').agg(agg_dict).round(2)
+                cat_stats.columns = col_names
                 cat_stats = cat_stats.sort_values('Ticket Count', ascending=False)
 
                 # Add financial if available
