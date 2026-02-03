@@ -416,7 +416,7 @@ class ExcelReportWriter:
             
             # AI-generated columns to append
             ai_cols = [
-                'AI_Category', 'AI_Confidence', 'Severity_Norm', 'Origin_Norm',
+                'AI_Category', 'AI_Sub_Category', 'AI_Confidence', 'Severity_Norm', 'Origin_Norm',
                 'Strategic_Friction_Score', 'Learning_Status', 'Financial_Impact',
                 'AI_Recurrence_Probability', 'AI_Recurrence_Risk', 'AI_Recurrence_Confidence',
                 'Similar_Ticket_Count', 'Similar_Ticket_IDs',
