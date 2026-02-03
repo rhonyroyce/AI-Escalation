@@ -938,6 +938,7 @@ def chart_engineer_performance(df):
     theme = create_plotly_theme()
     theme.pop('margin', None)
     
+    theme.pop('margin', None)  # Remove margin from theme to avoid conflict
     fig.update_layout(
         **theme,
         title=dict(text='Engineer Performance', font=dict(size=16)),
@@ -2196,10 +2197,12 @@ def render_root_cause(df):
         ), row=1, col=2)
         
         fig.update_layout(
-            **create_plotly_theme(),
+            **{
+                **create_plotly_theme(),
+                'margin': dict(l=150, r=40, t=60, b=40),  # More left margin for labels
+            },
             height=500,  # Taller to prevent overlap
-            showlegend=False,
-            margin=dict(l=150, r=40, t=60, b=40)  # More left margin for labels
+            showlegend=False
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -3929,9 +3932,11 @@ def render_analytics(df):
                                 marker_color='#0066CC'
                             ))
                             fig.update_layout(
-                                **create_plotly_theme(),
+                                **{
+                                    **create_plotly_theme(),
+                                    'margin': dict(l=10, r=10, t=10, b=10),
+                                },
                                 height=200,
-                                margin=dict(l=10, r=10, t=10, b=10),
                                 yaxis_title='',
                                 xaxis_title='Count'
                             )
