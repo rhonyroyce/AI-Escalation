@@ -347,17 +347,17 @@ class ExcelReportWriter:
             'financial': '💰 Financial Impact',
         }
         
-        # Grid layout settings
-        img_width = 350  # pixels - smaller to fit 3 per row without overlap
-        img_height = 210  # 60% aspect ratio
+        # Grid layout settings - 2.72 x 4.53 inches at 96 DPI
+        img_width = 261   # 2.72 inches * 96 DPI
+        img_height = 435  # 4.53 inches * 96 DPI
         cols_per_row = 3  # 3 charts per row
-        col_positions = ['A', 'G', 'M']  # Column positions for each chart in row (6 cols apart)
-        rows_per_chart = 14  # Excel rows per chart height
+        col_positions = ['A', 'F', 'K']  # Column positions for each chart (5 cols apart for narrower charts)
+        rows_per_chart = 29  # Excel rows per chart height (435px / ~15px per row)
         header_gap_rows = 2  # Gap between header and first chart row
-        
+
         # Set column widths to accommodate images with proper spacing
         for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R']:
-            ws.column_dimensions[col].width = 7
+            ws.column_dimensions[col].width = 6
         
         current_row = 5
         images_embedded = 0
