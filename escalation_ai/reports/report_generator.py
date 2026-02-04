@@ -220,28 +220,34 @@ class ExcelReportWriter:
         ws['B13'].alignment = Alignment(horizontal='center', vertical='center')
         ws.merge_cells('B13:H13')
         
-        # Process synthesis text - SIMPLIFIED approach to prevent overlap
+        # Process synthesis text - STANDARDIZED spacing approach
         import re
         current_row = 15
-        
+
+        # Standardized spacing constants
+        SECTION_GAP_BEFORE = 18  # Gap before each section header
+        SECTION_HEADER_HEIGHT = 26  # Height of section header row
+        BODY_GAP_AFTER = 6  # Small gap after body text (tight to header)
+
         # Clean up the entire text first
         clean_text = exec_summary_text.strip()
         clean_text = re.sub(r'\*\*([^*]+)\*\*', r'\1', clean_text)  # Remove bold markers
         clean_text = re.sub(r'^#+\s*', '', clean_text, flags=re.MULTILINE)  # Remove markdown headers
         clean_text = re.sub(r'▶\s*', '', clean_text)  # Remove arrow symbols
-        
+
         # Split into logical sections (by double newlines or section markers)
         sections = re.split(r'\n\s*\n|(?=SECTION \d)', clean_text)
-        
+
+        is_first_section = True
         for section in sections:
             section_text = section.strip()
             if not section_text:
                 continue
-            
+
             # Check if this is a section header (starts with SECTION or is short and looks like header)
             is_header = bool(re.match(r'^SECTION\s*\d', section_text, re.IGNORECASE)) or \
                         (len(section_text) < 60 and section_text.replace('-', '').replace(':', '').strip().isupper())
-            
+
             if is_header:
                 # Section header - extract just the header part
                 header_match = re.match(r'^(SECTION\s*\d+[^\n]*)', section_text, re.IGNORECASE)
@@ -251,9 +257,15 @@ class ExcelReportWriter:
                 else:
                     header_text = section_text.split('\n')[0].strip()
                     body_text = '\n'.join(section_text.split('\n')[1:]).strip()
-                
+
+                # Add standardized gap before section header (except first section)
+                if not is_first_section:
+                    ws.row_dimensions[current_row].height = SECTION_GAP_BEFORE
+                    current_row += 1
+                is_first_section = False
+
                 # Write header with blue background
-                ws.row_dimensions[current_row].height = 24
+                ws.row_dimensions[current_row].height = SECTION_HEADER_HEIGHT
                 cell = ws.cell(row=current_row, column=2)
                 cell.value = header_text[:100]  # Truncate to prevent overflow
                 cell.font = Font(bold=True, size=11, color="FFFFFF")
@@ -261,14 +273,14 @@ class ExcelReportWriter:
                 cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=False)
                 ws.merge_cells(f'B{current_row}:H{current_row}')
                 current_row += 1
-                
-                # Write body text if present
+
+                # Write body text if present (tight to header, no gap between)
                 if body_text:
                     # Calculate appropriate row height based on text length
                     char_per_line = 100  # Approx chars per line with merged cells
                     num_lines = max(1, (len(body_text) // char_per_line) + body_text.count('\n') + 1)
                     row_height = min(300, max(40, num_lines * 15))
-                    
+
                     ws.row_dimensions[current_row].height = row_height
                     cell = ws.cell(row=current_row, column=2)
                     cell.value = body_text
@@ -276,12 +288,16 @@ class ExcelReportWriter:
                     cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
                     ws.merge_cells(f'B{current_row}:H{current_row}')
                     current_row += 1
+
+                    # Small gap after body text
+                    ws.row_dimensions[current_row].height = BODY_GAP_AFTER
+                    current_row += 1
             else:
-                # Regular body text - calculate appropriate height
+                # Regular body text (continuation) - calculate appropriate height
                 text_length = len(section_text)
                 line_count = max(1, text_length // 100 + section_text.count('\n') + 1)
                 row_height = min(250, max(45, line_count * 16))
-                
+
                 ws.row_dimensions[current_row].height = row_height
                 cell = ws.cell(row=current_row, column=2)
                 cell.value = section_text
@@ -289,10 +305,10 @@ class ExcelReportWriter:
                 cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
                 ws.merge_cells(f'B{current_row}:H{current_row}')
                 current_row += 1
-            
-            # Add small gap between sections
-            ws.row_dimensions[current_row].height = 8
-            current_row += 1
+
+                # Small gap after body text
+                ws.row_dimensions[current_row].height = BODY_GAP_AFTER
+                current_row += 1
         
         # Add footer
         ws.row_dimensions[current_row].height = 15  # Spacer
