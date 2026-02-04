@@ -108,79 +108,90 @@ def create_roi_opportunity_chart(roi_data: Dict) -> go.Figure:
 
     opportunities = roi_data['top_opportunities'][:5]
 
-    fig = make_subplots(
-        rows=1, cols=2,
-        subplot_titles=('Investment vs Annual Savings', 'ROI % by Category'),
-        specs=[[{"type": "scatter"}, {"type": "bar"}]]
-    )
-
-    # Scatter: Investment vs Savings
+    # Scatter: Investment vs Savings (single chart, cleaner)
     categories = [opp['category'] for opp in opportunities]
     investments = [opp['investment_required'] for opp in opportunities]
     savings = [opp['annual_savings'] for opp in opportunities]
     roi_pcts = [opp['roi_percentage'] for opp in opportunities]
+    incidents = [opp['incident_count'] for opp in opportunities]
 
+    fig = go.Figure()
+
+    # Add bubbles with hover info (no text labels to avoid overlap)
     fig.add_trace(
         go.Scatter(
             x=investments,
             y=savings,
-            mode='markers+text',
+            mode='markers',
             marker=dict(
-                size=[min(opp['roi_percentage'] / 10, 50) for opp in opportunities],
+                size=[max(30, min(roi / 20, 80)) for roi in roi_pcts],
                 color=roi_pcts,
                 colorscale='Greens',
                 showscale=True,
-                colorbar=dict(title="ROI %", x=0.45)
+                colorbar=dict(title="ROI %"),
+                line=dict(width=2, color='white')
             ),
             text=categories,
-            textposition="top center",
+            customdata=list(zip(categories, roi_pcts, incidents)),
+            hovertemplate=(
+                '<b>%{customdata[0]}</b><br>'
+                'Investment: $%{x:,.0f}<br>'
+                'Annual Savings: $%{y:,.0f}<br>'
+                'ROI: %{customdata[1]:.0f}%<br>'
+                'Incidents: %{customdata[2]}<extra></extra>'
+            ),
             name="Opportunities"
-        ),
-        row=1, col=1
+        )
     )
 
     # Add diagonal line (break-even)
-    max_val = max(max(investments), max(savings))
+    max_val = max(max(investments), max(savings)) * 1.1
     fig.add_trace(
         go.Scatter(
             x=[0, max_val],
             y=[0, max_val],
             mode='lines',
-            line=dict(color='gray', dash='dash'),
+            line=dict(color='gray', dash='dash', width=1),
             name='Break-even',
-            showlegend=False
-        ),
-        row=1, col=1
+            showlegend=False,
+            hoverinfo='skip'
+        )
     )
 
-    # Bar: ROI percentages
-    fig.add_trace(
-        go.Bar(
-            x=categories,
-            y=roi_pcts,
-            marker=dict(
-                color=roi_pcts,
-                colorscale='RdYlGn',
-                showscale=False
-            ),
-            text=[f"{roi:.0f}%" for roi in roi_pcts],
-            textposition='outside',
-            name="ROI %"
-        ),
-        row=1, col=2
-    )
-
-    fig.update_xaxes(title_text="Investment Required ($)", row=1, col=1)
-    fig.update_yaxes(title_text="Annual Savings ($)", row=1, col=1)
-    fig.update_xaxes(title_text="Category", row=1, col=2)
-    fig.update_yaxes(title_text="ROI %", row=1, col=2)
+    # Add annotations for each point (positioned to avoid overlap)
+    positions = ['top right', 'top left', 'bottom right', 'bottom left', 'top center']
+    for i, (cat, x, y) in enumerate(zip(categories, investments, savings)):
+        # Truncate long category names
+        short_cat = cat[:20] + '...' if len(cat) > 20 else cat
+        fig.add_annotation(
+            x=x, y=y,
+            text=f"<b>{short_cat}</b>",
+            showarrow=True,
+            arrowhead=0,
+            arrowsize=1,
+            arrowwidth=1,
+            arrowcolor='#666',
+            ax=30 if i % 2 == 0 else -30,
+            ay=-30 if i < 2 else 30,
+            font=dict(size=10, color='#E0E0E0'),
+            bgcolor='rgba(0,0,0,0.7)',
+            borderpad=3
+        )
 
     fig.update_layout(
-        title_text="ROI Investment Opportunities",
+        title=dict(text='Investment vs Annual Savings', font=dict(size=16)),
+        xaxis_title="Investment Required ($)",
+        yaxis_title="Annual Savings ($)",
         showlegend=False,
-        height=500,
-        template="plotly_white"
+        height=450,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='Inter', color='#E0E0E0')
     )
+
+    # Format axes as currency
+    fig.update_xaxes(tickprefix='$', tickformat=',.0f', gridcolor='rgba(255,255,255,0.1)')
+    fig.update_yaxes(tickprefix='$', tickformat=',.0f', gridcolor='rgba(255,255,255,0.1)')
 
     return fig
 
@@ -230,16 +241,18 @@ def create_cost_avoidance_breakdown(avoidance_data: Dict) -> go.Figure:
 
 def create_cost_trend_forecast(df: pd.DataFrame, forecasts: Dict) -> go.Figure:
     """Create cost trend chart with forecast projection."""
-    if 'Issue_Date' not in df.columns or 'Financial_Impact' not in df.columns:
-        logger.warning("Missing Issue_Date or Financial_Impact columns for trend forecast")
-        return _create_empty_forecast_figure("Missing date or financial data")
+    # Check for Financial_Impact column
+    if 'Financial_Impact' not in df.columns:
+        logger.warning("Missing Financial_Impact column for trend forecast")
+        return _create_empty_forecast_figure("Missing financial data")
 
     try:
         df_temp = df.copy()
 
         # Try multiple date column names
         date_col = None
-        for col in ['Issue_Date', 'Issue Date', 'Created_Date', 'Date', 'Timestamp']:
+        for col in ['tickets_data_issue_datetime', 'Issue_Date', 'Issue Date',
+                    'Created_Date', 'Date', 'Timestamp', 'tickets_data_resolution_datetime']:
             if col in df_temp.columns:
                 date_col = col
                 break
