@@ -3345,7 +3345,7 @@ def generate_executive_pdf_report(df):
         story.append(Paragraph("Key Performance Indicators", subheading_style))
         
         # Count by type
-        type_col = 'tickets_data_type_1'
+        type_col = 'tickets_data_type'
         escalations_count = len(df[df[type_col].astype(str).str.contains('Escalation', case=False, na=False)]) if type_col in df.columns else len(df)
         concerns_count = len(df[df[type_col].astype(str).str.contains('Concern', case=False, na=False)]) if type_col in df.columns else 0
         lessons_count = len(df[df[type_col].astype(str).str.contains('Lesson', case=False, na=False)]) if type_col in df.columns else 0
@@ -3644,9 +3644,9 @@ def generate_html_report(df):
             
             <table>
                 <tr><th>Category</th><th>Count</th><th>Description</th></tr>
-                <tr><td>📋 Escalations</td><td>{len(df[df['tickets_data_type_1'].astype(str).str.contains('Escalation', case=False, na=False)]) if 'tickets_data_type_1' in df.columns else len(df)}</td><td>Active escalation tickets</td></tr>
-                <tr><td>⚠️ Concerns</td><td>{len(df[df['tickets_data_type_1'].astype(str).str.contains('Concern', case=False, na=False)]) if 'tickets_data_type_1' in df.columns else 0}</td><td>Potential issues flagged</td></tr>
-                <tr><td>📚 Lessons Learned</td><td>{len(df[df['tickets_data_type_1'].astype(str).str.contains('Lesson', case=False, na=False)]) if 'tickets_data_type_1' in df.columns else 0}</td><td>Historical learnings</td></tr>
+                <tr><td>📋 Escalations</td><td>{len(df[df['tickets_data_type'].astype(str).str.contains('Escalation', case=False, na=False)]) if 'tickets_data_type' in df.columns else len(df)}</td><td>Active escalation tickets</td></tr>
+                <tr><td>⚠️ Concerns</td><td>{len(df[df['tickets_data_type'].astype(str).str.contains('Concern', case=False, na=False)]) if 'tickets_data_type' in df.columns else 0}</td><td>Potential issues flagged</td></tr>
+                <tr><td>📚 Lessons Learned</td><td>{len(df[df['tickets_data_type'].astype(str).str.contains('Lesson', case=False, na=False)]) if 'tickets_data_type' in df.columns else 0}</td><td>Historical learnings</td></tr>
             </table>
             
             <table>
@@ -3862,7 +3862,7 @@ def main():
                         df.to_excel(writer, sheet_name='All Records', index=False)
                         
                         # Add summary sheet with type breakdown
-                        type_col = 'tickets_data_type_1'
+                        type_col = 'tickets_data_type'
                         escalations = len(df[df[type_col].astype(str).str.contains('Escalation', case=False, na=False)]) if type_col in df.columns else len(df)
                         concerns = len(df[df[type_col].astype(str).str.contains('Concern', case=False, na=False)]) if type_col in df.columns else 0
                         lessons = len(df[df[type_col].astype(str).str.contains('Lesson', case=False, na=False)]) if type_col in df.columns else 0
@@ -4082,7 +4082,7 @@ def render_dashboard(df):
     col1, col2, col3, col4 = st.columns(4)
     
     # Count by ticket type
-    type_col = 'tickets_data_type_1'
+    type_col = 'tickets_data_type'
     total = len(df)
     escalations_count = len(df[df[type_col].astype(str).str.contains('Escalation', case=False, na=False)]) if type_col in df.columns else total
     concerns_count = len(df[df[type_col].astype(str).str.contains('Concern', case=False, na=False)]) if type_col in df.columns else 0
