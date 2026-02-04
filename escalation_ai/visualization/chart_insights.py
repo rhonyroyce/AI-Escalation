@@ -3,6 +3,13 @@ Vision-based Chart Insight Analyzer.
 
 Uses local vision models (Ollama) to analyze chart images and generate
 deep, data-driven insights for the Dashboard.
+
+Recommended model: llama3.2-vision:latest
+- Consistently generates accurate, data-specific insights
+- Works reliably with Ollama vision API
+- Average response time: 3-20 seconds depending on chart complexity
+
+Note: qwen3-vl models may have compatibility issues with Ollama image API
 """
 
 import os
@@ -12,10 +19,9 @@ import json
 from typing import Dict, List, Optional, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-logger = logging.getLogger(__name__)
+from ..core.config import VISION_MODEL, VISION_MODEL_TIMEOUT, OLLAMA_BASE_URL
 
-# Default Ollama endpoint
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+logger = logging.getLogger(__name__)
 
 
 class ChartInsightAnalyzer:
@@ -28,16 +34,18 @@ class ChartInsightAnalyzer:
     - Generate actionable recommendations
     """
 
-    def __init__(self, model: str = "llama3.2-vision:latest", base_url: str = None):
+    def __init__(self, model: str = None, base_url: str = None, timeout: int = None):
         """
         Initialize the chart insight analyzer.
 
         Args:
-            model: Ollama vision model to use (llama3.2-vision:latest or qwen3-vl:8b)
-            base_url: Ollama API base URL (default: http://localhost:11434)
+            model: Ollama vision model to use (default from config: llama3.2-vision:latest)
+            base_url: Ollama API base URL (default from config)
+            timeout: Request timeout in seconds (default from config: 120)
         """
-        self.model = model
+        self.model = model or VISION_MODEL
         self.base_url = base_url or OLLAMA_BASE_URL
+        self.timeout = timeout or VISION_MODEL_TIMEOUT
         self.insights_cache: Dict[str, Dict] = {}
 
     def _encode_image(self, image_path: str) -> str:
@@ -81,7 +89,7 @@ class ChartInsightAnalyzer:
             response = requests.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
-                timeout=60
+                timeout=self.timeout
             )
 
             if response.status_code == 200:
@@ -305,11 +313,21 @@ Be specific about numbers, categories, or values you can see in the chart. Keep 
 _chart_analyzer: Optional[ChartInsightAnalyzer] = None
 
 
-def get_chart_analyzer(model: str = "llama3.2-vision:latest") -> ChartInsightAnalyzer:
-    """Get or create the chart analyzer singleton."""
+def get_chart_analyzer(model: str = None, timeout: int = None) -> ChartInsightAnalyzer:
+    """
+    Get or create the chart analyzer singleton.
+
+    Args:
+        model: Vision model to use (default: from config, recommended: llama3.2-vision:latest)
+        timeout: Request timeout in seconds (default: from config)
+
+    Returns:
+        ChartInsightAnalyzer instance
+    """
     global _chart_analyzer
-    if _chart_analyzer is None or _chart_analyzer.model != model:
-        _chart_analyzer = ChartInsightAnalyzer(model=model)
+    target_model = model or VISION_MODEL
+    if _chart_analyzer is None or _chart_analyzer.model != target_model:
+        _chart_analyzer = ChartInsightAnalyzer(model=model, timeout=timeout)
     return _chart_analyzer
 
 

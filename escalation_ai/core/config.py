@@ -110,6 +110,15 @@ RECURRENCE_ENCODERS_PATH = "recurrence_encoders.pkl"
 RESOLUTION_MODEL_PATH = "resolution_model.pkl"
 
 # ==========================================
+# VISION MODEL SETTINGS (for chart insights)
+# ==========================================
+# Recommended: llama3.2-vision:latest (best compatibility with Ollama)
+# Alternative: qwen3-vl:8b (may have compatibility issues)
+VISION_MODEL = os.environ.get("VISION_MODEL", "llama3.2-vision:latest")
+VISION_MODEL_TIMEOUT = int(os.environ.get("VISION_MODEL_TIMEOUT", "120"))
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+
+# ==========================================
 # OUTPUT DIRECTORIES
 # ==========================================
 from pathlib import Path
