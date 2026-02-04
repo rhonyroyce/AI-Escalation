@@ -53,6 +53,190 @@ feedback_learner = None
 price_catalog = None
 
 
+# ============================================================================
+# EXCEL API REFRESH UTILITY
+# ============================================================================
+
+def is_excel_available():
+    """Check if Microsoft Excel is available on this system."""
+    import platform
+    if platform.system() != 'Windows':
+        return False
+    try:
+        import win32com.client
+        return True
+    except ImportError:
+        try:
+            import xlwings
+            return True
+        except ImportError:
+            return False
+
+
+def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tuple:
+    """
+    Refresh all data connections (APIs, Power Query) in an Excel file.
+
+    Args:
+        file_path: Path to the Excel file
+        timeout_seconds: Maximum time to wait for refresh
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    import platform
+    import time
+
+    if platform.system() != 'Windows':
+        return False, "Excel refresh only available on Windows"
+
+    print_status("refresh", "Checking for API connections in Excel...", "🔄")
+
+    # Try xlwings first (more reliable)
+    try:
+        import xlwings as xw
+
+        # Open Excel in the background
+        app = xw.App(visible=False, add_book=False)
+        app.display_alerts = False
+        app.screen_updating = False
+
+        try:
+            # Open the workbook
+            wb = app.books.open(file_path)
+
+            # Check if there are any connections
+            has_connections = False
+            connection_count = 0
+
+            try:
+                connection_count = wb.api.Connections.Count
+                if connection_count > 0:
+                    has_connections = True
+            except:
+                pass
+
+            try:
+                query_count = wb.api.Queries.Count
+                if query_count > 0:
+                    has_connections = True
+                    connection_count += query_count
+            except:
+                pass
+
+            if not has_connections:
+                wb.close()
+                app.quit()
+                return False, "No API/Power Query connections found - using file as-is"
+
+            print_status("refresh", f"Found {connection_count} data connection(s) - refreshing...", "📡")
+
+            # Refresh all connections
+            wb.api.RefreshAll()
+
+            # Wait for refresh to complete
+            start_time = time.time()
+            while time.time() - start_time < timeout_seconds:
+                try:
+                    # Check if any query is still refreshing
+                    still_refreshing = False
+                    for conn in wb.api.Connections:
+                        try:
+                            if conn.OLEDBConnection.Refreshing:
+                                still_refreshing = True
+                                break
+                        except:
+                            pass
+                except:
+                    pass
+
+                if not still_refreshing:
+                    break
+                time.sleep(1)
+
+            # Save the workbook
+            wb.save()
+            wb.close()
+            app.quit()
+
+            return True, f"Successfully refreshed {connection_count} data connection(s)"
+
+        except Exception as e:
+            try:
+                wb.close()
+            except:
+                pass
+            app.quit()
+            raise e
+
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.warning(f"xlwings refresh failed: {e}, trying win32com...")
+
+    # Fallback to win32com
+    try:
+        import win32com.client
+        import pythoncom
+
+        pythoncom.CoInitialize()
+
+        excel = win32com.client.Dispatch("Excel.Application")
+        excel.Visible = False
+        excel.DisplayAlerts = False
+
+        try:
+            wb = excel.Workbooks.Open(file_path)
+
+            # Check for connections
+            connection_count = wb.Connections.Count
+
+            if connection_count == 0:
+                wb.Close(SaveChanges=False)
+                excel.Quit()
+                pythoncom.CoUninitialize()
+                return False, "No API/Power Query connections found - using file as-is"
+
+            print_status("refresh", f"Found {connection_count} data connection(s) - refreshing...", "📡")
+
+            # Refresh all
+            wb.RefreshAll()
+
+            # Wait for background queries
+            time.sleep(5)  # Initial wait
+
+            # Try to wait for refresh completion
+            start_time = time.time()
+            while time.time() - start_time < timeout_seconds:
+                try:
+                    excel.CalculateUntilAsyncQueriesDone()
+                    break
+                except:
+                    time.sleep(2)
+
+            # Save and close
+            wb.Save()
+            wb.Close(SaveChanges=True)
+            excel.Quit()
+            pythoncom.CoUninitialize()
+
+            return True, f"Successfully refreshed {connection_count} data connection(s)"
+
+        except Exception as e:
+            try:
+                wb.Close(SaveChanges=False)
+            except:
+                pass
+            excel.Quit()
+            pythoncom.CoUninitialize()
+            return False, f"Error refreshing Excel: {str(e)}"
+
+    except ImportError:
+        return False, "Neither xlwings nor pywin32 installed (pip install xlwings pywin32)"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
+
 def print_banner(text, char="=", width=60):
     """Print a formatted banner to console."""
     print()
@@ -285,19 +469,34 @@ class EscalationPipeline:
         return True
     
     def load_data(self, file_path=None):
-        """Load data from file."""
+        """Load data from file, refreshing API connections if available."""
         print_banner("LOADING DATA", "-")
-        
+
         if file_path is None:
             root = tk.Tk()
             root.withdraw()
-            file_path = filedialog.askopenfilename(title="Select Log File")
+            file_path = filedialog.askopenfilename(
+                title="Select Input Excel File",
+                filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+            )
             if not file_path:
                 return False
-        
+
         self.file_path = file_path
         print_status("load", f"File: {os.path.basename(file_path)}", "📁")
-        
+
+        # Try to refresh Excel API connections before loading (Windows only)
+        if file_path.lower().endswith(('.xlsx', '.xls')):
+            if is_excel_available():
+                print_status("load", "Excel detected - checking for API connections...", "🔍")
+                success, msg = refresh_excel_connections(file_path)
+                if success:
+                    print_status("load", msg, "✅")
+                else:
+                    print_status("load", msg, "ℹ️")
+            else:
+                print_status("load", "Excel not available - loading file as-is", "ℹ️")
+
         try:
             xls = pd.ExcelFile(file_path)
             sheet = next((s for s in xls.sheet_names if 'raw' in str(s).lower()), xls.sheet_names[0])
@@ -308,11 +507,11 @@ class EscalationPipeline:
             logger.warning(f"Excel read failed, trying CSV: {e}")
             self.df = pd.read_csv(file_path, engine='python')
             self.df_raw = self.df.copy()
-        
+
         if not validate_data_quality(self.df):
             messagebox.showerror("Data Error", "The selected file contains no usable data.")
             return False
-        
+
         print_status("load", f"Loaded {len(self.df):,} tickets with {len(self.df.columns)} columns", "✅")
         return True
     
