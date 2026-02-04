@@ -819,7 +819,7 @@ class ExcelReportWriter:
         """Write the Dashboard sheet with embedded chart images in a grid layout."""
         ws = self.wb.create_sheet("Dashboard", 1)
         ws.sheet_view.showGridLines = False
-        
+
         ws['A1'] = "VISUAL ANALYTICS DASHBOARD"
         ws['A1'].font = self.title_font
         ws.merge_cells('A1:Z1')
@@ -827,7 +827,7 @@ class ExcelReportWriter:
         ws['A3'] = "📊 Strategic Visual Analysis - Embedded Charts"
         ws['A3'].font = Font(size=11, italic=True, color="666666")
         ws.merge_cells('A3:Z3')
-        
+
         # Category display order and labels
         category_labels = {
             'risk': '📊 Risk Analysis',
@@ -837,22 +837,62 @@ class ExcelReportWriter:
             'predictive': '🤖 Predictive Models',
             'financial': '💰 Financial Impact',
         }
-        
+
+        # Chart summaries - map filename patterns to short descriptions
+        chart_summaries = {
+            'friction_by_category': 'Friction Score by Category: Higher scores indicate more operational friction. Focus on top categories.',
+            'risk_by_origin': 'Risk Distribution by Origin: Shows where escalations originate. Target high-volume sources.',
+            'severity_distribution': 'Severity Distribution: Breakdown of ticket severity levels across the dataset.',
+            'friction_by_engineer': 'Engineer Friction Scores: Average friction per engineer. Higher = more complex issues handled.',
+            'engineer_learning': 'Engineer Learning Status: Completed vs pending learning items per engineer.',
+            'friction_by_lob': 'LOB Friction Analysis: Business line friction scores. Prioritize high-friction LOBs.',
+            'lob_category_matrix': 'LOB vs Category Matrix: Heatmap showing issue concentration by business line.',
+            'root_cause': 'Root Cause Analysis: Top categories driving escalations. Address top 3 for 80% impact.',
+            'category_drift': 'Category Drift Detection: Compares baseline vs recent period distributions.',
+            'distribution_comparison': 'Distribution Comparison: Baseline (60%) vs Recent (40%) category shifts.',
+            'recurrence': 'Recurrence Prediction: AI-predicted vs actual recurrence rates by category.',
+            'resolution_time': 'Resolution Time Distribution: Box plot of resolution days by category.',
+            'financial_impact': 'Financial Impact: Direct costs, indirect costs, and potential savings by category.',
+            'cost_breakdown': 'Cost Breakdown: Detailed cost analysis across different impact categories.',
+            'threshold': 'Smart Thresholds: Metric trends with auto-calculated warning/critical thresholds.',
+            'sla_compliance': 'SLA Compliance Funnel: Shows ticket flow through SLA stages.',
+            'cost_avoidance': 'Cost Avoidance Waterfall: Potential savings from process improvements.',
+            'engineer_quadrant': 'Engineer Quadrant Analysis: Speed vs Quality matrix for engineer performance.',
+            'executive_scorecard': 'Executive Scorecard: High-level KPIs and performance indicators.',
+        }
+
         # Grid layout settings - 4.5 x 2.8 inches at 96 DPI (landscape ratio)
         img_width = 432   # 4.5 inches * 96 DPI
         img_height = 269  # 2.8 inches * 96 DPI
         cols_per_row = 2  # 2 charts per row
         col_positions = ['A', 'N']  # Column positions (13 cols apart to prevent overlap with 432px wide charts)
-        rows_per_chart = 20  # Excel rows per chart (extra spacing)
-        header_gap_rows = 2  # Gap between header and first chart row
+        summary_row_height = 2  # Rows for summary text above each chart
+        chart_rows = 18  # Excel rows for chart image
+        rows_per_chart = summary_row_height + chart_rows + 2  # Summary + chart + gap
+        header_gap_rows = 2  # Gap between category header and first chart
 
         # Set column widths - use 8 for wider columns to fill more horizontal space
         for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']:
             ws.column_dimensions[col].width = 8
-        
+
+        # Summary text styling
+        summary_font = Font(size=9, italic=True, color="333333")
+        summary_fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+
         current_row = 5
         images_embedded = 0
-        
+
+        def get_chart_summary(chart_path):
+            """Extract summary for a chart based on filename."""
+            filename = os.path.basename(chart_path).lower()
+            for key, summary in chart_summaries.items():
+                if key in filename:
+                    return summary
+            # Default summary if no match
+            chart_name = os.path.splitext(os.path.basename(chart_path))[0]
+            chart_name = chart_name.replace('_', ' ').title()
+            return f"{chart_name}: Visual analysis of escalation data patterns."
+
         if chart_paths and isinstance(chart_paths, dict):
             for category, label in category_labels.items():
                 if category in chart_paths and chart_paths[category]:
@@ -862,49 +902,99 @@ class ExcelReportWriter:
                     ws.row_dimensions[current_row].height = 25
                     ws.merge_cells(f'A{current_row}:Z{current_row}')
                     current_row += header_gap_rows  # Gap after header
-                    
-                    # Embed charts in grid layout
+
+                    # Track chart positions for this category
                     chart_list = chart_paths[category]
+                    chart_positions = []  # Store (row, col_idx) for each chart
+
                     for i, chart_path in enumerate(chart_list):
                         if os.path.exists(chart_path):
-                            try:
-                                img = XLImage(chart_path)
-                                img.width = img_width
-                                img.height = img_height
-                                
-                                # Calculate grid position
-                                col_idx = i % cols_per_row
-                                row_offset = (i // cols_per_row) * rows_per_chart
-                                
-                                # Place image at grid position
-                                cell_ref = f'{col_positions[col_idx]}{current_row + row_offset}'
-                                ws.add_image(img, cell_ref)
-                                images_embedded += 1
-                                
-                            except Exception as e:
-                                logger.warning(f"Failed to embed chart {chart_path}: {e}")
-                    
-                    # Calculate total rows used for this category
-                    num_rows_of_charts = (len(chart_list) + cols_per_row - 1) // cols_per_row
-                    current_row += num_rows_of_charts * rows_per_chart + 2  # +2 for gap between categories
-        
+                            col_idx = i % cols_per_row
+                            row_in_grid = i // cols_per_row
+                            chart_positions.append((row_in_grid, col_idx, chart_path))
+
+                    # Process charts row by row
+                    if chart_positions:
+                        max_row_in_grid = max(pos[0] for pos in chart_positions)
+
+                        for row_in_grid in range(max_row_in_grid + 1):
+                            # Get charts in this row
+                            row_charts = [(col_idx, path) for (r, col_idx, path) in chart_positions if r == row_in_grid]
+
+                            # Write summary text for each chart in this row
+                            summary_start_row = current_row
+                            ws.row_dimensions[summary_start_row].height = 30
+
+                            for col_idx, chart_path in row_charts:
+                                col_letter = col_positions[col_idx]
+                                end_col = 'L' if col_idx == 0 else 'Z'
+
+                                # Write summary
+                                summary = get_chart_summary(chart_path)
+                                cell = ws[f'{col_letter}{summary_start_row}']
+                                cell.value = summary
+                                cell.font = summary_font
+                                cell.fill = summary_fill
+                                cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+                                ws.merge_cells(f'{col_letter}{summary_start_row}:{end_col}{summary_start_row}')
+
+                            # Position for chart images (below summary)
+                            chart_image_row = summary_start_row + summary_row_height
+
+                            for col_idx, chart_path in row_charts:
+                                try:
+                                    img = XLImage(chart_path)
+                                    img.width = img_width
+                                    img.height = img_height
+
+                                    cell_ref = f'{col_positions[col_idx]}{chart_image_row}'
+                                    ws.add_image(img, cell_ref)
+                                    images_embedded += 1
+
+                                except Exception as e:
+                                    logger.warning(f"Failed to embed chart {chart_path}: {e}")
+
+                            # Move to next row of charts
+                            current_row += rows_per_chart
+
+                    current_row += 2  # Gap between categories
+
         elif chart_paths and isinstance(chart_paths, list):
-            # Fallback for list format - also use grid
+            # Fallback for list format - also use grid with summaries
             for i, path in enumerate(chart_paths[:18]):
                 if os.path.exists(path):
+                    col_idx = i % cols_per_row
+                    row_in_grid = i // cols_per_row
+
+                    # Calculate row position
+                    base_row = 5 + row_in_grid * rows_per_chart
+
+                    # Only write summary for first chart in each row position
+                    if col_idx == 0 or i == 0:
+                        ws.row_dimensions[base_row].height = 30
+
+                    # Write summary
+                    col_letter = col_positions[col_idx]
+                    end_col = 'L' if col_idx == 0 else 'Z'
+                    summary = get_chart_summary(path)
+                    cell = ws[f'{col_letter}{base_row}']
+                    cell.value = summary
+                    cell.font = summary_font
+                    cell.fill = summary_fill
+                    cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+                    ws.merge_cells(f'{col_letter}{base_row}:{end_col}{base_row}')
+
                     try:
                         img = XLImage(path)
                         img.width = img_width
                         img.height = img_height
-                        
-                        col_idx = i % cols_per_row
-                        row_offset = (i // cols_per_row) * rows_per_chart
-                        cell_ref = f'{col_positions[col_idx]}{5 + row_offset}'
+
+                        cell_ref = f'{col_positions[col_idx]}{base_row + summary_row_height}'
                         ws.add_image(img, cell_ref)
                         images_embedded += 1
                     except Exception as e:
                         logger.warning(f"Failed to embed {path}: {e}")
-        
+
         if images_embedded == 0:
             ws['A5'] = "No charts were generated or embedded."
         else:
