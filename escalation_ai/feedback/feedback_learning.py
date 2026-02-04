@@ -14,7 +14,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from ..core.config import (
-    FEEDBACK_FILE, FEEDBACK_WEIGHT, ANCHORS, SUB_CATEGORIES,
+    FEEDBACK_FILE, RESOLUTION_FEEDBACK_FILE, FEEDBACK_WEIGHT, ANCHORS, SUB_CATEGORIES,
     REPORT_VERSION, MIN_CLASSIFICATION_CONFIDENCE
 )
 
@@ -473,3 +473,206 @@ def get_feedback_learner() -> FeedbackLearning:
     if _feedback_learner is None:
         _feedback_learner = FeedbackLearning()
     return _feedback_learner
+
+
+class ResolutionFeedbackLearning:
+    """
+    Human-in-the-loop learning system for resolution time prediction improvement.
+
+    Workflow:
+    1. Run analysis → generates/updates resolution_feedback.xlsx
+    2. User reviews predictions and enters Human_Expected_Days
+    3. Next run loads feedback to improve resolution time predictions
+    """
+
+    def __init__(self, feedback_path: Optional[str] = None):
+        self.feedback_path = feedback_path or RESOLUTION_FEEDBACK_FILE
+        self.feedback_data: Dict[str, Dict] = {}  # identity -> feedback record
+        self.stats = {'loaded': 0, 'with_human_feedback': 0}
+
+    def load_feedback(self) -> Dict[str, Dict]:
+        """
+        Load existing resolution time feedback from Excel file.
+
+        Returns dict of {Identity: {Human_Expected_Days, Actual_Resolution_Days, ...}}
+        """
+        if not os.path.exists(self.feedback_path):
+            logger.info(f"No resolution feedback file found at {self.feedback_path}")
+            return {}
+
+        try:
+            df_feedback = pd.read_excel(self.feedback_path, sheet_name='Resolution Feedback')
+
+            for _, row in df_feedback.iterrows():
+                identity = str(row.get('Identity', '')).strip()
+                if not identity or identity.lower() in ['', 'nan', 'none']:
+                    continue
+
+                human_days = row.get('Human_Expected_Days')
+                actual_days = row.get('Actual_Resolution_Days')
+
+                self.feedback_data[identity] = {
+                    'AI_Category': row.get('AI_Category', ''),
+                    'AI_Sub_Category': row.get('AI_Sub_Category', ''),
+                    'Predicted_Resolution_Days': row.get('Predicted_Resolution_Days'),
+                    'Human_Expected_Days': human_days if pd.notna(human_days) else None,
+                    'Actual_Resolution_Days': actual_days if pd.notna(actual_days) else None,
+                    'Notes': row.get('Notes', '')
+                }
+
+                if pd.notna(human_days):
+                    self.stats['with_human_feedback'] += 1
+
+            self.stats['loaded'] = len(self.feedback_data)
+
+            if self.feedback_data:
+                logger.info(f"✓ Loaded resolution feedback: {self.stats['loaded']} records, "
+                           f"{self.stats['with_human_feedback']} with human feedback")
+
+        except Exception as e:
+            logger.warning(f"Failed to load resolution feedback: {e}")
+
+        return self.feedback_data
+
+    def get_human_expected_days(self, identity: str) -> Optional[float]:
+        """Get human-provided expected days for a specific ticket."""
+        if identity in self.feedback_data:
+            return self.feedback_data[identity].get('Human_Expected_Days')
+        return None
+
+    def save_for_review(self, df: pd.DataFrame, output_dir: str) -> str:
+        """
+        Export resolution predictions to Excel for user review and correction.
+
+        IMPORTANT: This method preserves existing Human_Expected_Days entries
+        from previous feedback files, allowing continuous human-in-the-loop learning.
+        """
+        # Load existing feedback to preserve user corrections
+        existing_feedback = {}
+        if os.path.exists(self.feedback_path):
+            try:
+                df_existing = pd.read_excel(self.feedback_path, sheet_name='Resolution Feedback')
+                for _, row in df_existing.iterrows():
+                    identity = str(row.get('Identity', '')).strip()
+                    if identity and identity.lower() not in ['', 'nan', 'none']:
+                        human_days = row.get('Human_Expected_Days')
+                        actual_days = row.get('Actual_Resolution_Days')
+                        notes = row.get('Notes', '')
+
+                        existing_feedback[identity] = {
+                            'Human_Expected_Days': human_days if pd.notna(human_days) else None,
+                            'Actual_Resolution_Days': actual_days if pd.notna(actual_days) else None,
+                            'Notes': notes if pd.notna(notes) and str(notes).lower() not in ['', 'nan'] else ''
+                        }
+
+                logger.info(f"Loaded {len(existing_feedback)} existing resolution feedback entries")
+            except Exception as e:
+                logger.warning(f"Could not load existing resolution feedback: {e}")
+
+        # Build feedback rows
+        feedback_rows = []
+        for idx, row in df.iterrows():
+            identity = str(row.get('Identity', idx))
+
+            # Preserve existing human feedback
+            existing = existing_feedback.get(identity, {})
+
+            feedback_rows.append({
+                'Identity': identity,
+                'AI_Category': row.get('AI_Category', 'Unclassified'),
+                'AI_Sub_Category': row.get('AI_Sub_Category', 'General'),
+                'Predicted_Resolution_Days': round(float(row.get('Predicted_Resolution_Days', 0)), 2)
+                    if pd.notna(row.get('Predicted_Resolution_Days')) else '',
+                'Human_Expected_Days': existing.get('Human_Expected_Days', ''),
+                'Actual_Resolution_Days': row.get('Actual_Resolution_Days', existing.get('Actual_Resolution_Days', '')),
+                'Resolution_Prediction_Confidence': round(float(row.get('Resolution_Prediction_Confidence', 0)), 2)
+                    if pd.notna(row.get('Resolution_Prediction_Confidence')) else '',
+                'Notes': existing.get('Notes', '')
+            })
+
+        df_feedback = pd.DataFrame(feedback_rows)
+        export_path = os.path.join(output_dir, 'resolution_feedback.xlsx')
+
+        # Create instructions sheet
+        instructions_df = pd.DataFrame({
+            'Instructions': [
+                'RESOLUTION TIME FEEDBACK',
+                '',
+                'This file helps improve AI resolution time predictions through your feedback.',
+                '',
+                'HOW TO PROVIDE FEEDBACK:',
+                '1. Go to the "Resolution Feedback" sheet',
+                '2. Review each row - check if Predicted_Resolution_Days is reasonable',
+                '3. Enter your expected resolution time in "Human_Expected_Days"',
+                '4. When tickets are closed, enter "Actual_Resolution_Days"',
+                '5. Save this file',
+                '6. Next analysis run will learn from your feedback!',
+                '',
+                'COLUMNS:',
+                '• Identity: Unique ticket identifier',
+                '• AI_Category: AI-assigned category',
+                '• AI_Sub_Category: AI-assigned sub-category',
+                '• Predicted_Resolution_Days: AI prediction',
+                '• Human_Expected_Days: YOUR estimate (edit this!)',
+                '• Actual_Resolution_Days: Real resolution time',
+                '• Resolution_Prediction_Confidence: AI confidence (0-1)',
+                '• Notes: Any additional notes',
+                '',
+                f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}',
+                f'Version: {REPORT_VERSION}'
+            ]
+        })
+
+        with pd.ExcelWriter(export_path, engine='openpyxl') as writer:
+            instructions_df.to_excel(writer, sheet_name='Instructions', index=False)
+            df_feedback.to_excel(writer, sheet_name='Resolution Feedback', index=False)
+            self._format_feedback_workbook(writer, df_feedback)
+
+        # Also save to working directory for next run
+        try:
+            with pd.ExcelWriter(self.feedback_path, engine='openpyxl') as wd_writer:
+                instructions_df.to_excel(wd_writer, sheet_name='Instructions', index=False)
+                df_feedback.to_excel(wd_writer, sheet_name='Resolution Feedback', index=False)
+                self._format_feedback_workbook(wd_writer, df_feedback)
+            logger.info(f"✓ Resolution feedback file updated at: {self.feedback_path}")
+        except Exception as e:
+            logger.warning(f"Could not save resolution feedback to working directory: {e}")
+
+        logger.info(f"✓ Resolution feedback Excel saved to: {export_path}")
+        return export_path
+
+    def _format_feedback_workbook(self, writer, df_feedback: pd.DataFrame):
+        """Apply formatting to resolution feedback workbook."""
+        ws = writer.sheets['Resolution Feedback']
+
+        # Column widths
+        widths = {'A': 15, 'B': 25, 'C': 25, 'D': 22, 'E': 20, 'F': 22, 'G': 28, 'H': 40}
+        for col, width in widths.items():
+            ws.column_dimensions[col].width = width
+
+        # Header styling
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="004C97", end_color="004C97", fill_type="solid")
+
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+
+        # Highlight editable columns (Human_Expected_Days, Notes) with light yellow
+        editable_fill = PatternFill(start_color="FFFDE7", end_color="FFFDE7", fill_type="solid")
+        for row_idx in range(2, len(df_feedback) + 2):
+            ws.cell(row=row_idx, column=5).fill = editable_fill  # Human_Expected_Days
+            ws.cell(row=row_idx, column=8).fill = editable_fill  # Notes
+
+        ws.freeze_panes = 'A2'
+
+
+# Global resolution feedback learner instance
+_resolution_feedback_learner: Optional[ResolutionFeedbackLearning] = None
+
+def get_resolution_feedback_learner() -> ResolutionFeedbackLearning:
+    """Get or create the resolution feedback learner singleton."""
+    global _resolution_feedback_learner
+    if _resolution_feedback_learner is None:
+        _resolution_feedback_learner = ResolutionFeedbackLearning()
+    return _resolution_feedback_learner

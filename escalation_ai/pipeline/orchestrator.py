@@ -31,7 +31,7 @@ from ..core.ai_engine import OllamaBrain
 from ..core.utils import clean_text
 from ..classification import classify_rows
 from ..scoring import calculate_strategic_friction
-from ..feedback import FeedbackLearning, PriceCatalog
+from ..feedback import FeedbackLearning, ResolutionFeedbackLearning, PriceCatalog
 from ..predictors import (
     apply_recurrence_predictions,
     apply_similar_ticket_analysis,
@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 
 # Global instances
 feedback_learner = None
+resolution_feedback_learner = None
 price_catalog = None
 
 
@@ -259,6 +260,14 @@ def get_feedback_learner():
     return feedback_learner
 
 
+def get_resolution_feedback_learner():
+    """Get or create the global resolution feedback learner instance."""
+    global resolution_feedback_learner
+    if resolution_feedback_learner is None:
+        resolution_feedback_learner = ResolutionFeedbackLearning()
+    return resolution_feedback_learner
+
+
 def get_price_catalog():
     """Get or create the global price catalog instance."""
     global price_catalog
@@ -437,6 +446,7 @@ class EscalationPipeline:
         self.file_path = None
         self.output_path = None
         self.feedback_learner = None
+        self.resolution_feedback_learner = None
         self.price_catalog = None
         self.show_progress = True
         
@@ -461,7 +471,11 @@ class EscalationPipeline:
         print_status("init", "Loading feedback learning system...", "📚")
         self.feedback_learner = get_feedback_learner()
         self.feedback_learner.load_feedback(self.ai)
-        
+
+        # Initialize resolution feedback learner
+        self.resolution_feedback_learner = get_resolution_feedback_learner()
+        self.resolution_feedback_learner.load_feedback()
+
         self.price_catalog = get_price_catalog()
         self.price_catalog.load_catalog()
         print_status("init", "Initialization complete!", "✅")
@@ -764,7 +778,7 @@ class EscalationPipeline:
         return self.df
 
     def _save_feedback_for_review(self):
-        """Save current classifications to feedback file for human review."""
+        """Save current classifications and resolution predictions to feedback files for human review."""
         try:
             # Determine output directory (use file's directory or current directory)
             if self.file_path:
@@ -772,9 +786,15 @@ class EscalationPipeline:
             else:
                 output_dir = os.getcwd()
 
+            # Save classification feedback
             print_status("feedback", "Updating classification feedback file for human review...", "📝")
             feedback_path = self.feedback_learner.save_for_review(self.df, output_dir)
             print_status("feedback", f"Feedback file updated: {os.path.basename(feedback_path)}", "✅")
+
+            # Save resolution time feedback
+            print_status("feedback", "Updating resolution feedback file for human review...", "📝")
+            resolution_path = self.resolution_feedback_learner.save_for_review(self.df, output_dir)
+            print_status("feedback", f"Resolution feedback updated: {os.path.basename(resolution_path)}", "✅")
         except Exception as e:
             logger.warning(f"Could not save feedback file: {e}")
             print_status("feedback", f"Warning: Could not save feedback file: {e}", "⚠️")

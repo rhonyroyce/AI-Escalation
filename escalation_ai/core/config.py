@@ -98,6 +98,7 @@ RECIDIVISM_PENALTY_MEDIUM = 1.25   # 25% score increase for possible repeats
 # FEEDBACK/REINFORCEMENT LEARNING SETTINGS
 # ==========================================
 FEEDBACK_FILE = "classification_feedback.xlsx"
+RESOLUTION_FEEDBACK_FILE = "resolution_feedback.xlsx"  # Persistent human feedback for resolution times
 FEEDBACK_WEIGHT = 0.4  # How much weight to give user feedback vs original anchors (0-1)
 SIMILARITY_FEEDBACK_PATH = "similarity_feedback.json"
 

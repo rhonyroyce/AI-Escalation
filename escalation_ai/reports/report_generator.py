@@ -840,67 +840,6 @@ class ExcelReportWriter:
             result = chr(65 + remainder) + result
         return result
     
-    def write_resolution_time_sheet(self, df):
-        """Write Resolution Time Analysis sheet."""
-        ws = self.wb.create_sheet("Resolution Time Analysis", 3)
-        
-        # Check if resolution time columns exist
-        res_cols = ['AI_Category', 'Actual_Resolution_Days', 'Predicted_Resolution_Days', 
-                   'Human_Expected_Days', 'Resolution_Prediction_Confidence']
-        
-        available = [c for c in res_cols if c in df.columns]
-        
-        if not available:
-            ws['A1'] = "Resolution Time Analysis"
-            ws['A1'].font = self.title_font
-            ws['A3'] = "No resolution time data available."
-            return
-        
-        # Title
-        ws['A1'] = "RESOLUTION TIME ANALYSIS"
-        ws['A1'].font = self.title_font
-        ws.merge_cells('A1:G1')
-        
-        # Summary metrics
-        if 'Actual_Resolution_Days' in df.columns and 'Predicted_Resolution_Days' in df.columns:
-            valid = df.dropna(subset=['Actual_Resolution_Days', 'Predicted_Resolution_Days'])
-            
-            if len(valid) > 0:
-                actual = valid['Actual_Resolution_Days']
-                predicted = valid['Predicted_Resolution_Days']
-                
-                mae = (actual - predicted).abs().mean()
-                
-                ws['A3'] = "Prediction Accuracy Metrics"
-                ws['A3'].font = Font(bold=True)
-                
-                ws['A4'] = f"Mean Absolute Error: {mae:.2f} days"
-                ws['A5'] = f"Sample Size: {len(valid)} tickets"
-                ws['A6'] = f"Average Actual: {actual.mean():.2f} days"
-                ws['A7'] = f"Average Predicted: {predicted.mean():.2f} days"
-        
-        # Write data table starting at row 10
-        start_row = 10
-        ws[f'A{start_row-1}'] = "Detailed Resolution Time Data"
-        ws[f'A{start_row-1}'].font = Font(bold=True)
-        
-        export_df = df[available].copy()
-        
-        for col_idx, col_name in enumerate(export_df.columns, 1):
-            ws.cell(row=start_row, column=col_idx).value = col_name
-        
-        self._style_header_row(ws, row=start_row, end_col=len(available))
-        
-        for row_idx, row in enumerate(export_df.itertuples(index=False), start_row + 1):
-            for col_idx, value in enumerate(row, 1):
-                cell = ws.cell(row=row_idx, column=col_idx)
-                if pd.isna(value):
-                    cell.value = ""
-                elif isinstance(value, float):
-                    cell.value = round(value, 2)
-                else:
-                    cell.value = str(value)
-    
     def write_raw_data(self, df_raw):
         """Write Raw Data backup sheet with Identity as primary key."""
         ws = self.wb.create_sheet("Raw Data", -1)
@@ -1230,9 +1169,8 @@ def generate_report(df, output_path, exec_summary_text, df_raw=None):
     
     # Write Scored Data - combines raw data with AI columns (no separate Raw Data sheet)
     writer.write_scored_data(df, df_raw)
-    
-    writer.write_resolution_time_sheet(df)
-    
+
+    # Note: Resolution Time Analysis moved to persistent resolution_feedback.xlsx
     # Note: Raw Data sheet removed - all data is now in Scored Data sheet
     
     writer.save()
