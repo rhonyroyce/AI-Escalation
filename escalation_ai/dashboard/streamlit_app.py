@@ -1448,8 +1448,8 @@ def chart_benchmark_gauge(metric_name, current_value, benchmark_data, unit=''):
     fig.update_layout(
         **theme,
         title=dict(text=metric_name, font=dict(size=14)),
-        height=250,
-        margin=dict(t=50, b=50, l=30, r=30)
+        height=280,
+        margin=dict(t=40, b=70, l=30, r=30)  # More bottom margin for annotations
     )
     
     return fig
