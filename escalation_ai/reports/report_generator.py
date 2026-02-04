@@ -87,16 +87,18 @@ class ExcelReportWriter:
         
         report_timestamp = datetime.now().strftime("%B %d, %Y at %H:%M")
         
-        # Set column widths for two-column sectional layout
-        ws.column_dimensions['A'].width = 2   # Left margin
-        ws.column_dimensions['B'].width = 4   # Left panel start
-        ws.column_dimensions['C'].width = 14  # Left panel content
-        ws.column_dimensions['D'].width = 14  # Left panel content
-        ws.column_dimensions['E'].width = 2   # Gutter between columns
-        ws.column_dimensions['F'].width = 4   # Right panel start
-        ws.column_dimensions['G'].width = 14  # Right panel content
-        ws.column_dimensions['H'].width = 14  # Right panel content
-        ws.column_dimensions['I'].width = 2   # Right margin
+        # Set column widths for WIDE two-column sectional layout (uses columns A-N)
+        ws.column_dimensions['A'].width = 2    # Left margin
+        ws.column_dimensions['B'].width = 6    # Left panel start
+        ws.column_dimensions['C'].width = 18   # Left panel content
+        ws.column_dimensions['D'].width = 18   # Left panel content
+        ws.column_dimensions['E'].width = 18   # Left panel content
+        ws.column_dimensions['F'].width = 3    # Gutter between columns
+        ws.column_dimensions['G'].width = 6    # Right panel start
+        ws.column_dimensions['H'].width = 18   # Right panel content
+        ws.column_dimensions['I'].width = 18   # Right panel content
+        ws.column_dimensions['J'].width = 18   # Right panel content
+        ws.column_dimensions['K'].width = 2    # Right margin
         
         # ═══════════════════════════════════════════════════════════════
         # HEADER SECTION
@@ -105,19 +107,19 @@ class ExcelReportWriter:
         ws.row_dimensions[2].height = 35  # Title row
         
         # Title with blue background banner
-        for col in range(2, 9):
+        for col in range(2, 11):  # B to J
             ws.cell(row=2, column=col).fill = self.header_fill
         ws['B2'] = f"📊 {REPORT_TITLE}"
         ws['B2'].font = Font(bold=True, size=20, color="FFFFFF")
         ws['B2'].alignment = Alignment(horizontal='center', vertical='center')
-        ws.merge_cells('B2:H2')
+        ws.merge_cells('B2:J2')
         
         # Subtitle row
         ws.row_dimensions[3].height = 22
         ws['B3'] = f"Generated: {report_timestamp}  •  Version: {REPORT_VERSION}  •  AI Model: {GEN_MODEL}"
         ws['B3'].font = Font(size=10, italic=True, color="666666")
         ws['B3'].alignment = Alignment(horizontal='center', vertical='center')
-        ws.merge_cells('B3:H3')
+        ws.merge_cells('B3:J3')
         
         # ═══════════════════════════════════════════════════════════════
         # KPI CARDS SECTION
@@ -128,7 +130,7 @@ class ExcelReportWriter:
         # Section header
         ws['B5'] = "📈 KEY METRICS AT A GLANCE"
         ws['B5'].font = Font(bold=True, size=12, color="004C97")
-        ws.merge_cells('B5:H5')
+        ws.merge_cells('B5:J5')
         
         # Calculate metrics
         total_tickets = len(df)
@@ -228,12 +230,12 @@ class ExcelReportWriter:
         ws.row_dimensions[13].height = 32  # Section header
 
         # Section header with dark banner
-        for col in range(2, 9):
+        for col in range(2, 11):  # B to J
             ws.cell(row=13, column=col).fill = fill_dark
         ws['B13'] = "⚡ AI EXECUTIVE SYNTHESIS"
         ws['B13'].font = Font(bold=True, size=14, color="FFFFFF")
         ws['B13'].alignment = Alignment(horizontal='center', vertical='center')
-        ws.merge_cells('B13:H13')
+        ws.merge_cells('B13:J13')
 
         current_row = 15
 
@@ -243,7 +245,7 @@ class ExcelReportWriter:
         ws.row_dimensions[current_row].height = 20
         ws.cell(row=current_row, column=2).value = "📊 SNAPSHOT"
         ws.cell(row=current_row, column=2).font = Font(bold=True, size=11, color="004C97")
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 1
 
         # Quick stats row with colored boxes
@@ -290,7 +292,7 @@ class ExcelReportWriter:
         cell.font = Font(bold=True, size=11, color="FFFFFF")
         cell.fill = fill_dark
         cell.alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 1
 
         # Extract key conclusion from text
@@ -307,7 +309,7 @@ class ExcelReportWriter:
         cell.fill = fill_insight
         cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
         cell.border = border_gray
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 2
 
         # ─────────────────────────────────────────────────────────────
@@ -317,7 +319,7 @@ class ExcelReportWriter:
         cell = ws.cell(row=current_row, column=2)
         cell.value = "🚦 STATUS AT A GLANCE"
         cell.font = Font(bold=True, size=10, color="004C97")
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 1
 
         # RAG status indicators
@@ -359,7 +361,7 @@ class ExcelReportWriter:
         cell.font = Font(bold=True, size=11, color="FFFFFF")
         cell.fill = self.header_fill
         cell.alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 1
 
         # MECE categories with impact indicators
@@ -437,7 +439,7 @@ class ExcelReportWriter:
                 cell.font = Font(size=9, bold=True, color="004C97")
                 cell.alignment = Alignment(horizontal='left', vertical='center')
                 cell.border = border_gray
-                ws.merge_cells(f'G{current_row}:H{current_row}')
+                ws.merge_cells(f'H{current_row}:J{current_row}')
 
                 current_row += 1
 
@@ -452,7 +454,7 @@ class ExcelReportWriter:
         cell.font = Font(bold=True, size=11, color="FFFFFF")
         cell.fill = self.header_fill
         cell.alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 1
 
         ws.row_dimensions[current_row].height = 40
@@ -463,7 +465,7 @@ class ExcelReportWriter:
         cell.fill = fill_warning
         cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
         cell.border = border_gray
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 2
 
         # ─────────────────────────────────────────────────────────────
@@ -475,7 +477,7 @@ class ExcelReportWriter:
         cell.font = Font(bold=True, size=11, color="FFFFFF")
         cell.fill = self.header_fill
         cell.alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 1
 
         # Priority headers
@@ -549,7 +551,7 @@ class ExcelReportWriter:
             cell.fill = row_fill
             cell.alignment = Alignment(horizontal='center', vertical='center')
             cell.border = border_gray
-            ws.merge_cells(f'G{current_row}:H{current_row}')
+            ws.merge_cells(f'H{current_row}:J{current_row}')
 
             current_row += 1
 
@@ -559,7 +561,7 @@ class ExcelReportWriter:
         cell = ws.cell(row=current_row, column=2)
         cell.value = "⭐ = Quick Win (High Impact, Low Effort) - Prioritize these first"
         cell.font = Font(size=9, italic=True, color="28A745")
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 2
 
         # ─────────────────────────────────────────────────────────────
@@ -569,23 +571,23 @@ class ExcelReportWriter:
         # Section headers (side by side)
         ws.row_dimensions[current_row].height = 26
 
-        # Left column header: KEY FINDINGS
+        # Left column header: KEY FINDINGS (B to E)
         cell = ws.cell(row=current_row, column=2)
         cell.value = "🔍 KEY FINDINGS"
         cell.font = Font(bold=True, size=11, color="FFFFFF")
         cell.fill = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
         cell.alignment = Alignment(horizontal='center', vertical='center')
         cell.border = border_gray
-        ws.merge_cells(f'B{current_row}:D{current_row}')
+        ws.merge_cells(f'B{current_row}:E{current_row}')
 
-        # Right column header: NEXT STEPS
-        cell = ws.cell(row=current_row, column=6)
+        # Right column header: NEXT STEPS (G to J)
+        cell = ws.cell(row=current_row, column=7)  # Column G
         cell.value = "🚀 NEXT STEPS"
         cell.font = Font(bold=True, size=11, color="FFFFFF")
         cell.fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
         cell.alignment = Alignment(horizontal='center', vertical='center')
         cell.border = border_gray
-        ws.merge_cells(f'F{current_row}:H{current_row}')
+        ws.merge_cells(f'G{current_row}:J{current_row}')
 
         current_row += 1
 
@@ -652,11 +654,12 @@ class ExcelReportWriter:
         for i in range(max(len(left_findings), len(right_steps))):
             ws.row_dimensions[current_row].height = 32
 
-            # Left column: Finding
+            # Left column: Finding (B=icon, C-E=finding text)
             if i < len(left_findings):
                 icon, finding = left_findings[i]
                 row_fill = fill_insight if i % 2 == 0 else PatternFill(start_color="FAFAFA", end_color="FAFAFA", fill_type="solid")
 
+                # Icon in column B
                 cell = ws.cell(row=current_row, column=2)
                 cell.value = icon
                 cell.font = Font(size=12)
@@ -664,34 +667,39 @@ class ExcelReportWriter:
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = border_gray
 
+                # Finding text merged across C:E
                 cell = ws.cell(row=current_row, column=3)
                 cell.value = finding
                 cell.font = Font(size=9, color="333333")
                 cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
                 cell.border = border_gray
-                ws.merge_cells(f'C{current_row}:D{current_row}')
+                ws.merge_cells(f'C{current_row}:E{current_row}')
 
-            # Right column: Next Step
+            # Right column: Next Step (G=number, H-I=step, J=timeline)
             if i < len(right_steps):
                 num, step, timeline = right_steps[i]
                 row_fill = fill_success if i % 2 == 0 else PatternFill(start_color="FAFAFA", end_color="FAFAFA", fill_type="solid")
 
-                cell = ws.cell(row=current_row, column=6)
+                # Number in column G
+                cell = ws.cell(row=current_row, column=7)
                 cell.value = num
                 cell.font = Font(bold=True, size=10, color="2E7D32")
                 cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = border_gray
 
-                cell = ws.cell(row=current_row, column=7)
+                # Step text merged across H:I
+                cell = ws.cell(row=current_row, column=8)
                 cell.value = step
                 cell.font = Font(size=9, color="333333")
                 cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
                 cell.border = border_gray
+                ws.merge_cells(f'H{current_row}:I{current_row}')
 
-                cell = ws.cell(row=current_row, column=8)
+                # Timeline in column J
+                cell = ws.cell(row=current_row, column=10)
                 cell.value = timeline
                 cell.font = Font(size=8, italic=True, color="666666")
                 cell.fill = row_fill
@@ -731,7 +739,7 @@ class ExcelReportWriter:
         cell.fill = callout_fill
         cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
         cell.border = callout_border
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
 
         current_row += 2
 
@@ -744,7 +752,7 @@ class ExcelReportWriter:
         cell.font = Font(bold=True, size=11, color="FFFFFF")
         cell.fill = fill_dark
         cell.alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 1
 
         # Parse and display AI synthesis content
@@ -752,7 +760,7 @@ class ExcelReportWriter:
             # Split into paragraphs/sections
             paragraphs = [p.strip() for p in exec_summary_text.split('\n\n') if p.strip()]
 
-            for para in paragraphs[:12]:  # Limit to 12 sections to avoid overflow
+            for para in paragraphs[:20]:  # Allow up to 20 sections for full AI analysis
                 # Clean up markdown formatting
                 para_clean = re.sub(r'\*\*([^*]+)\*\*', r'\1', para)
                 para_clean = re.sub(r'^#+\s*', '', para_clean, flags=re.MULTILINE)
@@ -765,26 +773,27 @@ class ExcelReportWriter:
                 is_header = para_clean.isupper() or para_clean.startswith('SECTION') or para_clean.startswith('THE BOTTOM LINE')
 
                 if is_header:
-                    ws.row_dimensions[current_row].height = 22
+                    ws.row_dimensions[current_row].height = 26
                     cell = ws.cell(row=current_row, column=2)
-                    cell.value = para_clean[:80]
-                    cell.font = Font(bold=True, size=10, color="004C97")
+                    cell.value = para_clean  # No truncation
+                    cell.font = Font(bold=True, size=11, color="004C97")
                     cell.fill = fill_insight
                     cell.alignment = Alignment(horizontal='left', vertical='center')
                     cell.border = border_gray
-                    ws.merge_cells(f'B{current_row}:H{current_row}')
+                    ws.merge_cells(f'B{current_row}:J{current_row}')
                 else:
                     # Regular content paragraph - calculate row height based on content
-                    content_lines = len(para_clean) // 80 + 1
-                    row_height = max(35, min(content_lines * 14, 100))
+                    # With wider columns, ~120 chars per line
+                    content_lines = len(para_clean) // 120 + 1
+                    row_height = max(40, min(content_lines * 15, 150))
                     ws.row_dimensions[current_row].height = row_height
 
                     cell = ws.cell(row=current_row, column=2)
-                    cell.value = para_clean[:800]  # Limit length
-                    cell.font = Font(size=9, color="333333")
+                    cell.value = para_clean  # No truncation - full content
+                    cell.font = Font(size=10, color="333333")
                     cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
                     cell.border = border_gray
-                    ws.merge_cells(f'B{current_row}:H{current_row}')
+                    ws.merge_cells(f'B{current_row}:J{current_row}')
 
                 current_row += 1
 
@@ -798,13 +807,13 @@ class ExcelReportWriter:
         ws.row_dimensions[current_row].height = 18
         ws.cell(row=current_row, column=2).value = "─" * 80
         ws.cell(row=current_row, column=2).font = Font(color="CCCCCC")
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
 
         current_row += 1
         ws.cell(row=current_row, column=2).value = f"Report generated by Escalation AI v{REPORT_VERSION} • {report_timestamp}"
         ws.cell(row=current_row, column=2).font = Font(size=9, italic=True, color="999999")
         ws.cell(row=current_row, column=2).alignment = Alignment(horizontal='center')
-        ws.merge_cells(f'B{current_row}:H{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
     
     def write_dashboard(self, df, chart_paths):
         """Write the Dashboard sheet with embedded chart images in a grid layout."""
@@ -813,11 +822,11 @@ class ExcelReportWriter:
         
         ws['A1'] = "VISUAL ANALYTICS DASHBOARD"
         ws['A1'].font = self.title_font
-        ws.merge_cells('A1:L1')
-        
+        ws.merge_cells('A1:Z1')
+
         ws['A3'] = "📊 Strategic Visual Analysis - Embedded Charts"
         ws['A3'].font = Font(size=11, italic=True, color="666666")
-        ws.merge_cells('A3:L3')
+        ws.merge_cells('A3:Z3')
         
         # Category display order and labels
         category_labels = {
@@ -832,14 +841,14 @@ class ExcelReportWriter:
         # Grid layout settings - 4.5 x 2.8 inches at 96 DPI (landscape ratio)
         img_width = 432   # 4.5 inches * 96 DPI
         img_height = 269  # 2.8 inches * 96 DPI
-        cols_per_row = 2  # 2 charts per row (wider charts)
-        col_positions = ['A', 'J']  # Column positions for each chart (9 cols apart for wider charts)
-        rows_per_chart = 18  # Excel rows per chart height (269px / ~15px per row)
+        cols_per_row = 2  # 2 charts per row
+        col_positions = ['A', 'N']  # Column positions (13 cols apart to prevent overlap with 432px wide charts)
+        rows_per_chart = 20  # Excel rows per chart (extra spacing)
         header_gap_rows = 2  # Gap between header and first chart row
 
-        # Set column widths to accommodate images with proper spacing
-        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R']:
-            ws.column_dimensions[col].width = 6
+        # Set column widths - use 8 for wider columns to fill more horizontal space
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']:
+            ws.column_dimensions[col].width = 8
         
         current_row = 5
         images_embedded = 0
@@ -851,7 +860,7 @@ class ExcelReportWriter:
                     ws[f'A{current_row}'] = label
                     ws[f'A{current_row}'].font = Font(bold=True, size=14, color="003366")
                     ws.row_dimensions[current_row].height = 25
-                    ws.merge_cells(f'A{current_row}:O{current_row}')
+                    ws.merge_cells(f'A{current_row}:Z{current_row}')
                     current_row += header_gap_rows  # Gap after header
                     
                     # Embed charts in grid layout
