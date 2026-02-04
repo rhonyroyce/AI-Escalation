@@ -351,7 +351,7 @@ class ExcelReportWriter:
         current_row += 2
 
         # ─────────────────────────────────────────────────────────────
-        # MECE FRAMEWORK: Issue Decomposition
+        # MECE FRAMEWORK: Issue Decomposition (DATA-DRIVEN)
         # ─────────────────────────────────────────────────────────────
         ws.row_dimensions[current_row].height = 24
         cell = ws.cell(row=current_row, column=2)
@@ -364,7 +364,7 @@ class ExcelReportWriter:
 
         # MECE categories with impact indicators
         ws.row_dimensions[current_row].height = 18
-        mece_headers = [("B", "C", "CATEGORY"), ("D", "D", "IMPACT"), ("E", "F", "ROOT CAUSE"), ("G", "H", "SO WHAT?")]
+        mece_headers = [("B", "C", "CATEGORY"), ("D", "D", "COUNT"), ("E", "E", "%"), ("F", "F", "IMPACT"), ("G", "H", "ACTION")]
         for start_col, end_col, header in mece_headers:
             cell = ws[f'{start_col}{current_row}']
             cell.value = header
@@ -372,56 +372,74 @@ class ExcelReportWriter:
             cell.fill = PatternFill(start_color="607D8B", end_color="607D8B", fill_type="solid")
             cell.alignment = Alignment(horizontal='center', vertical='center')
             cell.border = border_gray
-            ws.merge_cells(f'{start_col}{current_row}:{end_col}{current_row}')
+            if start_col != end_col:
+                ws.merge_cells(f'{start_col}{current_row}:{end_col}{current_row}')
         current_row += 1
 
-        # Parse sections for MECE content
-        sections = re.split(r'(?=SECTION \d)', clean_text)
+        # Build MECE data from actual DataFrame categories
+        if 'AI_Category' in df.columns:
+            cat_counts = df['AI_Category'].value_counts().head(6)
+            cat_total = cat_counts.sum()
 
-        mece_data = [
-            ("Process Gaps", "HIGH", "Inconsistent workflows", "Standardize procedures"),
-            ("Knowledge Gaps", "MED", "Training deficiencies", "Upskill team"),
-            ("System Issues", "MED", "Tool limitations", "Evaluate tech stack"),
-            ("Communication", "LOW", "Handoff failures", "Improve protocols"),
-        ]
+            # Action mapping for categories
+            action_map = {
+                'Scheduling & Planning': 'Standardize scheduling',
+                'Documentation & Reporting': 'Improve templates',
+                'Validation & QA': 'Enhance QA checks',
+                'Process Compliance': 'Enforce SOPs',
+                'Configuration & Data Mismatch': 'Validate configs',
+                'Site Readiness': 'Pre-checks required',
+                'Communication & Response': 'Improve protocols',
+                'Nesting & Tool Errors': 'Tool training',
+            }
 
-        for category, impact, root_cause, so_what in mece_data:
-            ws.row_dimensions[current_row].height = 28
-            impact_fill = fill_critical if impact == "HIGH" else fill_warning if impact == "MED" else fill_success
+            for idx, (cat, count) in enumerate(cat_counts.items()):
+                pct = (count / cat_total) * 100 if cat_total > 0 else 0
+                impact = "HIGH" if pct > 20 else "MED" if pct > 10 else "LOW"
+                action = action_map.get(cat, "Review & address")
 
-            # Category
-            cell = ws[f'B{current_row}']
-            cell.value = category
-            cell.font = Font(size=10, color="333333")
-            cell.alignment = Alignment(horizontal='left', vertical='center')
-            cell.border = border_gray
-            ws.merge_cells(f'B{current_row}:C{current_row}')
+                ws.row_dimensions[current_row].height = 28
+                impact_fill = fill_critical if impact == "HIGH" else fill_warning if impact == "MED" else fill_success
 
-            # Impact
-            cell = ws[f'D{current_row}']
-            cell.value = impact
-            cell.font = Font(bold=True, size=10, color="333333")
-            cell.fill = impact_fill
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            cell.border = border_gray
+                # Category
+                cell = ws[f'B{current_row}']
+                cell.value = cat[:25] if len(cat) > 25 else cat
+                cell.font = Font(size=10, color="333333")
+                cell.alignment = Alignment(horizontal='left', vertical='center')
+                cell.border = border_gray
+                ws.merge_cells(f'B{current_row}:C{current_row}')
 
-            # Root Cause
-            cell = ws[f'E{current_row}']
-            cell.value = root_cause
-            cell.font = Font(size=9, color="666666")
-            cell.alignment = Alignment(horizontal='left', vertical='center')
-            cell.border = border_gray
-            ws.merge_cells(f'E{current_row}:F{current_row}')
+                # Count
+                cell = ws[f'D{current_row}']
+                cell.value = count
+                cell.font = Font(bold=True, size=10, color="333333")
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.border = border_gray
 
-            # So What
-            cell = ws[f'G{current_row}']
-            cell.value = f"→ {so_what}"
-            cell.font = Font(size=9, bold=True, color="004C97")
-            cell.alignment = Alignment(horizontal='left', vertical='center')
-            cell.border = border_gray
-            ws.merge_cells(f'G{current_row}:H{current_row}')
+                # Percentage
+                cell = ws[f'E{current_row}']
+                cell.value = f"{pct:.1f}%"
+                cell.font = Font(size=10, color="666666")
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.border = border_gray
 
-            current_row += 1
+                # Impact
+                cell = ws[f'F{current_row}']
+                cell.value = impact
+                cell.font = Font(bold=True, size=10, color="333333")
+                cell.fill = impact_fill
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.border = border_gray
+
+                # Action
+                cell = ws[f'G{current_row}']
+                cell.value = f"→ {action}"
+                cell.font = Font(size=9, bold=True, color="004C97")
+                cell.alignment = Alignment(horizontal='left', vertical='center')
+                cell.border = border_gray
+                ws.merge_cells(f'G{current_row}:H{current_row}')
+
+                current_row += 1
 
         current_row += 1
 
@@ -571,20 +589,65 @@ class ExcelReportWriter:
 
         current_row += 1
 
-        # Two-column content
-        left_findings = [
-            ("🔴", "Process inconsistencies driving 40% of escalations"),
-            ("🟡", "Knowledge gaps in 3 key technical areas"),
-            ("🟡", "Communication delays averaging 2+ days"),
-            ("🟢", "Resolution quality improved 15% YoY"),
-        ]
+        # Build data-driven findings from DataFrame
+        left_findings = []
 
-        right_steps = [
-            ("1.", "Implement standardized escalation workflow", "Week 1"),
-            ("2.", "Deploy knowledge base improvements", "Week 2-3"),
-            ("3.", "Establish daily sync protocols", "Week 2"),
-            ("4.", "Continue monitoring & optimization", "Ongoing"),
-        ]
+        # Top category finding
+        if 'AI_Category' in df.columns:
+            top_cat = df['AI_Category'].value_counts()
+            if len(top_cat) > 0:
+                top_pct = (top_cat.iloc[0] / len(df)) * 100
+                icon = "🔴" if top_pct > 25 else "🟡" if top_pct > 15 else "🟢"
+                left_findings.append((icon, f"{top_cat.index[0]} driving {top_pct:.0f}% of escalations"))
+
+        # Financial impact finding
+        if 'Total_Financial_Impact' in df.columns and df['Total_Financial_Impact'].sum() > 0:
+            total_impact = df['Total_Financial_Impact'].sum()
+            icon = "🔴" if total_impact > 500000 else "🟡"
+            left_findings.append((icon, f"${total_impact:,.0f} total financial impact identified"))
+
+        # Recurrence risk finding
+        if 'AI_Recurrence_Probability' in df.columns:
+            high_risk = (df['AI_Recurrence_Probability'] > 0.7).sum()
+            pct_high = (high_risk / len(df)) * 100 if len(df) > 0 else 0
+            icon = "🔴" if pct_high > 30 else "🟡" if pct_high > 15 else "🟢"
+            left_findings.append((icon, f"{high_risk} tickets ({pct_high:.0f}%) at high recurrence risk"))
+
+        # Resolution time finding
+        if 'Predicted_Resolution_Days' in df.columns:
+            avg_days = df['Predicted_Resolution_Days'].mean()
+            icon = "🟡" if avg_days > 7 else "🟢"
+            left_findings.append((icon, f"Average predicted resolution: {avg_days:.1f} days"))
+
+        # Fallback if no data
+        if not left_findings:
+            left_findings = [("🟡", "Data analysis in progress")]
+
+        # Build data-driven next steps based on top categories
+        right_steps = []
+        if 'AI_Category' in df.columns:
+            top_cats = df['AI_Category'].value_counts().head(3).index.tolist()
+            step_map = {
+                'Scheduling & Planning': ("Implement scheduling validation checks", "Week 1-2"),
+                'Documentation & Reporting': ("Standardize documentation templates", "Week 2-3"),
+                'Validation & QA': ("Enhance QA validation protocols", "Week 2-4"),
+                'Process Compliance': ("Reinforce SOP compliance training", "Week 1-2"),
+                'Configuration & Data Mismatch': ("Automate config validation", "Month 1"),
+                'Site Readiness': ("Implement pre-readiness checklists", "Week 2"),
+                'Communication & Response': ("Establish response SLAs", "Week 1"),
+                'Nesting & Tool Errors': ("Tool usage training sessions", "Week 2-3"),
+            }
+            for i, cat in enumerate(top_cats, 1):
+                step, timeline = step_map.get(cat, ("Address root causes", "Ongoing"))
+                right_steps.append((f"{i}.", step, timeline))
+
+        right_steps.append((f"{len(right_steps)+1}.", "Continue monitoring & optimization", "Ongoing"))
+
+        # Ensure we have at least 4 items for visual balance
+        while len(left_findings) < 4:
+            left_findings.append(("🟢", "—"))
+        while len(right_steps) < 4:
+            right_steps.append(("", "—", ""))
 
         for i in range(max(len(left_findings), len(right_steps))):
             ws.row_dimensions[current_row].height = 32
@@ -653,8 +716,17 @@ class ExcelReportWriter:
             bottom=Side(style='thin', color='FFE0B2')
         )
 
+        # Build dynamic executive insight from data
+        if 'AI_Category' in df.columns:
+            top_3_cats = df['AI_Category'].value_counts().head(3).index.tolist()
+            top_3_str = ", ".join(top_3_cats[:3]) if top_3_cats else "key categories"
+            top_3_pct = (df['AI_Category'].value_counts().head(3).sum() / len(df)) * 100 if len(df) > 0 else 0
+            insight_text = f"💡 EXECUTIVE INSIGHT: Focus on {top_3_str} to address {top_3_pct:.0f}% of escalation volume. Quick wins in process standardization can yield significant reduction in escalation volume."
+        else:
+            insight_text = "💡 EXECUTIVE INSIGHT: Focus on the top categories identified to achieve maximum ROI with minimal resource expenditure."
+
         cell = ws.cell(row=current_row, column=2)
-        cell.value = "💡 EXECUTIVE INSIGHT: Focus on the top 3 categories (Scheduling, Configuration, Validation) to address 65% of financial impact. Quick wins in process standardization can yield 30% reduction in escalation volume within 60 days."
+        cell.value = insight_text
         cell.font = Font(size=10, bold=True, color="E65100")
         cell.fill = callout_fill
         cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
@@ -662,6 +734,61 @@ class ExcelReportWriter:
         ws.merge_cells(f'B{current_row}:H{current_row}')
 
         current_row += 2
+
+        # ─────────────────────────────────────────────────────────────
+        # DETAILED AI ANALYSIS (Full LLM Output)
+        # ─────────────────────────────────────────────────────────────
+        ws.row_dimensions[current_row].height = 24
+        cell = ws.cell(row=current_row, column=2)
+        cell.value = "📝 DETAILED AI ANALYSIS"
+        cell.font = Font(bold=True, size=11, color="FFFFFF")
+        cell.fill = fill_dark
+        cell.alignment = Alignment(horizontal='left', vertical='center')
+        ws.merge_cells(f'B{current_row}:H{current_row}')
+        current_row += 1
+
+        # Parse and display AI synthesis content
+        if exec_summary_text and len(exec_summary_text.strip()) > 50:
+            # Split into paragraphs/sections
+            paragraphs = [p.strip() for p in exec_summary_text.split('\n\n') if p.strip()]
+
+            for para in paragraphs[:12]:  # Limit to 12 sections to avoid overflow
+                # Clean up markdown formatting
+                para_clean = re.sub(r'\*\*([^*]+)\*\*', r'\1', para)
+                para_clean = re.sub(r'^#+\s*', '', para_clean, flags=re.MULTILINE)
+                para_clean = para_clean.strip()
+
+                if not para_clean or len(para_clean) < 10:
+                    continue
+
+                # Check if it's a section header (all caps or starts with SECTION)
+                is_header = para_clean.isupper() or para_clean.startswith('SECTION') or para_clean.startswith('THE BOTTOM LINE')
+
+                if is_header:
+                    ws.row_dimensions[current_row].height = 22
+                    cell = ws.cell(row=current_row, column=2)
+                    cell.value = para_clean[:80]
+                    cell.font = Font(bold=True, size=10, color="004C97")
+                    cell.fill = fill_insight
+                    cell.alignment = Alignment(horizontal='left', vertical='center')
+                    cell.border = border_gray
+                    ws.merge_cells(f'B{current_row}:H{current_row}')
+                else:
+                    # Regular content paragraph - calculate row height based on content
+                    content_lines = len(para_clean) // 80 + 1
+                    row_height = max(35, min(content_lines * 14, 100))
+                    ws.row_dimensions[current_row].height = row_height
+
+                    cell = ws.cell(row=current_row, column=2)
+                    cell.value = para_clean[:800]  # Limit length
+                    cell.font = Font(size=9, color="333333")
+                    cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+                    cell.border = border_gray
+                    ws.merge_cells(f'B{current_row}:H{current_row}')
+
+                current_row += 1
+
+        current_row += 1
 
         # ─────────────────────────────────────────────────────────────
         # FOOTER
@@ -702,12 +829,12 @@ class ExcelReportWriter:
             'financial': '💰 Financial Impact',
         }
         
-        # Grid layout settings - 2.72 x 4.53 inches at 96 DPI
-        img_width = 261   # 2.72 inches * 96 DPI
-        img_height = 435  # 4.53 inches * 96 DPI
-        cols_per_row = 3  # 3 charts per row
-        col_positions = ['A', 'F', 'K']  # Column positions for each chart (5 cols apart for narrower charts)
-        rows_per_chart = 29  # Excel rows per chart height (435px / ~15px per row)
+        # Grid layout settings - 4.5 x 2.8 inches at 96 DPI (landscape ratio)
+        img_width = 432   # 4.5 inches * 96 DPI
+        img_height = 269  # 2.8 inches * 96 DPI
+        cols_per_row = 2  # 2 charts per row (wider charts)
+        col_positions = ['A', 'J']  # Column positions for each chart (9 cols apart for wider charts)
+        rows_per_chart = 18  # Excel rows per chart height (269px / ~15px per row)
         header_gap_rows = 2  # Gap between header and first chart row
 
         # Set column widths to accommodate images with proper spacing
