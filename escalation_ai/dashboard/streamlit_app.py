@@ -3930,72 +3930,11 @@ def main():
             label_visibility="collapsed"
         )
         
-        st.markdown("---")
-
-        # Data Source Section
-        st.markdown("### 📂 Data Source")
-
-        # File uploader for custom Excel files
-        uploaded_file = st.file_uploader(
-            "Upload Excel File",
-            type=['xlsx', 'xls'],
-            help="Upload an Excel file with API connections for auto-refresh"
-        )
-
-        # Process uploaded file or use default
-        if uploaded_file is not None:
-            # Save uploaded file temporarily
-            import tempfile
-            import os
-
-            temp_dir = tempfile.gettempdir()
-            temp_path = os.path.join(temp_dir, uploaded_file.name)
-
-            with open(temp_path, 'wb') as f:
-                f.write(uploaded_file.getvalue())
-
-            st.session_state.uploaded_file_path = temp_path
-
-            # Option to refresh API connections
-            refresh_api = st.checkbox(
-                "🔄 Refresh API connections",
-                value=True,
-                help="Refresh data from APIs in Excel before loading (Windows + Excel required)"
-            )
-
-            if st.button("📥 Load Data", type="primary"):
-                if refresh_api and is_excel_available():
-                    with st.spinner("🔄 Refreshing Excel API connections..."):
-                        success, msg = refresh_excel_connections(temp_path)
-                        if success:
-                            st.success(f"✅ {msg}")
-                        else:
-                            st.info(f"ℹ️ {msg}")
-
-                # Clear cache and reload
-                st.cache_data.clear()
-                st.rerun()
-
-            # Show Excel availability status
-            if is_excel_available():
-                st.caption("✅ Excel available - API refresh enabled")
-            else:
-                st.caption("ℹ️ Excel not available - using file as-is")
-
-            # Load from uploaded file
-            result = load_excel_file(temp_path)
-            if result[0] is not None:
-                df = result[0]
-                data_source = uploaded_file.name
-            else:
-                st.warning(f"Could not load file: {result[1]}")
-                df, data_source = load_data()
-        else:
-            # Use default data loading
-            df, data_source = load_data()
+        # Load data from default source
+        df, data_source = load_data()
 
         st.markdown("---")
-        st.markdown(f"**Current Source:**")
+        st.markdown(f"**📁 Data Source:**")
         st.caption(data_source)
         st.markdown(f"**Records:** {len(df):,}")
 
@@ -4005,17 +3944,9 @@ def main():
             st.markdown(f"**Total Cost:** ${total_cost:,.0f}")
 
         if st.button("🔄 Refresh Data"):
-            # If we have an uploaded file with Excel available, refresh it
-            if st.session_state.uploaded_file_path and is_excel_available():
-                with st.spinner("🔄 Refreshing Excel API connections..."):
-                    success, msg = refresh_excel_connections(st.session_state.uploaded_file_path)
-                    if success:
-                        st.toast(f"✅ {msg}")
-                    else:
-                        st.toast(f"ℹ️ {msg}")
             st.cache_data.clear()
             st.rerun()
-        
+
         st.markdown("---")
         st.markdown("### ⚙️ Settings")
         
