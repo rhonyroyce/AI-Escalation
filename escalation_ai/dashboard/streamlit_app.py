@@ -1012,7 +1012,7 @@ def chart_recurrence_risk(df):
     """Gauge chart for average recurrence risk."""
     # AI_Recurrence_Risk is now guaranteed to be numeric from load_data()
     avg_risk = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
-    
+
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta",
         value=avg_risk,
@@ -1028,9 +1028,9 @@ def chart_recurrence_risk(df):
                 {'range': [40, 100], 'color': 'rgba(220, 53, 69, 0.3)'}
             ],
             'threshold': {
-                'line': {'color': '#FF6B6B', 'width': 3},
+                'line': {'color': '#FF6B6B', 'width': 4},
                 'thickness': 0.8,
-                'value': 30
+                'value': avg_risk  # Point needle at actual value
             }
         }
     ))
