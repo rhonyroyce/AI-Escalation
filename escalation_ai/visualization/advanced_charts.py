@@ -333,17 +333,17 @@ class AdvancedChartGenerator:
                 ax.annotate(name, (x[i], y[i]), xytext=(5, 5), 
                            textcoords='offset points', fontsize=8, alpha=0.8)
             
-            # Quadrant labels
-            ax.text(x_median/2, (y_median + ylim[1])/2, '⭐ Fast & Clean', 
+            # Quadrant labels (using text instead of emojis for font compatibility)
+            ax.text(x_median/2, (y_median + ylim[1])/2, '[*] Fast & Clean',
                    ha='center', va='center', fontsize=12, fontweight='bold',
                    color=self.QUADRANT_COLORS['fast_clean'], alpha=0.8)
-            ax.text((x_median + xlim[1])/2, (y_median + ylim[1])/2, '🐢 Slow but Thorough',
+            ax.text((x_median + xlim[1])/2, (y_median + ylim[1])/2, '[~] Slow but Thorough',
                    ha='center', va='center', fontsize=12, fontweight='bold',
                    color=self.QUADRANT_COLORS['slow_thorough'], alpha=0.8)
-            ax.text(x_median/2, (ylim[0] + y_median)/2, '⚡ Fast but Sloppy',
+            ax.text(x_median/2, (ylim[0] + y_median)/2, '[!] Fast but Sloppy',
                    ha='center', va='center', fontsize=12, fontweight='bold',
                    color=self.QUADRANT_COLORS['fast_sloppy'], alpha=0.8)
-            ax.text((x_median + xlim[1])/2, (ylim[0] + y_median)/2, '🆘 Needs Support',
+            ax.text((x_median + xlim[1])/2, (ylim[0] + y_median)/2, '[?] Needs Support',
                    ha='center', va='center', fontsize=12, fontweight='bold',
                    color=self.QUADRANT_COLORS['needs_support'], alpha=0.8)
             
