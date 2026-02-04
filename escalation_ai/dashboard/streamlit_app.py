@@ -24,6 +24,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pathlib import Path
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
 import sys
 import json
 import time
@@ -957,6 +958,37 @@ CHART_DESCRIPTIONS = {
         'what_it_shows': 'Identifies dangerous combinations of category and severity that need immediate attention.',
         'how_to_read': 'Darker colors = higher risk. Focus on dark red cells for critical risk areas.',
     },
+    # Similarity Search Charts
+    'similarity_count': {
+        'title': 'Similar Ticket Count Distribution',
+        'description': 'Shows how many similar historical tickets were found for each current issue.',
+        'what_it_shows': 'Zero matches may indicate new issue types. High counts suggest well-documented problem patterns.',
+        'how_to_read': 'Bars show frequency. Zero-match tickets need manual review. High-match tickets have good historical data for predictions.',
+    },
+    'resolution_consistency': {
+        'title': 'Resolution Consistency Analysis',
+        'description': 'Compares how current tickets are being resolved vs how similar historical tickets were resolved.',
+        'what_it_shows': 'Inconsistent resolutions suggest either evolving best practices or engineers deviating from proven solutions.',
+        'how_to_read': 'Green = consistent with history. Red = different approach being taken. High inconsistency warrants investigation.',
+    },
+    'similarity_score': {
+        'title': 'Similarity Score Distribution',
+        'description': 'Quality of best matches found for each ticket (0 = no match, 1 = identical).',
+        'what_it_shows': 'Higher scores mean more confident predictions. Low scores suggest unique or poorly documented issues.',
+        'how_to_read': 'Green zone (>0.7) = high confidence. Yellow (0.5-0.7) = moderate. Red (<0.5) = low confidence.',
+    },
+    'inconsistent_resolution': {
+        'title': 'Inconsistent Resolutions by Category',
+        'description': 'Categories where current resolutions differ from similar historical cases.',
+        'what_it_shows': 'Identifies categories with resolution approach inconsistency - may indicate training gaps or process changes.',
+        'how_to_read': 'Longer bars = more inconsistent cases. Focus on top categories for standardization opportunities.',
+    },
+    'similarity_effectiveness': {
+        'title': 'Similarity Search Effectiveness',
+        'description': 'Heatmap showing average similar ticket matches by category and origin.',
+        'what_it_shows': 'Green areas have good historical coverage. Red areas lack similar historical data.',
+        'how_to_read': 'Higher values = better knowledge base coverage. Low values need historical data enrichment.',
+    },
 }
 
 
@@ -1666,6 +1698,1068 @@ def chart_benchmark_gauge(metric_name, current_value, benchmark_data, unit=''):
     )
     
     return fig
+
+# ============================================================================
+# SIMILARITY SEARCH CHARTS
+# ============================================================================
+
+def chart_similarity_count_distribution(df):
+    """Histogram showing distribution of similar ticket counts."""
+    if 'Similar_Ticket_Count' not in df.columns:
+        return None
+
+    counts = df['Similar_Ticket_Count'].dropna()
+    if len(counts) == 0:
+        return None
+
+    fig = go.Figure()
+
+    # Create histogram with color gradient
+    fig.add_trace(go.Histogram(
+        x=counts,
+        nbinsx=min(20, int(counts.max()) + 1),
+        marker=dict(
+            color=counts,
+            colorscale='Viridis',
+            line=dict(color='white', width=1)
+        ),
+        name='Count'
+    ))
+
+    # Add statistics
+    avg_count = counts.mean()
+    zero_matches = (counts == 0).sum()
+
+    fig.add_vline(x=avg_count, line_dash="dash", line_color="#FF6600",
+                  annotation_text=f"Avg: {avg_count:.1f}")
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        title=f'Similar Ticket Count Distribution<br><sub>{zero_matches} tickets with no matches</sub>',
+        xaxis_title='Number of Similar Tickets Found',
+        yaxis_title='Frequency',
+        height=400,
+        margin=dict(l=50, r=30, t=80, b=50)
+    )
+
+    return fig
+
+
+def chart_resolution_consistency(df):
+    """Pie chart showing resolution consistency breakdown."""
+    if 'Resolution_Consistency' not in df.columns:
+        return None
+
+    consistency = df['Resolution_Consistency'].value_counts()
+    if len(consistency) == 0:
+        return None
+
+    colors = {
+        'Consistent': '#28A745',
+        'Inconsistent': '#DC3545',
+        'No Similar Data': '#6C757D'
+    }
+
+    fig = go.Figure(data=[go.Pie(
+        labels=consistency.index,
+        values=consistency.values,
+        hole=0.4,
+        marker=dict(colors=[colors.get(l, '#0066CC') for l in consistency.index]),
+        textinfo='label+percent',
+        textposition='outside'
+    )])
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        title='Resolution Consistency Analysis',
+        height=400,
+        margin=dict(l=20, r=20, t=60, b=20)
+    )
+
+    return fig
+
+
+def chart_similarity_score_distribution(df):
+    """Histogram of best match similarity scores."""
+    if 'Best_Match_Similarity' not in df.columns:
+        return None
+
+    scores = df['Best_Match_Similarity'].dropna()
+    scores = scores[scores > 0]  # Filter zeros
+
+    if len(scores) == 0:
+        return None
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Histogram(
+        x=scores,
+        nbinsx=20,
+        marker=dict(
+            color=scores,
+            colorscale='RdYlGn',
+            cmin=0,
+            cmax=1,
+            line=dict(color='white', width=1)
+        ),
+        name='Scores'
+    ))
+
+    # Threshold lines
+    fig.add_vline(x=0.7, line_dash="dash", line_color="#28A745",
+                  annotation_text="High (0.7)")
+    fig.add_vline(x=0.5, line_dash="dot", line_color="#FFC107",
+                  annotation_text="Medium (0.5)")
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    high_conf = (scores >= 0.7).sum()
+    fig.update_layout(
+        **theme,
+        title=f'Similarity Score Distribution<br><sub>{high_conf} high-confidence matches ({high_conf/len(scores)*100:.0f}%)</sub>',
+        xaxis_title='Best Match Similarity Score',
+        yaxis_title='Frequency',
+        height=400,
+        margin=dict(l=50, r=30, t=80, b=50)
+    )
+
+    return fig
+
+
+def chart_inconsistent_by_category(df):
+    """Bar chart showing inconsistent resolutions by category."""
+    if 'Inconsistent_Resolution' not in df.columns or 'AI_Category' not in df.columns:
+        return None
+
+    # Filter to inconsistent only
+    inconsistent = df[df['Inconsistent_Resolution'] == True]
+    if len(inconsistent) == 0:
+        return None
+
+    by_cat = inconsistent.groupby('AI_Category').size().sort_values(ascending=True)
+
+    fig = go.Figure(go.Bar(
+        x=by_cat.values,
+        y=by_cat.index,
+        orientation='h',
+        marker=dict(
+            color=by_cat.values,
+            colorscale='Reds',
+            line=dict(color='white', width=1)
+        ),
+        text=by_cat.values,
+        textposition='outside'
+    ))
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        title='Inconsistent Resolutions by Category',
+        xaxis_title='Count of Inconsistent Resolutions',
+        yaxis_title='',
+        height=400,
+        margin=dict(l=150, r=60, t=60, b=50)
+    )
+
+    return fig
+
+
+def chart_similarity_effectiveness_heatmap(df):
+    """Heatmap showing similarity effectiveness by category and origin."""
+    if 'Similar_Ticket_Count' not in df.columns or 'AI_Category' not in df.columns:
+        return None
+
+    # Check for origin column
+    origin_col = None
+    for col in ['tickets_data_origin', 'Origin', 'tickets_data_source']:
+        if col in df.columns:
+            origin_col = col
+            break
+
+    if origin_col is None:
+        return None
+
+    # Calculate effectiveness (avg similar count) by category and origin
+    effectiveness = df.groupby(['AI_Category', origin_col])['Similar_Ticket_Count'].mean().unstack(fill_value=0)
+
+    if effectiveness.empty:
+        return None
+
+    fig = go.Figure(data=go.Heatmap(
+        z=effectiveness.values,
+        x=effectiveness.columns,
+        y=effectiveness.index,
+        colorscale='RdYlGn',
+        text=np.round(effectiveness.values, 1),
+        texttemplate='%{text:.1f}',
+        textfont={"size": 10},
+        hoverongaps=False
+    ))
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        title='Similarity Search Effectiveness<br><sub>Avg similar tickets found by Category & Origin</sub>',
+        xaxis_title='Origin',
+        yaxis_title='Category',
+        height=450,
+        margin=dict(l=150, r=30, t=80, b=80)
+    )
+
+    return fig
+
+
+def chart_expected_vs_predicted_resolution(df):
+    """Grouped bar comparing expected (from similar tickets) vs AI predicted resolution."""
+    if 'Expected_Resolution_Days' not in df.columns or 'Predicted_Resolution_Days' not in df.columns:
+        # Try alternate column name
+        if 'Similar_Expected_Days' in df.columns:
+            expected_col = 'Similar_Expected_Days'
+        else:
+            return None
+    else:
+        expected_col = 'Expected_Resolution_Days'
+
+    if 'AI_Category' not in df.columns:
+        return None
+
+    # Aggregate by category
+    comparison = df.groupby('AI_Category').agg({
+        expected_col: 'mean',
+        'Predicted_Resolution_Days': 'mean'
+    }).dropna()
+
+    if comparison.empty:
+        return None
+
+    comparison = comparison.sort_values('Predicted_Resolution_Days', ascending=False).head(10)
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        name='Expected (Similar Tickets)',
+        x=comparison.index,
+        y=comparison[expected_col],
+        marker_color='#0066CC',
+        text=[f'{v:.1f}d' for v in comparison[expected_col]],
+        textposition='outside'
+    ))
+
+    fig.add_trace(go.Bar(
+        name='AI Predicted',
+        x=comparison.index,
+        y=comparison['Predicted_Resolution_Days'],
+        marker_color='#FF6600',
+        text=[f'{v:.1f}d' for v in comparison['Predicted_Resolution_Days']],
+        textposition='outside'
+    ))
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        barmode='group',
+        title='Resolution Time: Similar Tickets vs AI Prediction',
+        xaxis_title='Category',
+        yaxis_title='Days',
+        xaxis_tickangle=-45,
+        height=400,
+        margin=dict(l=50, r=30, t=60, b=100),
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5)
+    )
+
+    return fig
+
+
+# ============================================================================
+# LESSONS LEARNED EFFECTIVENESS CHARTS (Comprehensive 6-Pillar Scorecard)
+# ============================================================================
+
+# Import the comprehensive scorecard
+try:
+    from escalation_ai.analysis.lessons_learned import (
+        LearningEffectivenessScorecard, create_scorecard, CategoryScorecard
+    )
+    SCORECARD_AVAILABLE = True
+except ImportError:
+    SCORECARD_AVAILABLE = False
+
+# Cache for scorecard results
+_scorecard_cache: Dict[int, Any] = {}
+
+
+def get_comprehensive_scorecard(df) -> Optional[Any]:
+    """Get or create cached comprehensive scorecard."""
+    if not SCORECARD_AVAILABLE:
+        return None
+
+    # Use hash of dataframe shape and categories as cache key
+    cache_key = hash((len(df), tuple(sorted(df['AI_Category'].unique())) if 'AI_Category' in df.columns else ()))
+
+    if cache_key not in _scorecard_cache:
+        try:
+            _scorecard_cache[cache_key] = create_scorecard(df)
+        except Exception as e:
+            return None
+
+    return _scorecard_cache[cache_key]
+
+
+def chart_scorecard_radar(df, category: str = None):
+    """
+    Radar chart showing 6-pillar scorecard for a category or overall average.
+    """
+    scorecard = get_comprehensive_scorecard(df)
+    if not scorecard or not scorecard.category_scorecards:
+        return None
+
+    pillar_names = [
+        'Learning Velocity',
+        'Impact Management',
+        'Knowledge Quality',
+        'Process Maturity',
+        'Knowledge Transfer',
+        'Outcome Effectiveness'
+    ]
+    pillar_keys = [
+        'learning_velocity', 'impact_management', 'knowledge_quality',
+        'process_maturity', 'knowledge_transfer', 'outcome_effectiveness'
+    ]
+
+    fig = go.Figure()
+
+    if category and category in scorecard.category_scorecards:
+        # Single category radar
+        cat_scorecard = scorecard.category_scorecards[category]
+        scores = [cat_scorecard.pillars[k].score for k in pillar_keys]
+
+        fig.add_trace(go.Scatterpolar(
+            r=scores + [scores[0]],  # Close the shape
+            theta=pillar_names + [pillar_names[0]],
+            fill='toself',
+            fillcolor='rgba(0, 102, 204, 0.3)',
+            line=dict(color='#0066CC', width=2),
+            name=category,
+            hovertemplate='%{theta}: %{r:.0f}<extra></extra>'
+        ))
+        title = f'Learning Effectiveness Scorecard: {category}<br><sub>Grade: {cat_scorecard.overall_grade} ({cat_scorecard.overall_score:.0f}/100)</sub>'
+    else:
+        # Average across all categories
+        avg_scores = []
+        for key in pillar_keys:
+            pillar_scores = [sc.pillars[key].score for sc in scorecard.category_scorecards.values()]
+            avg_scores.append(np.mean(pillar_scores))
+
+        fig.add_trace(go.Scatterpolar(
+            r=avg_scores + [avg_scores[0]],
+            theta=pillar_names + [pillar_names[0]],
+            fill='toself',
+            fillcolor='rgba(0, 102, 204, 0.3)',
+            line=dict(color='#0066CC', width=2),
+            name='Organization Average',
+            hovertemplate='%{theta}: %{r:.0f}<extra></extra>'
+        ))
+        avg_overall = np.mean([sc.overall_score for sc in scorecard.category_scorecards.values()])
+        title = f'Organization Learning Effectiveness<br><sub>Average Score: {avg_overall:.0f}/100</sub>'
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100], tickfont=dict(size=10)),
+            angularaxis=dict(tickfont=dict(size=11))
+        ),
+        showlegend=False,
+        title=dict(text=title, x=0.5, xanchor='center'),
+        height=450,
+        margin=dict(l=80, r=80, t=100, b=50)
+    )
+
+    return fig
+
+
+def chart_scorecard_comparison(df, categories: List[str] = None):
+    """
+    Radar chart comparing multiple categories.
+    """
+    scorecard = get_comprehensive_scorecard(df)
+    if not scorecard or not scorecard.category_scorecards:
+        return None
+
+    pillar_names = [
+        'Learning Velocity', 'Impact Management', 'Knowledge Quality',
+        'Process Maturity', 'Knowledge Transfer', 'Outcome Effectiveness'
+    ]
+    pillar_keys = [
+        'learning_velocity', 'impact_management', 'knowledge_quality',
+        'process_maturity', 'knowledge_transfer', 'outcome_effectiveness'
+    ]
+
+    if not categories:
+        # Use top 3 and bottom 2 by default
+        sorted_cats = sorted(
+            scorecard.category_scorecards.items(),
+            key=lambda x: x[1].overall_score,
+            reverse=True
+        )
+        categories = [c[0] for c in sorted_cats[:3]] + [c[0] for c in sorted_cats[-2:]]
+
+    colors = ['#0066CC', '#28A745', '#FFC107', '#DC3545', '#6C757D']
+
+    fig = go.Figure()
+
+    for i, cat in enumerate(categories[:5]):
+        if cat not in scorecard.category_scorecards:
+            continue
+        cat_scorecard = scorecard.category_scorecards[cat]
+        scores = [cat_scorecard.pillars[k].score for k in pillar_keys]
+
+        fig.add_trace(go.Scatterpolar(
+            r=scores + [scores[0]],
+            theta=pillar_names + [pillar_names[0]],
+            name=f'{cat} ({cat_scorecard.overall_grade})',
+            line=dict(color=colors[i % len(colors)], width=2),
+            hovertemplate=f'{cat}<br>%{{theta}}: %{{r:.0f}}<extra></extra>'
+        ))
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 100], tickfont=dict(size=10)),
+            angularaxis=dict(tickfont=dict(size=10))
+        ),
+        title='Category Comparison: 6-Pillar Scorecard',
+        legend=dict(orientation='h', yanchor='bottom', y=-0.2, xanchor='center', x=0.5),
+        height=500,
+        margin=dict(l=80, r=80, t=80, b=100)
+    )
+
+    return fig
+
+
+def chart_pillar_breakdown(df, pillar_name: str):
+    """
+    Bar chart showing sub-factor scores for a specific pillar across categories.
+    """
+    scorecard = get_comprehensive_scorecard(df)
+    if not scorecard or not scorecard.category_scorecards:
+        return None
+
+    pillar_key = pillar_name.lower().replace(' ', '_')
+
+    # Get all categories and their sub-scores for this pillar
+    data = []
+    for cat, sc in scorecard.category_scorecards.items():
+        if pillar_key in sc.pillars:
+            pillar = sc.pillars[pillar_key]
+            for sub_name, sub_score in pillar.sub_scores.items():
+                data.append({
+                    'Category': cat,
+                    'Sub-Factor': sub_name.replace('_', ' ').title(),
+                    'Score': sub_score
+                })
+
+    if not data:
+        return None
+
+    plot_df = pd.DataFrame(data)
+
+    fig = px.bar(
+        plot_df,
+        x='Category',
+        y='Score',
+        color='Sub-Factor',
+        barmode='group',
+        title=f'{pillar_name} - Sub-Factor Breakdown',
+        color_discrete_sequence=px.colors.qualitative.Set2
+    )
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        xaxis_tickangle=-45,
+        height=450,
+        margin=dict(l=50, r=30, t=80, b=100),
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5)
+    )
+
+    return fig
+
+
+def chart_learning_grades(df):
+    """
+    Bar chart showing learning effectiveness grades (A-F) by category.
+    Uses comprehensive scorecard if available, falls back to simple calculation.
+    """
+    # Check for required columns
+    required_cols = ['AI_Category']
+    if not all(col in df.columns for col in required_cols):
+        return None
+
+    # Try comprehensive scorecard first
+    scorecard = get_comprehensive_scorecard(df)
+    if scorecard and scorecard.category_scorecards:
+        sorted_items = sorted(
+            scorecard.category_scorecards.items(),
+            key=lambda x: x[1].overall_score,
+            reverse=True
+        )
+        categories = [item[0] for item in sorted_items]
+        scores = [item[1].overall_score for item in sorted_items]
+        grades = [item[1].overall_grade for item in sorted_items]
+    else:
+        # Fall back to simple calculation
+        grades_data = _calculate_learning_grades(df)
+        if not grades_data:
+            return None
+        sorted_items = sorted(grades_data.items(), key=lambda x: x[1]['score'], reverse=True)
+        categories = [item[0] for item in sorted_items]
+        scores = [item[1]['score'] for item in sorted_items]
+        grades = [item[1]['grade'] for item in sorted_items]
+
+    # Grade colors (extended for +/- grades)
+    grade_colors = {
+        'A+': '#1B5E20', 'A': '#28A745', 'A-': '#43A047',
+        'B+': '#558B2F', 'B': '#7CB342', 'B-': '#9CCC65',
+        'C+': '#F9A825', 'C': '#FFC107', 'C-': '#FFCA28',
+        'D+': '#EF6C00', 'D': '#FF9800', 'D-': '#FFA726',
+        'F': '#DC3545'
+    }
+    colors = [grade_colors.get(g, '#6C757D') for g in grades]
+
+    fig = go.Figure(go.Bar(
+        x=scores,
+        y=categories,
+        orientation='h',
+        marker=dict(color=colors, line=dict(color='white', width=1)),
+        text=[f'{g} ({s:.0f})' for g, s in zip(grades, scores)],
+        textposition='outside',
+        hovertemplate='<b>%{y}</b><br>Score: %{x:.0f}<br>Grade: %{text}<extra></extra>'
+    ))
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        title='Learning Effectiveness Grades by Category<br><sub>Comprehensive 6-Pillar Assessment</sub>',
+        xaxis_title='Learning Effectiveness Score (0-100)',
+        yaxis_title='',
+        xaxis=dict(range=[0, 110]),
+        height=max(400, len(categories) * 35),
+        margin=dict(l=200, r=80, t=80, b=50)
+    )
+
+    return fig
+
+
+def chart_lesson_completion_rate(df):
+    """Grouped bar chart showing documented vs completed lessons by category."""
+    # Find lesson columns
+    lesson_title_col = None
+    lesson_status_col = None
+    for col in ['tickets_data_lessons_learned_title', 'Lesson_Title', 'lessons_learned_title']:
+        if col in df.columns:
+            lesson_title_col = col
+            break
+    for col in ['tickets_data_lessons_learned_status', 'Lesson_Status', 'lessons_learned_status']:
+        if col in df.columns:
+            lesson_status_col = col
+            break
+
+    if not lesson_title_col or 'AI_Category' not in df.columns:
+        return None
+
+    # Calculate documented and completed counts per category
+    lessons_data = {}
+    for cat in df['AI_Category'].dropna().unique():
+        cat_df = df[df['AI_Category'] == cat]
+        documented = cat_df[lesson_title_col].notna().sum()
+        completed = 0
+        if lesson_status_col:
+            completed = cat_df[lesson_status_col].str.lower().str.contains('complete|done|closed', na=False).sum()
+        if documented > 0:
+            lessons_data[cat] = {'documented': documented, 'completed': completed}
+
+    if not lessons_data:
+        return None
+
+    # Sort by documented count
+    sorted_items = sorted(lessons_data.items(), key=lambda x: x[1]['documented'], reverse=True)[:15]
+    categories = [item[0] for item in sorted_items]
+    documented = [item[1]['documented'] for item in sorted_items]
+    completed = [item[1]['completed'] for item in sorted_items]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        name='Documented',
+        x=categories,
+        y=documented,
+        marker_color='#0066CC',
+        text=documented,
+        textposition='outside'
+    ))
+
+    fig.add_trace(go.Bar(
+        name='Completed',
+        x=categories,
+        y=completed,
+        marker_color='#28A745',
+        text=completed,
+        textposition='outside'
+    ))
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        barmode='group',
+        title='Lesson Documentation & Completion by Category',
+        xaxis_title='Category',
+        yaxis_title='Number of Lessons',
+        xaxis_tickangle=-45,
+        height=450,
+        margin=dict(l=50, r=30, t=60, b=120),
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5)
+    )
+
+    return fig
+
+
+def chart_recurrence_vs_lessons(df):
+    """
+    Scatter plot showing correlation between lesson completion and recurrence reduction.
+    Quadrant analysis: ideal = high completion, low recurrence.
+    """
+    if 'AI_Category' not in df.columns:
+        return None
+
+    # Find lesson columns
+    lesson_title_col = None
+    lesson_status_col = None
+    for col in ['tickets_data_lessons_learned_title', 'Lesson_Title', 'lessons_learned_title']:
+        if col in df.columns:
+            lesson_title_col = col
+            break
+    for col in ['tickets_data_lessons_learned_status', 'Lesson_Status', 'lessons_learned_status']:
+        if col in df.columns:
+            lesson_status_col = col
+            break
+
+    # Calculate metrics per category
+    correlation_data = {}
+    for cat in df['AI_Category'].dropna().unique():
+        cat_df = df[df['AI_Category'] == cat]
+        ticket_count = len(cat_df)
+        if ticket_count < 3:
+            continue
+
+        # Recurrence rate from AI prediction or similarity
+        recurrence_rate = 0
+        if 'AI_Recurrence_Probability' in cat_df.columns:
+            recurrence_rate = cat_df['AI_Recurrence_Probability'].mean() * 100
+        elif 'Similar_Ticket_Count' in cat_df.columns:
+            recurrence_rate = (cat_df['Similar_Ticket_Count'] > 0).mean() * 100
+
+        # Lesson completion
+        completion_rate = 0
+        if lesson_title_col:
+            documented = cat_df[lesson_title_col].notna().sum()
+            if documented > 0 and lesson_status_col:
+                completed = cat_df[lesson_status_col].str.lower().str.contains('complete|done|closed', na=False).sum()
+                completion_rate = (completed / documented) * 100
+
+        correlation_data[cat] = {
+            'recurrence_rate': recurrence_rate,
+            'lesson_completion': completion_rate,
+            'ticket_count': ticket_count
+        }
+
+    if not correlation_data:
+        return None
+
+    categories = list(correlation_data.keys())
+    recurrence = [correlation_data[c]['recurrence_rate'] for c in categories]
+    completion = [correlation_data[c]['lesson_completion'] for c in categories]
+    ticket_counts = [correlation_data[c]['ticket_count'] for c in categories]
+
+    # Size based on ticket count
+    sizes = [max(15, min(60, t * 2)) for t in ticket_counts]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=completion,
+        y=recurrence,
+        mode='markers+text',
+        marker=dict(
+            size=sizes,
+            color=recurrence,
+            colorscale='RdYlGn_r',
+            showscale=True,
+            colorbar=dict(title='Recurrence %'),
+            line=dict(color='white', width=1)
+        ),
+        text=[c[:12] + '..' if len(c) > 12 else c for c in categories],
+        textposition='top center',
+        textfont=dict(size=9),
+        hovertemplate='<b>%{text}</b><br>Completion: %{x:.0f}%<br>Recurrence: %{y:.0f}%<extra></extra>'
+    ))
+
+    # Add quadrant lines
+    fig.add_hline(y=30, line_dash="dash", line_color="#CCCCCC", line_width=1)
+    fig.add_vline(x=50, line_dash="dash", line_color="#CCCCCC", line_width=1)
+
+    # Quadrant annotations
+    fig.add_annotation(x=75, y=50, text="⚠️ Process Issue", showarrow=False,
+                      font=dict(color='#FF9800', size=10))
+    fig.add_annotation(x=25, y=50, text="🔴 NEEDS ATTENTION", showarrow=False,
+                      font=dict(color='#DC3545', size=10, weight='bold'))
+    fig.add_annotation(x=75, y=15, text="✅ IDEAL", showarrow=False,
+                      font=dict(color='#28A745', size=10, weight='bold'))
+    fig.add_annotation(x=25, y=15, text="Natural Resolution", showarrow=False,
+                      font=dict(color='#6C757D', size=10))
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        title='Recurrence Rate vs Lesson Completion<br><sub>Bubble size = ticket volume</sub>',
+        xaxis_title='Lesson Completion Rate (%)',
+        yaxis_title='Recurrence Rate (%)',
+        xaxis=dict(range=[-5, 105]),
+        yaxis=dict(range=[-5, max(recurrence) * 1.2 if recurrence else 100]),
+        height=500,
+        margin=dict(l=60, r=30, t=80, b=60)
+    )
+
+    return fig
+
+
+def chart_learning_heatmap(df):
+    """Heatmap showing learning effectiveness scores by Category and LOB."""
+    if 'AI_Category' not in df.columns:
+        return None
+
+    # Find LOB column
+    lob_col = None
+    for col in ['tickets_data_lob', 'LOB', 'tickets_data_market']:
+        if col in df.columns:
+            lob_col = col
+            break
+
+    if not lob_col:
+        return None
+
+    # Calculate learning scores by category and LOB
+    grades_data = _calculate_learning_grades(df)
+    if not grades_data:
+        return None
+
+    # Build matrix
+    categories = list(grades_data.keys())
+    lobs = df[lob_col].dropna().unique()
+
+    matrix = []
+    for cat in categories:
+        row = []
+        for lob in lobs:
+            subset = df[(df['AI_Category'] == cat) & (df[lob_col] == lob)]
+            if len(subset) >= 2:
+                subset_grades = _calculate_learning_grades(subset)
+                if cat in subset_grades:
+                    row.append(subset_grades[cat]['score'])
+                else:
+                    row.append(np.nan)
+            else:
+                row.append(np.nan)
+        matrix.append(row)
+
+    matrix = np.array(matrix)
+
+    fig = go.Figure(data=go.Heatmap(
+        z=matrix,
+        x=[str(l)[:15] for l in lobs],
+        y=[c[:20] for c in categories],
+        colorscale='RdYlGn',
+        text=np.round(matrix, 0),
+        texttemplate='%{text:.0f}',
+        textfont={"size": 9},
+        hoverongaps=False,
+        colorbar=dict(title='Score')
+    ))
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        title='Learning Effectiveness by Category & LOB<br><sub>Score 0-100 (higher = better)</sub>',
+        xaxis_title='LOB / Market',
+        yaxis_title='Category',
+        height=max(400, len(categories) * 30),
+        margin=dict(l=200, r=30, t=80, b=80)
+    )
+
+    return fig
+
+
+def chart_at_risk_categories(df):
+    """Bar chart highlighting categories with poor learning (D/F grades) that need attention."""
+    grades_data = _calculate_learning_grades(df)
+    if not grades_data:
+        return None
+
+    # Filter to D and F grades only
+    at_risk = {k: v for k, v in grades_data.items() if v['grade'] in ['D', 'F']}
+    if not at_risk:
+        return None
+
+    # Sort by score ascending (worst first)
+    sorted_items = sorted(at_risk.items(), key=lambda x: x[1]['score'])
+    categories = [item[0] for item in sorted_items]
+    scores = [item[1]['score'] for item in sorted_items]
+    grades = [item[1]['grade'] for item in sorted_items]
+    recurrence = [item[1].get('recurrence_rate', 0) for item in sorted_items]
+
+    colors = ['#DC3545' if g == 'F' else '#FF9800' for g in grades]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=scores,
+        y=categories,
+        orientation='h',
+        marker=dict(color=colors, line=dict(color='white', width=1)),
+        text=[f'{g} - {r:.0f}% recurrence' for g, r in zip(grades, recurrence)],
+        textposition='outside',
+        hovertemplate='<b>%{y}</b><br>Score: %{x:.0f}<br>%{text}<extra></extra>'
+    ))
+
+    theme = create_plotly_theme()
+    theme.pop('margin', None)
+
+    fig.update_layout(
+        **theme,
+        title='⚠️ At-Risk Categories (D/F Grades)<br><sub>These categories need immediate attention</sub>',
+        xaxis_title='Learning Effectiveness Score',
+        yaxis_title='',
+        xaxis=dict(range=[0, 60]),
+        height=max(300, len(categories) * 40),
+        margin=dict(l=200, r=100, t=80, b=50)
+    )
+
+    return fig
+
+
+def _calculate_learning_grades(df) -> Dict[str, Dict]:
+    """
+    Calculate learning effectiveness grades for each category.
+    Returns dict: {category: {score, grade, recurrence_rate, lesson_completion, consistency}}
+    """
+    if 'AI_Category' not in df.columns:
+        return {}
+
+    # Find lesson columns
+    lesson_title_col = None
+    lesson_status_col = None
+    for col in ['tickets_data_lessons_learned_title', 'Lesson_Title', 'lessons_learned_title']:
+        if col in df.columns:
+            lesson_title_col = col
+            break
+    for col in ['tickets_data_lessons_learned_status', 'Lesson_Status', 'lessons_learned_status']:
+        if col in df.columns:
+            lesson_status_col = col
+            break
+
+    grades_data = {}
+
+    for cat in df['AI_Category'].dropna().unique():
+        cat_df = df[df['AI_Category'] == cat]
+        ticket_count = len(cat_df)
+
+        if ticket_count < 2:
+            continue
+
+        # 1. Recurrence rate (from AI prediction or similarity)
+        recurrence_rate = 0
+        if 'AI_Recurrence_Probability' in cat_df.columns:
+            recurrence_rate = cat_df['AI_Recurrence_Probability'].mean() * 100
+        elif 'Similar_Ticket_Count' in cat_df.columns:
+            recurrence_rate = (cat_df['Similar_Ticket_Count'] > 0).mean() * 100
+
+        # 2. Lesson completion rate
+        lesson_completion = 0
+        lessons_documented = 0
+        if lesson_title_col:
+            lessons_documented = cat_df[lesson_title_col].notna().sum()
+            if lessons_documented > 0 and lesson_status_col:
+                completed = cat_df[lesson_status_col].str.lower().str.contains('complete|done|closed', na=False).sum()
+                lesson_completion = (completed / lessons_documented) * 100
+
+        # 3. Resolution consistency
+        consistency = 50  # Default
+        if 'Resolution_Consistency' in cat_df.columns:
+            consistent = cat_df['Resolution_Consistency'].str.contains('consistent|Consistent', na=False).sum()
+            consistency = (consistent / ticket_count) * 100
+
+        # 4. Has any lesson documented (bonus)
+        has_lessons = 1 if lessons_documented > 0 else 0
+
+        # Calculate weighted score
+        # Lower recurrence = better, so invert it
+        recurrence_score = max(0, 100 - recurrence_rate)
+        score = (
+            recurrence_score * 0.35 +
+            lesson_completion * 0.30 +
+            consistency * 0.25 +
+            has_lessons * 10  # Bonus points for documenting
+        )
+
+        # Assign grade
+        if score >= 80:
+            grade = 'A'
+        elif score >= 65:
+            grade = 'B'
+        elif score >= 50:
+            grade = 'C'
+        elif score >= 35:
+            grade = 'D'
+        else:
+            grade = 'F'
+
+        grades_data[cat] = {
+            'score': score,
+            'grade': grade,
+            'recurrence_rate': recurrence_rate,
+            'lesson_completion': lesson_completion,
+            'consistency': consistency,
+            'ticket_count': ticket_count,
+            'lessons_documented': lessons_documented
+        }
+
+    return grades_data
+
+
+def generate_ai_lesson_recommendations(df, use_ollama: bool = True) -> List[Dict]:
+    """
+    Generate AI-powered recommendations for improving learning effectiveness.
+    Uses Ollama for inference, falls back to rule-based if unavailable.
+    """
+    grades_data = _calculate_learning_grades(df)
+    if not grades_data:
+        return []
+
+    recommendations = []
+
+    # Get at-risk categories (D and F grades)
+    at_risk = [(cat, data) for cat, data in grades_data.items() if data['grade'] in ['D', 'F']]
+    at_risk.sort(key=lambda x: x[1]['score'])
+
+    if use_ollama:
+        try:
+            import requests
+            from ..core.config import OLLAMA_BASE_URL, GEN_MODEL
+
+            # Build context for AI
+            context_lines = [
+                "Learning Effectiveness Analysis Summary:",
+                f"Total categories analyzed: {len(grades_data)}",
+                f"At-risk categories (D/F grades): {len(at_risk)}",
+                "",
+                "Categories needing attention:"
+            ]
+
+            for cat, data in at_risk[:10]:
+                context_lines.append(
+                    f"- {cat}: Grade {data['grade']} (Score: {data['score']:.0f}), "
+                    f"Recurrence: {data['recurrence_rate']:.0f}%, "
+                    f"Lesson Completion: {data['lesson_completion']:.0f}%"
+                )
+
+            context = "\n".join(context_lines)
+
+            prompt = f"""You are an expert in operational excellence and continuous improvement.
+Analyze this learning effectiveness data and provide specific, actionable recommendations.
+
+{context}
+
+For each at-risk category, provide:
+1. Root cause analysis (why is learning failing?)
+2. Specific action to improve (who should do what)
+3. Expected impact if addressed
+
+Format each recommendation as:
+[PRIORITY: HIGH/MEDIUM] Category: Recommendation
+
+Be specific and actionable. Focus on the worst performing categories first."""
+
+            response = requests.post(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": GEN_MODEL,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.7, "num_predict": 1000}
+                },
+                timeout=60
+            )
+
+            if response.status_code == 200:
+                ai_text = response.json().get("response", "").strip()
+                if ai_text:
+                    recommendations.append({
+                        'type': 'ai',
+                        'content': ai_text,
+                        'categories': [cat for cat, _ in at_risk[:10]]
+                    })
+                    return recommendations
+
+        except Exception as e:
+            pass  # Fall back to rule-based
+
+    # Rule-based recommendations
+    for cat, data in at_risk[:5]:
+        if data['recurrence_rate'] > 50 and data['lesson_completion'] < 30:
+            rec = f"🔴 HIGH PRIORITY: {cat} has {data['recurrence_rate']:.0f}% recurrence with only {data['lesson_completion']:.0f}% lesson completion. Mandate lesson documentation for all resolved tickets in this category."
+        elif data['recurrence_rate'] > 30:
+            rec = f"🟡 MEDIUM: {cat} shows {data['recurrence_rate']:.0f}% recurrence. Review root causes and ensure lessons learned are being applied."
+        else:
+            rec = f"📋 {cat}: Improve lesson documentation rate (currently {data['lessons_documented']} documented)."
+
+        recommendations.append({
+            'type': 'rule',
+            'priority': 'HIGH' if data['grade'] == 'F' else 'MEDIUM',
+            'category': cat,
+            'content': rec,
+            'score': data['score'],
+            'grade': data['grade']
+        })
+
+    return recommendations
+
 
 # ============================================================================
 # SYSTEMIC ISSUES ANALYSIS
@@ -4299,7 +5393,7 @@ def render_analytics(df):
     st.markdown('<p class="main-header">📈 Analytics</p>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Deep dive into escalation patterns and performance</p>', unsafe_allow_html=True)
 
-    tabs = st.tabs(["🎯 Categories", "👥 Engineers", "📊 Distributions", "💰 Financial"])
+    tabs = st.tabs(["🎯 Categories", "👥 Engineers", "📊 Distributions", "💰 Financial", "🔗 Similarity", "📚 Lessons Learned"])
 
     with tabs[0]:
         # Sub-tabs for different category views
@@ -4535,6 +5629,390 @@ def render_analytics(df):
                 st.dataframe(summary, use_container_width=True, hide_index=True)
         else:
             st.info("Financial impact data not available.")
+
+    with tabs[4]:
+        # Similarity Search Analysis Tab
+        st.markdown("### 🔗 Similarity Search Analysis")
+        st.markdown("*Insights from comparing tickets to historical patterns*")
+
+        # Check if similarity data exists
+        has_similarity = any(col in df.columns for col in ['Similar_Ticket_Count', 'Best_Match_Similarity', 'Resolution_Consistency'])
+
+        if not has_similarity:
+            st.info("🔍 **Similarity search data not available.**\n\nRun the analysis with similarity search enabled to populate this section.")
+        else:
+            # Similarity sub-tabs
+            sim_tabs = st.tabs(["📊 Overview", "📈 Score Analysis", "⚖️ Consistency", "🔥 Heatmap"])
+
+            with sim_tabs[0]:
+                # Overview - count distribution and key metrics
+                col1, col2, col3 = st.columns(3)
+
+                if 'Similar_Ticket_Count' in df.columns:
+                    counts = df['Similar_Ticket_Count'].dropna()
+                    with col1:
+                        avg_similar = counts.mean()
+                        st.metric("Avg Similar Tickets", f"{avg_similar:.1f}")
+                    with col2:
+                        zero_matches = (counts == 0).sum()
+                        st.metric("No Matches Found", f"{zero_matches}", delta=f"{zero_matches/len(counts)*100:.0f}%", delta_color="inverse")
+                    with col3:
+                        high_matches = (counts >= 5).sum()
+                        st.metric("Good Coverage (5+)", f"{high_matches}", delta=f"{high_matches/len(counts)*100:.0f}%")
+
+                st.markdown("---")
+
+                # Count distribution chart
+                fig = chart_similarity_count_distribution(df)
+                if fig:
+                    render_chart_with_insight('similarity_count', fig, df)
+                else:
+                    st.info("Similar ticket count data not available.")
+
+            with sim_tabs[1]:
+                # Score distribution
+                st.markdown("### Similarity Score Analysis")
+                st.markdown("*How confident are we in the similar ticket matches?*")
+
+                if 'Best_Match_Similarity' in df.columns:
+                    scores = df['Best_Match_Similarity'].dropna()
+                    scores = scores[scores > 0]
+
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Average Score", f"{scores.mean():.2f}")
+                    with col2:
+                        high_conf = (scores >= 0.7).sum()
+                        st.metric("High Confidence", f"{high_conf}", delta=f"{high_conf/len(scores)*100:.0f}%")
+                    with col3:
+                        low_conf = (scores < 0.5).sum()
+                        st.metric("Low Confidence", f"{low_conf}", delta=f"{low_conf/len(scores)*100:.0f}%", delta_color="inverse")
+
+                    st.markdown("---")
+                    fig = chart_similarity_score_distribution(df)
+                    if fig:
+                        render_chart_with_insight('similarity_score', fig, df)
+
+                # Resolution comparison
+                fig = chart_expected_vs_predicted_resolution(df)
+                if fig:
+                    st.markdown("### Expected vs AI Predicted Resolution")
+                    st.plotly_chart(fig, use_container_width=True)
+
+            with sim_tabs[2]:
+                # Consistency analysis
+                st.markdown("### Resolution Consistency")
+                st.markdown("*Are we resolving similar issues the same way?*")
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    fig = chart_resolution_consistency(df)
+                    if fig:
+                        render_chart_with_insight('resolution_consistency', fig, df)
+                    else:
+                        st.info("Resolution consistency data not available.")
+
+                with col2:
+                    fig = chart_inconsistent_by_category(df)
+                    if fig:
+                        render_chart_with_insight('inconsistent_resolution', fig, df)
+                    else:
+                        st.info("Inconsistent resolution data not available.")
+
+                # Detailed inconsistency table
+                if 'Inconsistent_Resolution' in df.columns:
+                    inconsistent = df[df['Inconsistent_Resolution'] == True]
+                    if len(inconsistent) > 0:
+                        st.markdown("### Tickets with Inconsistent Resolutions")
+                        st.markdown(f"*{len(inconsistent)} tickets resolved differently than similar historical cases*")
+
+                        display_cols = ['Identity', 'AI_Category', 'AI_Sub_Category', 'Similar_Ticket_Count', 'Best_Match_Similarity']
+                        display_cols = [c for c in display_cols if c in inconsistent.columns]
+
+                        if display_cols:
+                            st.dataframe(
+                                inconsistent[display_cols].head(20),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+
+            with sim_tabs[3]:
+                # Effectiveness heatmap
+                st.markdown("### Similarity Search Effectiveness")
+                st.markdown("*Where do we have good historical coverage?*")
+
+                fig = chart_similarity_effectiveness_heatmap(df)
+                if fig:
+                    render_chart_with_insight('similarity_effectiveness', fig, df)
+                else:
+                    st.info("Need both category and origin data for effectiveness heatmap.")
+
+                # Coverage summary by category
+                if 'Similar_Ticket_Count' in df.columns and 'AI_Category' in df.columns:
+                    st.markdown("### Coverage by Category")
+                    coverage = df.groupby('AI_Category').agg({
+                        'Similar_Ticket_Count': ['mean', 'sum'],
+                        'AI_Category': 'count'
+                    })
+                    coverage.columns = ['Avg Matches', 'Total Matches', 'Ticket Count']
+                    coverage['Coverage Score'] = (coverage['Avg Matches'] * 20).clip(0, 100).round(0).astype(int)
+                    coverage = coverage.sort_values('Coverage Score', ascending=False)
+
+                    st.dataframe(coverage, use_container_width=True)
+
+    with tabs[5]:
+        # Lessons Learned Effectiveness Tab - Comprehensive 6-Pillar Scorecard
+        st.markdown("### 📚 Lessons Learned Effectiveness")
+        st.markdown("*Comprehensive 6-pillar assessment of organizational learning*")
+
+        # Get comprehensive scorecard
+        scorecard = get_comprehensive_scorecard(df)
+
+        if not scorecard or not scorecard.category_scorecards:
+            # Fall back to simple grading
+            grades_data = _calculate_learning_grades(df)
+            if not grades_data:
+                st.info("🔍 **Lessons learned data not available.**\n\nThis analysis requires:\n- `AI_Category` column\n- `tickets_data_lessons_learned_title` or similar column\n- Ideally `AI_Recurrence_Probability` from similarity analysis")
+            else:
+                # Use simple grades (backwards compatibility)
+                total_cats = len(grades_data)
+                avg_score = np.mean([d['score'] for d in grades_data.values()])
+                st.metric("Average Score (Simple)", f"{avg_score:.0f}/100")
+                fig = chart_learning_grades(df)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+        else:
+            # Full comprehensive scorecard view
+            summary_df = scorecard.get_summary_df()
+            at_risk = scorecard.get_at_risk_categories()
+
+            # Summary metrics
+            total_cats = len(scorecard.category_scorecards)
+            avg_score = summary_df['Overall Score'].mean()
+
+            # Count grades by letter (ignore +/-)
+            grade_counts = {'A': 0, 'B': 0, 'C': 0, 'D': 0, 'F': 0}
+            for grade in summary_df['Grade']:
+                base_grade = grade[0] if grade else 'F'
+                if base_grade in grade_counts:
+                    grade_counts[base_grade] += 1
+
+            at_risk_count = grade_counts['D'] + grade_counts['F']
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Average Score", f"{avg_score:.0f}/100")
+            with col2:
+                st.metric("Categories Analyzed", total_cats)
+            with col3:
+                st.metric("At-Risk (D/F)", at_risk_count,
+                         delta=f"{at_risk_count/total_cats*100:.0f}%" if total_cats > 0 else "0%",
+                         delta_color="inverse")
+            with col4:
+                excellent = grade_counts['A'] + grade_counts['B']
+                st.metric("Excellent (A/B)", excellent,
+                         delta=f"{excellent/total_cats*100:.0f}%" if total_cats > 0 else "0%")
+
+            st.markdown("---")
+
+            # Comprehensive sub-tabs
+            lesson_tabs = st.tabs([
+                "🎯 Scorecard Overview",
+                "📊 Category Rankings",
+                "🔬 Pillar Deep-Dive",
+                "📈 Trends & Patterns",
+                "⚠️ At-Risk Categories",
+                "💡 AI Recommendations"
+            ])
+
+            with lesson_tabs[0]:
+                # Scorecard Overview with Radar
+                st.markdown("### Organization Learning Effectiveness Scorecard")
+                st.markdown("""
+                *The 6-pillar scorecard evaluates learning effectiveness across:*
+                - **Learning Velocity**: Improvement trends over time
+                - **Impact Management**: Handling of high-severity recurring issues
+                - **Knowledge Quality**: Quality of documented lessons (AI-assessed)
+                - **Process Maturity**: Consistency and documentation completeness
+                - **Knowledge Transfer**: Cross-team learning and knowledge sharing
+                - **Outcome Effectiveness**: Actual results and improvements
+                """)
+
+                col1, col2 = st.columns([1, 1])
+
+                with col1:
+                    # Organization-wide radar
+                    fig = chart_scorecard_radar(df)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+
+                with col2:
+                    # Pillar averages table
+                    st.markdown("### Pillar Averages")
+                    pillar_avgs = []
+                    for pillar_key in ['learning_velocity', 'impact_management', 'knowledge_quality',
+                                      'process_maturity', 'knowledge_transfer', 'outcome_effectiveness']:
+                        scores = [sc.pillars[pillar_key].score for sc in scorecard.category_scorecards.values()]
+                        avg = np.mean(scores)
+                        trend = 'improving' if avg > 60 else ('needs work' if avg < 40 else 'stable')
+                        pillar_avgs.append({
+                            'Pillar': pillar_key.replace('_', ' ').title(),
+                            'Avg Score': f"{avg:.0f}",
+                            'Status': '✅' if avg >= 70 else ('⚠️' if avg >= 50 else '🔴'),
+                            'Trend': trend
+                        })
+                    st.dataframe(pd.DataFrame(pillar_avgs), use_container_width=True, hide_index=True)
+
+            with lesson_tabs[1]:
+                # Category Rankings
+                st.markdown("### Category Rankings")
+                st.markdown("*All categories ranked by overall learning effectiveness score*")
+
+                fig = chart_learning_grades(df)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Detailed table
+                st.markdown("### Detailed Scores")
+                display_df = summary_df.copy()
+                display_df['Overall Score'] = display_df['Overall Score'].round(1)
+                for col in display_df.columns:
+                    if col not in ['Category', 'Rank', 'Grade', 'Overall Score']:
+                        display_df[col] = display_df[col].round(1)
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+            with lesson_tabs[2]:
+                # Pillar Deep-Dive
+                st.markdown("### Pillar Deep-Dive Analysis")
+                st.markdown("*Select a category to see detailed pillar breakdown*")
+
+                selected_cat = st.selectbox(
+                    "Select Category",
+                    options=['Organization Average'] + list(scorecard.category_scorecards.keys()),
+                    key="pillar_drilldown_cat"
+                )
+
+                col1, col2 = st.columns([1, 1])
+
+                with col1:
+                    if selected_cat == 'Organization Average':
+                        fig = chart_scorecard_radar(df)
+                    else:
+                        fig = chart_scorecard_radar(df, selected_cat)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+
+                with col2:
+                    if selected_cat != 'Organization Average' and selected_cat in scorecard.category_scorecards:
+                        cat_sc = scorecard.category_scorecards[selected_cat]
+
+                        st.markdown(f"### {selected_cat}")
+                        st.markdown(f"**Grade: {cat_sc.overall_grade}** | Score: {cat_sc.overall_score:.0f}/100 | Rank: #{cat_sc.rank}")
+
+                        if cat_sc.strengths:
+                            st.markdown("**Strengths:** " + ", ".join(cat_sc.strengths))
+                        if cat_sc.weaknesses:
+                            st.markdown("**Weaknesses:** " + ", ".join(cat_sc.weaknesses))
+
+                        st.markdown("#### Pillar Details")
+                        for name, pillar in cat_sc.pillars.items():
+                            status = '✅' if pillar.score >= 70 else ('⚠️' if pillar.score >= 50 else '🔴')
+                            with st.expander(f"{status} {name.replace('_', ' ').title()}: {pillar.score:.0f}"):
+                                for sub_name, sub_score in pillar.sub_scores.items():
+                                    st.write(f"  • {sub_name.replace('_', ' ').title()}: {sub_score:.0f}")
+                                if pillar.insights:
+                                    st.markdown("**Insights:**")
+                                    for insight in pillar.insights:
+                                        st.write(f"  {insight}")
+
+                # Comparison view
+                st.markdown("---")
+                st.markdown("### Compare Categories")
+                compare_cats = st.multiselect(
+                    "Select categories to compare (max 5)",
+                    options=list(scorecard.category_scorecards.keys()),
+                    default=list(scorecard.category_scorecards.keys())[:3],
+                    max_selections=5,
+                    key="compare_cats"
+                )
+                if compare_cats:
+                    fig = chart_scorecard_comparison(df, compare_cats)
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+
+            with lesson_tabs[3]:
+                # Trends & Patterns
+                st.markdown("### Trends & Patterns")
+
+                fig = chart_recurrence_vs_lessons(df)
+                if fig:
+                    st.markdown("#### Recurrence vs Lesson Completion")
+                    render_chart_with_insight('recurrence_lessons', fig, df)
+
+                fig = chart_learning_heatmap(df)
+                if fig:
+                    st.markdown("#### Learning Effectiveness by Category & LOB")
+                    st.plotly_chart(fig, use_container_width=True)
+
+            with lesson_tabs[4]:
+                # At-Risk Categories
+                st.markdown("### ⚠️ At-Risk Categories")
+                st.markdown("*Categories scoring below C- require immediate attention*")
+
+                if at_risk:
+                    for cat_sc in at_risk[:10]:
+                        with st.expander(f"🔴 {cat_sc.category} - Grade {cat_sc.overall_grade} ({cat_sc.overall_score:.0f})"):
+                            col1, col2 = st.columns([1, 2])
+                            with col1:
+                                fig = chart_scorecard_radar(df, cat_sc.category)
+                                if fig:
+                                    st.plotly_chart(fig, use_container_width=True)
+                            with col2:
+                                st.markdown("**Weaknesses:**")
+                                for w in cat_sc.weaknesses:
+                                    st.write(f"  • {w}")
+
+                                st.markdown("**Key Recommendations:**")
+                                for rec in cat_sc.recommendations[:5]:
+                                    st.write(f"  • {rec}")
+
+                                # Show worst pillars
+                                worst_pillars = sorted(
+                                    cat_sc.pillars.items(),
+                                    key=lambda x: x[1].score
+                                )[:2]
+                                st.markdown("**Focus Areas:**")
+                                for name, pillar in worst_pillars:
+                                    st.write(f"  🎯 {name.replace('_', ' ').title()}: {pillar.score:.0f}")
+                else:
+                    st.success("✅ No categories with grades below C-! Organization is learning effectively.")
+
+            with lesson_tabs[5]:
+                # AI Recommendations
+                st.markdown("### 💡 AI-Powered Recommendations")
+
+                top_recs = scorecard.get_top_recommendations(10)
+
+                if st.button("🤖 Generate AI Executive Summary", key="gen_ai_summary"):
+                    with st.spinner("Generating AI analysis..."):
+                        summary = scorecard.generate_ai_summary(use_ollama=True)
+                        st.markdown("#### Executive Summary")
+                        st.markdown(summary)
+                else:
+                    st.markdown("*Click button above for AI-generated executive summary*")
+
+                st.markdown("---")
+                st.markdown("### Priority Recommendations")
+
+                if top_recs:
+                    for rec in top_recs:
+                        priority = "🔴 HIGH" if rec['grade'] in ['F', 'D-', 'D'] else "🟡 MEDIUM"
+                        st.markdown(f"**{priority}** | {rec['category']} ({rec['grade']})")
+                        st.write(f"  → {rec['recommendation']}")
+                        st.markdown("")
+                else:
+                    st.success("✅ All categories performing well!")
 
 
 if __name__ == "__main__":

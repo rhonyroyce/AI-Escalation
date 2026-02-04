@@ -42,12 +42,12 @@ def select_models():
     if vram_gb >= 20:
         # High VRAM (24GB+): Use largest models
         embed_model = "qwen3-embedding:8b"
-        gen_model = "qwen3:30b"
+        gen_model = "gpt-oss:20b"
         tier = "high"
     elif vram_gb >= 12:
         # Medium VRAM (16GB): Use medium models
         embed_model = "qwen3-embedding:4b"
-        gen_model = "qwen3:14b"
+        gen_model = "gpt-oss:20b"
         tier = "medium"
     else:
         # Low VRAM (<12GB) or CPU only: Use smallest models
@@ -807,20 +807,20 @@ ROOT_CAUSE_CATEGORIES = {
 # COLUMN NAME CONSTANTS
 # ==========================================
 COL_SEVERITY = 'tickets_data_severity'
-COL_TYPE = 'tickets_data_type_1'
+COL_TYPE = 'tickets_data_type'
 COL_ORIGIN = 'tickets_data_escalation_origin'
-COL_IMPACT = 'tickets_data_business_impact_pm'
+COL_IMPACT = 'tickets_data_business_impact'
 COL_SUMMARY = 'tickets_data_issue_summary'
-COL_CATEGORY = 'tickets_data_issue_category_1'
+COL_CATEGORY = 'tickets_data_issue_category'
 COL_DATETIME = 'tickets_data_issue_datetime'
-COL_CLOSE_DATE = 'tickets_data_close_datetime'
-COL_RESOLUTION_DATE = 'tickets_data_resolution_datetime'  # Actual resolution timestamp
-COL_RESOLUTION_NOTES = 'tickets_data_resolution_notes'
+COL_CLOSE_DATE = 'tickets_data_resolution_datetime'
+COL_RESOLUTION_DATE = 'tickets_data_resolution_datetime'
+COL_RESOLUTION_NOTES = 'tickets_data_commentsresolution_plan'
 COL_ENGINEER = 'tickets_data_engineer_name'
 COL_LOB = 'tickets_data_lob'
-COL_LESSON_TITLE = 'tickets_data_lessons_learned_title'
-COL_LESSON_STATUS = 'tickets_data_lessons_learned_status'
+COL_LESSON_TITLE = 'tickets_data_lessons_learned_preventive_actions'
+COL_LESSON_STATUS = 'tickets_data_current_status'
 COL_ROOT_CAUSE = 'tickets_data_root_cause'
-COL_RECURRENCE_RISK = 'tickets_data_risk_for_recurrence_pm'
+COL_RECURRENCE_RISK = 'tickets_data_risk_for_recurrence'
 
 REQUIRED_COLUMNS = [COL_SEVERITY, COL_TYPE, COL_ORIGIN]

@@ -1,8 +1,9 @@
 """
-Category Drift Detection Module.
+Analysis modules for escalation AI.
 
-Detects shifts in escalation categories over time using statistical 
-tests and trend analysis to identify emerging patterns or declining issues.
+Includes:
+- Category Drift Detection
+- Lessons Learned Effectiveness Analysis
 """
 
 from .category_drift import (
@@ -15,12 +16,27 @@ from .category_drift import (
     get_declining_categories
 )
 
+from .lessons_learned import (
+    LessonsLearnedAnalyzer,
+    LearningGrade,
+    LearningScore,
+    get_lessons_analyzer,
+    analyze_lessons_learned
+)
+
 __all__ = [
+    # Category Drift
     'CategoryDriftDetector',
     'DriftResult',
     'DriftType',
     'detect_category_drift',
     'compare_periods',
     'get_emerging_categories',
-    'get_declining_categories'
+    'get_declining_categories',
+    # Lessons Learned
+    'LessonsLearnedAnalyzer',
+    'LearningGrade',
+    'LearningScore',
+    'get_lessons_analyzer',
+    'analyze_lessons_learned',
 ]

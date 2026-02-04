@@ -836,6 +836,8 @@ class ExcelReportWriter:
             'analysis': '🔍 Root Cause Analysis',
             'predictive': '🤖 Predictive Models',
             'financial': '💰 Financial Impact',
+            'similarity': '🔗 Similarity Search Analysis',
+            'lessons': '📚 Lessons Learned Effectiveness',
         }
 
         # Chart summaries - map filename patterns to short descriptions
@@ -859,6 +861,18 @@ class ExcelReportWriter:
             'cost_avoidance': 'Cost Avoidance Waterfall: Potential savings from process improvements.',
             'engineer_quadrant': 'Engineer Quadrant Analysis: Speed vs Quality matrix for engineer performance.',
             'executive_scorecard': 'Executive Scorecard: High-level KPIs and performance indicators.',
+            # Similarity Charts
+            'similarity_count': 'Similar Ticket Count: Distribution of similar tickets found per issue. Zero matches may indicate new issue types.',
+            'resolution_consistency': 'Resolution Consistency: Shows consistent vs inconsistent resolutions based on similar ticket patterns.',
+            'similarity_score': 'Similarity Score Distribution: Histogram of best match scores. Higher scores = more confident matches.',
+            'resolution_comparison': 'Resolution Time Comparison: Expected (from similar tickets) vs AI predicted resolution times.',
+            'similarity_effectiveness': 'Similarity Search Effectiveness: Match quality heatmap by category and origin.',
+            # Lessons Learned Charts
+            'learning_grades': 'Learning Effectiveness Grades: A-F grades based on recurrence, lesson completion, and resolution consistency.',
+            'lesson_completion': 'Lesson Completion Rate: Documented vs completed lessons by category. Percentage shows completion rate.',
+            'recurrence_vs_lessons': 'Recurrence vs Lessons: Scatter plot showing correlation between lesson completion and recurrence reduction.',
+            'learning_heatmap': 'Learning Effectiveness Heatmap: Score by category and LOB. Green = good learning, red = needs attention.',
+            'recommendations': 'AI Recommendations: Prioritized improvement suggestions based on lessons learned analysis.',
         }
 
         # Grid layout settings - 4.5 x 2.8 inches at 96 DPI (landscape ratio)
@@ -1383,10 +1397,217 @@ class ExcelReportWriter:
                 res_by_lob = df.groupby(lob_col)['Predicted_Resolution_Days'].mean()
                 res_by_lob = res_by_lob[res_by_lob.index.notna() & (res_by_lob.index != '') & (res_by_lob.index != '0')]
                 analysis_data['resolution_by_lob'] = res_by_lob.to_dict()
-                
+
+            # ─────────────────────────────────────────────────────────────
+            # SIMILARITY SEARCH DATA
+            # ─────────────────────────────────────────────────────────────
+
+            # Similar ticket count distribution
+            if 'Similar_Ticket_Count' in df.columns:
+                counts = df['Similar_Ticket_Count'].dropna().tolist()
+                analysis_data['similarity_counts'] = counts
+
+            # Similarity score distribution
+            if 'Best_Match_Similarity' in df.columns:
+                scores = df['Best_Match_Similarity'].dropna().tolist()
+                analysis_data['similarity_scores'] = scores
+
+            # Resolution consistency data
+            if 'Resolution_Consistency' in df.columns:
+                consistency = df['Resolution_Consistency'].value_counts()
+                analysis_data['resolution_consistency'] = {
+                    'consistent': int(consistency.get('Consistent', 0)),
+                    'inconsistent': int(consistency.get('Inconsistent', 0)),
+                    'no_data': int(consistency.get('No Similar Data', 0))
+                }
+
+                # Inconsistent resolutions by category
+                if 'AI_Category' in df.columns and 'Inconsistent_Resolution' in df.columns:
+                    inconsistent_df = df[df['Inconsistent_Resolution'] == True]
+                    if len(inconsistent_df) > 0:
+                        by_cat = inconsistent_df.groupby('AI_Category').size()
+                        analysis_data['resolution_consistency']['inconsistent_by_category'] = by_cat.to_dict()
+
+            # Resolution time comparison (expected from similar tickets vs predicted)
+            if 'Expected_Resolution_Days' in df.columns and 'Predicted_Resolution_Days' in df.columns and 'AI_Category' in df.columns:
+                comparison = df.groupby('AI_Category').agg({
+                    'Expected_Resolution_Days': 'mean',
+                    'Predicted_Resolution_Days': 'mean'
+                }).dropna()
+                if not comparison.empty:
+                    analysis_data['resolution_comparison'] = {
+                        'categories': list(comparison.index),
+                        'expected_days': list(comparison['Expected_Resolution_Days'].values),
+                        'predicted_days': list(comparison['Predicted_Resolution_Days'].values),
+                        'actual_days': []  # Populated if actual data available
+                    }
+
+            # Similarity effectiveness by category and origin
+            origin_col = None
+            for col in ['tickets_data_origin', 'Origin', COL_ORIGIN]:
+                if col in df.columns:
+                    origin_col = col
+                    break
+
+            if 'Similar_Ticket_Count' in df.columns and 'AI_Category' in df.columns and origin_col:
+                effectiveness = df.groupby(['AI_Category', origin_col])['Similar_Ticket_Count'].mean()
+                if not effectiveness.empty:
+                    # Convert to nested dict: {category: {origin: effectiveness}}
+                    effectiveness_dict = {}
+                    for (cat, origin), val in effectiveness.items():
+                        if cat not in effectiveness_dict:
+                            effectiveness_dict[cat] = {}
+                        effectiveness_dict[cat][origin] = val / max(effectiveness.max(), 1)  # Normalize to 0-1
+                    analysis_data['similarity_effectiveness'] = effectiveness_dict
+
+            # ─────────────────────────────────────────────────────────────
+            # LESSONS LEARNED EFFECTIVENESS DATA
+            # ─────────────────────────────────────────────────────────────
+
+            # Find lesson-related columns
+            lesson_title_col = None
+            lesson_status_col = None
+            for col in ['tickets_data_lessons_learned_title', 'Lesson_Title', 'lessons_learned_title']:
+                if col in df.columns:
+                    lesson_title_col = col
+                    break
+            for col in ['tickets_data_lessons_learned_status', 'Lesson_Status', 'lessons_learned_status']:
+                if col in df.columns:
+                    lesson_status_col = col
+                    break
+
+            if 'AI_Category' in df.columns:
+                # Calculate learning effectiveness grades by category
+                lessons_grades = {}
+                lessons_by_category = {}
+                recurrence_lessons_correlation = {}
+
+                for cat in df['AI_Category'].dropna().unique():
+                    if not cat or str(cat).strip() in ['', 'nan', 'None']:
+                        continue
+
+                    cat_df = df[df['AI_Category'] == cat]
+                    ticket_count = len(cat_df)
+                    if ticket_count < 3:
+                        continue
+
+                    # Recurrence rate
+                    recurrence_rate = 0.0
+                    if 'AI_Recurrence_Probability' in cat_df.columns:
+                        recurrence_rate = cat_df['AI_Recurrence_Probability'].mean() * 100
+
+                    # Lesson metrics
+                    lessons_documented = 0
+                    lessons_completed = 0
+
+                    if lesson_title_col:
+                        lessons_documented = cat_df[lesson_title_col].notna().sum()
+
+                    if lesson_status_col:
+                        status_lower = cat_df[lesson_status_col].astype(str).str.lower()
+                        lessons_completed = (
+                            status_lower.str.contains('complete', na=False) |
+                            status_lower.str.contains('done', na=False) |
+                            status_lower.str.contains('closed', na=False)
+                        ).sum()
+
+                    lesson_completion_rate = 0.0
+                    if lessons_documented > 0:
+                        lesson_completion_rate = (lessons_completed / lessons_documented) * 100
+
+                    # Consistency rate
+                    consistency_rate = 50.0
+                    if 'Resolution_Consistency' in cat_df.columns:
+                        consistent = (cat_df['Resolution_Consistency'] == 'Consistent').sum()
+                        total_with_data = (cat_df['Resolution_Consistency'] != 'No Similar Data').sum()
+                        if total_with_data > 0:
+                            consistency_rate = (consistent / total_with_data) * 100
+
+                    # Calculate score (0-100)
+                    recurrence_score = max(0, 100 - recurrence_rate)
+                    score = (
+                        0.35 * recurrence_score +
+                        0.30 * lesson_completion_rate +
+                        0.25 * consistency_rate +
+                        0.10 * (100 if lessons_documented > 0 else 0)
+                    )
+                    score = round(min(100, max(0, score)), 1)
+
+                    # Assign grade
+                    if score >= 80:
+                        grade = 'A'
+                    elif score >= 65:
+                        grade = 'B'
+                    elif score >= 50:
+                        grade = 'C'
+                    elif score >= 35:
+                        grade = 'D'
+                    else:
+                        grade = 'F'
+
+                    lessons_grades[cat] = {
+                        'score': score,
+                        'grade': grade,
+                        'recurrence_rate': recurrence_rate,
+                        'lesson_completion': lesson_completion_rate,
+                        'consistency': consistency_rate
+                    }
+
+                    lessons_by_category[cat] = {
+                        'documented': int(lessons_documented),
+                        'completed': int(lessons_completed),
+                        'ticket_count': ticket_count
+                    }
+
+                    recurrence_lessons_correlation[cat] = {
+                        'recurrence_rate': recurrence_rate,
+                        'lesson_completion': lesson_completion_rate,
+                        'ticket_count': ticket_count
+                    }
+
+                if lessons_grades:
+                    analysis_data['lessons_grades'] = lessons_grades
+                    analysis_data['lessons_by_category'] = lessons_by_category
+                    analysis_data['recurrence_lessons_correlation'] = recurrence_lessons_correlation
+
+                    # Generate recommendations
+                    recommendations = []
+                    sorted_grades = sorted(lessons_grades.items(), key=lambda x: x[1]['score'])
+                    for cat, data in sorted_grades[:5]:
+                        if data['grade'] in ['D', 'F']:
+                            priority = 'CRITICAL' if data['grade'] == 'F' else 'HIGH'
+                            recommendations.append({
+                                'category': cat,
+                                'priority': priority,
+                                'recommendation': f"{cat} needs attention: {data['recurrence_rate']:.0f}% recurrence, "
+                                                f"{data['lesson_completion']:.0f}% lesson completion. "
+                                                f"Focus on documenting lessons and root cause analysis."
+                            })
+                    if recommendations:
+                        analysis_data['lessons_recommendations'] = recommendations
+
+                # Learning heatmap by category and LOB
+                if lob_col:
+                    learning_heatmap = {}
+                    for cat in df['AI_Category'].dropna().unique():
+                        if not cat or str(cat).strip() in ['', 'nan', 'None']:
+                            continue
+                        learning_heatmap[cat] = {}
+                        for lob in df[lob_col].dropna().unique():
+                            if not lob or str(lob).strip() in ['', 'nan', 'None', '0']:
+                                continue
+                            subset = df[(df['AI_Category'] == cat) & (df[lob_col] == lob)]
+                            if len(subset) >= 2:
+                                # Calculate simple score for this combination
+                                recurrence = subset['AI_Recurrence_Probability'].mean() * 100 if 'AI_Recurrence_Probability' in subset.columns else 50
+                                score = max(0, 100 - recurrence)
+                                learning_heatmap[cat][str(lob)] = round(score, 0)
+                    if learning_heatmap:
+                        analysis_data['learning_heatmap'] = learning_heatmap
+
         except Exception as e:
             logger.warning(f"Error building analysis data: {e}")
-        
+
         return analysis_data
     
     def save(self):

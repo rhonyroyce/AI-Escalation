@@ -63,6 +63,8 @@ class ChartGenerator:
             'analysis': self.output_dir / '04_analysis',
             'predictive': self.output_dir / '05_predictive',
             'financial': self.output_dir / '06_financial',
+            'similarity': self.output_dir / '10_similarity',
+            'lessons': self.output_dir / '11_lessons_learned',
         }
         
         for dir_path in self.chart_dirs.values():
@@ -92,7 +94,7 @@ class ChartGenerator:
     def generate_all_charts(self, analysis_data: Dict[str, Any]) -> Dict[str, List[str]]:
         """
         Generate all charts organized by category.
-        
+
         Returns:
             Dict mapping category names to list of generated chart paths
         """
@@ -103,46 +105,62 @@ class ChartGenerator:
             'analysis': [],
             'predictive': [],
             'financial': [],
+            'similarity': [],
+            'lessons': [],
         }
-        
+
         try:
             # Risk Charts (01_risk/)
             generated['risk'].append(self._chart_friction_pareto(analysis_data))
             generated['risk'].append(self._chart_risk_origin(analysis_data))
             generated['risk'].append(self._chart_risk_trend(analysis_data))
             generated['risk'].append(self._chart_severity_heatmap(analysis_data))
-            
+
             # Engineer Charts (02_engineer/)
             generated['engineer'].append(self._chart_engineer_friction(analysis_data))
             generated['engineer'].append(self._chart_engineer_learning(analysis_data))
-            
+
             # LOB Charts (03_lob/)
             generated['lob'].append(self._chart_lob_friction(analysis_data))
             generated['lob'].append(self._chart_lob_matrix(analysis_data))
             generated['lob'].append(self._chart_lob_categories(analysis_data))
-            
+
             # Analysis Charts (04_analysis/)
             generated['analysis'].append(self._chart_root_cause(analysis_data))
             generated['analysis'].append(self._chart_learning_integrity(analysis_data))
             generated['analysis'].append(self._chart_category_subcategory_breakdown(analysis_data))
             generated['analysis'].append(self._chart_category_heatmap(analysis_data))
-            
+
             # Predictive Charts (05_predictive/)
             generated['predictive'].append(self._chart_pm_accuracy(analysis_data))
             generated['predictive'].append(self._chart_ai_recurrence(analysis_data))
             generated['predictive'].append(self._chart_resolution_time(analysis_data))
-            
+
             # Financial Charts (06_financial/)
             generated['financial'].append(self._chart_financial_impact(analysis_data))
             generated['financial'].append(self._chart_subcategory_financial_impact(analysis_data))
-            
+
+            # Similarity Charts (10_similarity/)
+            generated['similarity'].append(self._chart_similarity_count_distribution(analysis_data))
+            generated['similarity'].append(self._chart_resolution_consistency(analysis_data))
+            generated['similarity'].append(self._chart_similarity_score_distribution(analysis_data))
+            generated['similarity'].append(self._chart_resolution_comparison(analysis_data))
+            generated['similarity'].append(self._chart_similarity_effectiveness(analysis_data))
+
+            # Lessons Learned Charts (11_lessons_learned/)
+            generated['lessons'].append(self._chart_learning_grades(analysis_data))
+            generated['lessons'].append(self._chart_lesson_completion_rate(analysis_data))
+            generated['lessons'].append(self._chart_recurrence_vs_lessons(analysis_data))
+            generated['lessons'].append(self._chart_learning_heatmap(analysis_data))
+            generated['lessons'].append(self._chart_recommendations_summary(analysis_data))
+
         except Exception as e:
             print(f"Chart generation error: {e}")
-            
+
         # Filter None values
         for category in generated:
             generated[category] = [p for p in generated[category] if p]
-            
+
         return generated
     
     # =========================================================================
@@ -1151,6 +1169,763 @@ class ChartGenerator:
                     'files': [f.name for f in files]
                 }
         return summary
+
+    # =========================================================================
+    # SIMILARITY SEARCH CHARTS (10_similarity/)
+    # =========================================================================
+
+    def _chart_similarity_count_distribution(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Similar Ticket Count Distribution
+        Histogram showing how many similar tickets are found per issue.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(12, 7))
+
+            similarity_data = data.get('similarity_counts', [])
+            if not similarity_data:
+                # No data available - create placeholder
+                ax.text(0.5, 0.5, 'Similarity Search Data Not Available\n\n'
+                       'Run similarity search to populate this chart',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes,
+                       bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.axis('off')
+                plt.title('Similar Ticket Count Distribution\nData Not Available',
+                         fontsize=14, fontweight='bold', pad=20)
+                filepath = self.chart_dirs['similarity'] / 'similarity_count_distribution.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            # Create histogram
+            counts = np.array(similarity_data)
+            bins = np.arange(0, max(counts) + 2) - 0.5
+
+            n, bins_out, patches = ax.hist(counts, bins=bins, color=self.COLORS['primary'],
+                                           alpha=0.7, edgecolor='white', linewidth=1.5)
+
+            # Color bars by count level
+            for i, patch in enumerate(patches):
+                if i == 0:
+                    patch.set_facecolor(self.COLORS['danger'])  # No matches = concerning
+                elif i <= 2:
+                    patch.set_facecolor(self.COLORS['warning'])  # Few matches
+                else:
+                    patch.set_facecolor(self.COLORS['success'])  # Good coverage
+
+            # Add statistics
+            avg_count = np.mean(counts)
+            median_count = np.median(counts)
+            zero_matches = (counts == 0).sum()
+
+            ax.axvline(x=avg_count, color=self.COLORS['accent'], linestyle='--',
+                      linewidth=2, label=f'Mean: {avg_count:.1f}')
+            ax.axvline(x=median_count, color=self.COLORS['secondary'], linestyle=':',
+                      linewidth=2, label=f'Median: {median_count:.0f}')
+
+            ax.set_xlabel('Number of Similar Tickets Found', fontsize=11)
+            ax.set_ylabel('Frequency', fontsize=11)
+            ax.legend(loc='upper right')
+
+            # Add annotation about zero matches
+            if zero_matches > 0:
+                ax.annotate(f'{zero_matches} tickets with no similar matches\n(may be new issue types)',
+                           xy=(0.02, 0.98), xycoords='axes fraction',
+                           ha='left', va='top', fontsize=9,
+                           bbox=dict(boxstyle='round', facecolor='#FFEBEE', alpha=0.9))
+
+            plt.title(f'Similar Ticket Count Distribution\n{len(counts)} tickets analyzed, avg {avg_count:.1f} matches',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['similarity'] / 'similarity_count_distribution.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating similarity count chart: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_resolution_consistency(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Resolution Consistency Analysis
+        Shows consistent vs inconsistent resolutions based on similar ticket analysis.
+        """
+        try:
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
+
+            consistency_data = data.get('resolution_consistency', {})
+            if not consistency_data:
+                # Create placeholder
+                ax1.text(0.5, 0.5, 'Resolution Consistency\nData Not Available',
+                        ha='center', va='center', fontsize=14, transform=ax1.transAxes)
+                ax1.axis('off')
+                ax2.axis('off')
+                filepath = self.chart_dirs['similarity'] / 'resolution_consistency.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            # Left: Pie chart of consistency
+            consistent = consistency_data.get('consistent', 0)
+            inconsistent = consistency_data.get('inconsistent', 0)
+            no_data = consistency_data.get('no_data', 0)
+
+            sizes = [consistent, inconsistent, no_data]
+            labels = [f'Consistent\n({consistent})', f'Inconsistent\n({inconsistent})',
+                     f'No Similar Data\n({no_data})']
+            colors = [self.COLORS['success'], self.COLORS['danger'], self.COLORS['neutral']]
+            explode = (0, 0.1, 0)  # Explode inconsistent slice
+
+            # Filter out zero values
+            non_zero = [(s, l, c, e) for s, l, c, e in zip(sizes, labels, colors, explode) if s > 0]
+            if non_zero:
+                sizes, labels, colors, explode = zip(*non_zero)
+                wedges, texts, autotexts = ax1.pie(sizes, labels=labels, colors=colors, explode=explode,
+                                                   autopct='%1.1f%%', startangle=90,
+                                                   textprops={'fontsize': 10})
+                for autotext in autotexts:
+                    autotext.set_fontweight('bold')
+
+            ax1.set_title('Resolution Consistency Breakdown', fontsize=12, fontweight='bold')
+
+            # Right: Inconsistency by category (if available)
+            inconsistent_by_cat = consistency_data.get('inconsistent_by_category', {})
+            if inconsistent_by_cat:
+                categories = list(inconsistent_by_cat.keys())
+                counts = list(inconsistent_by_cat.values())
+
+                # Sort and limit
+                sorted_pairs = sorted(zip(counts, categories), reverse=True)[:10]
+                counts, categories = zip(*sorted_pairs)
+
+                # Truncate long names
+                cat_labels = [c[:18] + '..' if len(c) > 18 else c for c in categories]
+
+                bars = ax2.barh(cat_labels, counts, color=self.COLORS['danger'], alpha=0.8,
+                               edgecolor='white', linewidth=1)
+
+                for bar, count in zip(bars, counts):
+                    ax2.text(count + 0.3, bar.get_y() + bar.get_height()/2,
+                            f'{count}', va='center', fontsize=9, fontweight='bold')
+
+                ax2.set_xlabel('Inconsistent Resolutions', fontsize=11)
+                ax2.set_title('Inconsistency by Category', fontsize=12, fontweight='bold')
+                ax2.invert_yaxis()
+            else:
+                ax2.text(0.5, 0.5, 'Category breakdown\nnot available',
+                        ha='center', va='center', fontsize=12, transform=ax2.transAxes)
+                ax2.axis('off')
+
+            plt.suptitle('Resolution Consistency Analysis\nBased on Similar Ticket Patterns',
+                        fontsize=14, fontweight='bold', y=1.02)
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['similarity'] / 'resolution_consistency.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating resolution consistency chart: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_similarity_score_distribution(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Similarity Score Distribution
+        Histogram of best match similarity scores.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(12, 7))
+
+            scores = data.get('similarity_scores', [])
+            if not scores:
+                ax.text(0.5, 0.5, 'Similarity Score Data\nNot Available',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.axis('off')
+                filepath = self.chart_dirs['similarity'] / 'similarity_score_distribution.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            scores = np.array(scores)
+            scores = scores[scores > 0]  # Filter out zeros
+
+            if len(scores) == 0:
+                ax.text(0.5, 0.5, 'No valid similarity scores found',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.axis('off')
+                filepath = self.chart_dirs['similarity'] / 'similarity_score_distribution.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            # Create histogram with gradient colors
+            n, bins, patches = ax.hist(scores, bins=20, alpha=0.7, edgecolor='white', linewidth=1)
+
+            # Color by score level (higher = greener)
+            cm = plt.cm.get_cmap('RdYlGn')
+            for i, patch in enumerate(patches):
+                bin_center = (bins[i] + bins[i+1]) / 2
+                color = cm(bin_center)
+                patch.set_facecolor(color)
+
+            # Add threshold lines
+            ax.axvline(x=0.7, color=self.COLORS['success'], linestyle='--',
+                      linewidth=2, label='High Confidence (0.7+)')
+            ax.axvline(x=0.5, color=self.COLORS['warning'], linestyle='--',
+                      linewidth=2, label='Medium Confidence (0.5)')
+
+            # Statistics
+            avg_score = np.mean(scores)
+            high_conf = (scores >= 0.7).sum()
+
+            ax.set_xlabel('Best Match Similarity Score', fontsize=11)
+            ax.set_ylabel('Frequency', fontsize=11)
+            ax.set_xlim(0, 1)
+            ax.legend(loc='upper left')
+
+            # Annotation
+            ax.annotate(f'Average Score: {avg_score:.2f}\nHigh Confidence Matches: {high_conf} ({high_conf/len(scores)*100:.1f}%)',
+                       xy=(0.98, 0.98), xycoords='axes fraction',
+                       ha='right', va='top', fontsize=10,
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
+
+            plt.title(f'Similarity Score Distribution\n{len(scores)} matches analyzed',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['similarity'] / 'similarity_score_distribution.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating similarity score chart: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_resolution_comparison(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Resolution Time Comparison
+        Compares expected vs predicted vs actual resolution times based on similar tickets.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 8))
+
+            comparison_data = data.get('resolution_comparison', {})
+            if not comparison_data or not comparison_data.get('categories'):
+                ax.text(0.5, 0.5, 'Resolution Comparison Data\nNot Available',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.axis('off')
+                filepath = self.chart_dirs['similarity'] / 'resolution_comparison.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            categories = comparison_data.get('categories', [])
+            expected = comparison_data.get('expected_days', [])  # From similar tickets
+            predicted = comparison_data.get('predicted_days', [])  # AI prediction
+            actual = comparison_data.get('actual_days', [])  # Actual (if available)
+
+            # Truncate category names
+            cat_labels = [c[:15] + '..' if len(c) > 15 else c for c in categories]
+
+            x = np.arange(len(categories))
+            width = 0.25
+
+            bars1 = ax.bar(x - width, expected, width, label='Expected (Similar Tickets)',
+                          color=self.COLORS['secondary'], alpha=0.85)
+            bars2 = ax.bar(x, predicted, width, label='AI Predicted',
+                          color=self.COLORS['primary'], alpha=0.85)
+
+            if actual and any(a > 0 for a in actual):
+                bars3 = ax.bar(x + width, actual, width, label='Actual',
+                              color=self.COLORS['accent'], alpha=0.85)
+
+            ax.set_xlabel('Category', fontsize=11)
+            ax.set_ylabel('Resolution Time (days)', fontsize=11)
+            ax.set_xticks(x)
+            ax.set_xticklabels(cat_labels, rotation=45, ha='right', fontsize=9)
+            ax.legend(loc='upper right')
+
+            # Add accuracy annotation
+            if expected and predicted:
+                mae = np.mean(np.abs(np.array(expected) - np.array(predicted)))
+                ax.annotate(f'Mean Difference: {mae:.1f} days',
+                           xy=(0.02, 0.98), xycoords='axes fraction',
+                           ha='left', va='top', fontsize=10,
+                           bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
+
+            plt.title('Resolution Time Comparison\nSimilar Ticket Analysis vs AI Prediction',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            plt.subplots_adjust(bottom=0.2)
+
+            filepath = self.chart_dirs['similarity'] / 'resolution_comparison.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating resolution comparison chart: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_similarity_effectiveness(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Similarity Search Effectiveness Heatmap
+        Shows search effectiveness by category and origin.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 10))
+
+            effectiveness_data = data.get('similarity_effectiveness', None)
+            if effectiveness_data is None:
+                ax.text(0.5, 0.5, 'Similarity Effectiveness Data\nNot Available',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.axis('off')
+                filepath = self.chart_dirs['similarity'] / 'similarity_effectiveness.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            # Build matrix from dict {category: {origin: effectiveness_score}}
+            if isinstance(effectiveness_data, dict):
+                categories = sorted(effectiveness_data.keys())
+                origins = set()
+                for cat_data in effectiveness_data.values():
+                    if isinstance(cat_data, dict):
+                        origins.update(cat_data.keys())
+                origins = sorted(origins)
+
+                matrix = []
+                for cat in categories:
+                    row = []
+                    for origin in origins:
+                        val = effectiveness_data.get(cat, {}).get(origin, 0)
+                        row.append(val * 100)  # Convert to percentage
+                    matrix.append(row)
+                matrix = np.array(matrix)
+            else:
+                matrix = np.array(effectiveness_data) * 100
+                categories = [f'Cat {i+1}' for i in range(matrix.shape[0])]
+                origins = [f'Origin {i+1}' for i in range(matrix.shape[1])]
+
+            # Truncate labels
+            cat_labels = [c[:15] + '..' if len(c) > 15 else c for c in categories]
+            origin_labels = [o[:12] + '..' if len(o) > 12 else o for o in origins]
+
+            sns.heatmap(matrix, annot=True, fmt='.0f', cmap='RdYlGn',
+                       xticklabels=origin_labels, yticklabels=cat_labels,
+                       ax=ax, cbar_kws={'label': 'Match Effectiveness (%)'},
+                       linewidths=0.5, linecolor='white')
+
+            ax.set_xlabel('Origin/Source', fontsize=12)
+            ax.set_ylabel('Category', fontsize=12)
+            plt.xticks(rotation=45, ha='right')
+
+            plt.title('Similarity Search Effectiveness\nBy Category and Origin',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['similarity'] / 'similarity_effectiveness.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating similarity effectiveness chart: {e}")
+            plt.close('all')
+            return None
+
+    # =========================================================================
+    # LESSONS LEARNED EFFECTIVENESS CHARTS (11_lessons_learned/)
+    # =========================================================================
+
+    def _chart_learning_grades(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Learning Effectiveness Grades by Category
+        Shows letter grades (A-F) for each category based on lessons learned effectiveness.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 8))
+
+            grades_data = data.get('lessons_grades', {})
+            if not grades_data:
+                ax.text(0.5, 0.5, 'Lessons Learned Grades\nNot Available\n\n'
+                       'Run analysis with lessons_learned columns',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes,
+                       bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                ax.axis('off')
+                filepath = self.chart_dirs['lessons'] / 'learning_grades.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            categories = list(grades_data.keys())
+            scores = [grades_data[c]['score'] for c in categories]
+            grades = [grades_data[c]['grade'] for c in categories]
+
+            # Sort by score
+            sorted_data = sorted(zip(scores, categories, grades), reverse=True)
+            scores, categories, grades = zip(*sorted_data)
+
+            # Truncate long names
+            cat_labels = [c[:20] + '..' if len(c) > 20 else c for c in categories]
+
+            # Color by grade
+            grade_colors = {
+                'A': '#28A745', 'B': '#7CB342', 'C': '#FFC107',
+                'D': '#FF9800', 'F': '#DC3545'
+            }
+            colors = [grade_colors.get(g, '#6C757D') for g in grades]
+
+            bars = ax.barh(cat_labels, scores, color=colors, edgecolor='white', linewidth=1.5)
+
+            # Add grade labels
+            for bar, score, grade in zip(bars, scores, grades):
+                ax.text(score + 2, bar.get_y() + bar.get_height()/2,
+                       f'{grade} ({score:.0f})', va='center', fontsize=10, fontweight='bold')
+
+            ax.set_xlabel('Learning Effectiveness Score (0-100)', fontsize=11)
+            ax.set_xlim(0, 110)
+            ax.invert_yaxis()
+
+            # Grade legend
+            legend_elements = [
+                plt.Rectangle((0,0),1,1, facecolor='#28A745', label='A (80-100): Excellent'),
+                plt.Rectangle((0,0),1,1, facecolor='#7CB342', label='B (65-79): Good'),
+                plt.Rectangle((0,0),1,1, facecolor='#FFC107', label='C (50-64): Improving'),
+                plt.Rectangle((0,0),1,1, facecolor='#FF9800', label='D (35-49): Poor'),
+                plt.Rectangle((0,0),1,1, facecolor='#DC3545', label='F (0-34): Failing'),
+            ]
+            ax.legend(handles=legend_elements, loc='lower right', fontsize=9)
+
+            plt.title('Learning Effectiveness Grades by Category\nBased on Recurrence, Lesson Completion & Consistency',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['lessons'] / 'learning_grades.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating learning grades chart: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_lesson_completion_rate(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Lesson Completion Rate by Category
+        Bar chart comparing documented vs completed lessons.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 8))
+
+            lessons_data = data.get('lessons_by_category', {})
+            if not lessons_data:
+                ax.text(0.5, 0.5, 'Lesson Completion Data\nNot Available',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.axis('off')
+                filepath = self.chart_dirs['lessons'] / 'lesson_completion_rate.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            categories = list(lessons_data.keys())
+            documented = [lessons_data[c].get('documented', 0) for c in categories]
+            completed = [lessons_data[c].get('completed', 0) for c in categories]
+
+            # Sort by documented
+            sorted_data = sorted(zip(documented, completed, categories), reverse=True)
+            documented, completed, categories = zip(*sorted_data)
+
+            cat_labels = [c[:18] + '..' if len(c) > 18 else c for c in categories]
+
+            x = np.arange(len(categories))
+            width = 0.35
+
+            bars1 = ax.bar(x - width/2, documented, width, label='Documented',
+                          color=self.COLORS['primary'], alpha=0.85)
+            bars2 = ax.bar(x + width/2, completed, width, label='Completed',
+                          color=self.COLORS['success'], alpha=0.85)
+
+            # Add completion rate labels
+            for i, (doc, comp) in enumerate(zip(documented, completed)):
+                if doc > 0:
+                    rate = (comp / doc) * 100
+                    ax.text(i, max(doc, comp) + 1, f'{rate:.0f}%',
+                           ha='center', fontsize=9, fontweight='bold',
+                           color=self.COLORS['success'] if rate >= 50 else self.COLORS['danger'])
+
+            ax.set_xlabel('Category', fontsize=11)
+            ax.set_ylabel('Number of Lessons', fontsize=11)
+            ax.set_xticks(x)
+            ax.set_xticklabels(cat_labels, rotation=45, ha='right', fontsize=9)
+            ax.legend(loc='upper right')
+
+            plt.title('Lesson Documentation & Completion by Category\nPercentage shows completion rate',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            plt.subplots_adjust(bottom=0.25)
+
+            filepath = self.chart_dirs['lessons'] / 'lesson_completion_rate.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating lesson completion chart: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_recurrence_vs_lessons(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Recurrence Rate vs Lesson Completion
+        Scatter plot showing correlation between learning and recurrence reduction.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(12, 10))
+
+            correlation_data = data.get('recurrence_lessons_correlation', {})
+            if not correlation_data:
+                ax.text(0.5, 0.5, 'Recurrence vs Lessons Data\nNot Available',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.axis('off')
+                filepath = self.chart_dirs['lessons'] / 'recurrence_vs_lessons.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            categories = list(correlation_data.keys())
+            recurrence = [correlation_data[c].get('recurrence_rate', 0) for c in categories]
+            completion = [correlation_data[c].get('lesson_completion', 0) for c in categories]
+            ticket_count = [correlation_data[c].get('ticket_count', 10) for c in categories]
+
+            # Size based on ticket count
+            sizes = [max(50, min(500, t * 10)) for t in ticket_count]
+
+            # Color based on recurrence (red = high, green = low)
+            scatter = ax.scatter(completion, recurrence, s=sizes, c=recurrence,
+                               cmap='RdYlGn_r', alpha=0.7, edgecolors='white', linewidth=2)
+
+            # Add category labels
+            for i, cat in enumerate(categories):
+                label = cat[:12] + '..' if len(cat) > 12 else cat
+                ax.annotate(label, (completion[i], recurrence[i]), xytext=(5, 5),
+                           textcoords='offset points', fontsize=8, alpha=0.8)
+
+            # Draw quadrant lines
+            ax.axhline(y=30, color='#CCCCCC', linestyle='--', linewidth=1.5)
+            ax.axvline(x=50, color='#CCCCCC', linestyle='--', linewidth=1.5)
+
+            # Quadrant labels
+            ax.text(75, 50, 'High Completion\nHigh Recurrence\n(Process Issue)',
+                   ha='center', va='center', fontsize=9, color='#FF9800', alpha=0.8)
+            ax.text(25, 50, 'Low Completion\nHigh Recurrence\n(NEEDS ATTENTION)',
+                   ha='center', va='center', fontsize=9, color='#DC3545', fontweight='bold')
+            ax.text(75, 15, 'High Completion\nLow Recurrence\n(IDEAL)',
+                   ha='center', va='center', fontsize=9, color='#28A745', fontweight='bold')
+            ax.text(25, 15, 'Low Completion\nLow Recurrence\n(Natural Resolution)',
+                   ha='center', va='center', fontsize=9, color='#6C757D', alpha=0.8)
+
+            ax.set_xlabel('Lesson Completion Rate (%)', fontsize=11)
+            ax.set_ylabel('Recurrence Rate (%)', fontsize=11)
+            ax.set_xlim(-5, 105)
+            ax.set_ylim(-5, max(recurrence) * 1.2 if recurrence else 100)
+
+            plt.colorbar(scatter, ax=ax, label='Recurrence Rate (%)')
+
+            plt.title('Recurrence Rate vs Lesson Completion\nIdeal: Bottom-Right (Low Recurrence, High Completion)',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['lessons'] / 'recurrence_vs_lessons.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating recurrence vs lessons chart: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_learning_heatmap(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: Learning Effectiveness Heatmap
+        Shows learning metrics across categories and LOBs.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 10))
+
+            heatmap_data = data.get('learning_heatmap', None)
+            if heatmap_data is None:
+                ax.text(0.5, 0.5, 'Learning Heatmap Data\nNot Available',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes)
+                ax.axis('off')
+                filepath = self.chart_dirs['lessons'] / 'learning_heatmap.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            # Build matrix
+            if isinstance(heatmap_data, dict):
+                categories = sorted(heatmap_data.keys())
+                lobs = set()
+                for cat_data in heatmap_data.values():
+                    if isinstance(cat_data, dict):
+                        lobs.update(cat_data.keys())
+                lobs = sorted(lobs)
+
+                matrix = []
+                for cat in categories:
+                    row = []
+                    for lob in lobs:
+                        val = heatmap_data.get(cat, {}).get(lob, 50)
+                        row.append(val)
+                    matrix.append(row)
+                matrix = np.array(matrix)
+            else:
+                matrix = np.array(heatmap_data)
+                categories = [f'Cat {i+1}' for i in range(matrix.shape[0])]
+                lobs = [f'LOB {i+1}' for i in range(matrix.shape[1])]
+
+            # Truncate labels
+            cat_labels = [c[:15] + '..' if len(c) > 15 else c for c in categories]
+            lob_labels = [l[:12] + '..' if len(l) > 12 else l for l in lobs]
+
+            sns.heatmap(matrix, annot=True, fmt='.0f', cmap='RdYlGn',
+                       xticklabels=lob_labels, yticklabels=cat_labels,
+                       ax=ax, cbar_kws={'label': 'Learning Score'},
+                       vmin=0, vmax=100, linewidths=0.5, linecolor='white')
+
+            ax.set_xlabel('Line of Business / Market', fontsize=12)
+            ax.set_ylabel('Category', fontsize=12)
+            plt.xticks(rotation=45, ha='right')
+
+            plt.title('Learning Effectiveness by Category & LOB\nGreen = Good Learning, Red = Needs Attention',
+                     fontsize=14, fontweight='bold', pad=20)
+
+            fig.tight_layout()
+
+            filepath = self.chart_dirs['lessons'] / 'learning_heatmap.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating learning heatmap: {e}")
+            plt.close('all')
+            return None
+
+    def _chart_recommendations_summary(self, data: Dict[str, Any]) -> Optional[str]:
+        """
+        Chart: AI Recommendations Summary
+        Visual display of top recommendations with priority indicators.
+        """
+        try:
+            fig, ax = plt.subplots(figsize=(14, 8))
+
+            recommendations = data.get('lessons_recommendations', [])
+            if not recommendations:
+                ax.text(0.5, 0.5, 'No Recommendations Available\n\n'
+                       'Run lessons learned analysis to generate',
+                       ha='center', va='center', fontsize=14, transform=ax.transAxes,
+                       bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                ax.axis('off')
+                filepath = self.chart_dirs['lessons'] / 'recommendations_summary.png'
+                plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                plt.close(fig)
+                return str(filepath)
+
+            ax.axis('off')
+
+            # Title
+            ax.text(0.5, 0.95, 'AI-Generated Improvement Recommendations',
+                   ha='center', va='top', fontsize=16, fontweight='bold',
+                   transform=ax.transAxes)
+
+            # Priority colors
+            priority_colors = {
+                'CRITICAL': '#DC3545',
+                'HIGH': '#FF9800',
+                'MEDIUM': '#FFC107',
+                'LOW': '#28A745'
+            }
+
+            y_pos = 0.85
+            for i, rec in enumerate(recommendations[:6]):
+                if y_pos < 0.1:
+                    break
+
+                priority = rec.get('priority', 'MEDIUM')
+                color = priority_colors.get(priority, '#6C757D')
+
+                # Priority badge
+                ax.add_patch(plt.Rectangle((0.02, y_pos - 0.02), 0.08, 0.08,
+                            facecolor=color, edgecolor='white', linewidth=2,
+                            transform=ax.transAxes))
+                ax.text(0.06, y_pos + 0.02, priority[:1], ha='center', va='center',
+                       fontsize=10, fontweight='bold', color='white',
+                       transform=ax.transAxes)
+
+                # Category
+                category = rec.get('category', 'Unknown')[:25]
+                ax.text(0.12, y_pos + 0.02, category, ha='left', va='center',
+                       fontsize=11, fontweight='bold', transform=ax.transAxes)
+
+                # Recommendation text (wrapped)
+                rec_text = rec.get('recommendation', '')[:150]
+                if len(rec.get('recommendation', '')) > 150:
+                    rec_text += '...'
+                ax.text(0.12, y_pos - 0.04, rec_text, ha='left', va='top',
+                       fontsize=9, color='#333333', transform=ax.transAxes,
+                       wrap=True)
+
+                y_pos -= 0.15
+
+            # Legend
+            legend_y = 0.05
+            for priority, color in priority_colors.items():
+                ax.add_patch(plt.Rectangle((0.02 + list(priority_colors.keys()).index(priority) * 0.2,
+                            legend_y), 0.03, 0.03, facecolor=color,
+                            transform=ax.transAxes))
+                ax.text(0.06 + list(priority_colors.keys()).index(priority) * 0.2,
+                       legend_y + 0.015, priority, ha='left', va='center',
+                       fontsize=8, transform=ax.transAxes)
+
+            filepath = self.chart_dirs['lessons'] / 'recommendations_summary.png'
+            plt.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+            plt.close(fig)
+
+            return str(filepath)
+
+        except Exception as e:
+            print(f"Error generating recommendations chart: {e}")
+            plt.close('all')
+            return None
 
     # =========================================================================
     # CATEGORY/SUB-CATEGORY BREAKDOWN CHARTS (04_analysis/)

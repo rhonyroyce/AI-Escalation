@@ -208,15 +208,16 @@ FORMATTING:
             res = requests.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
                 json={
-                    "model": self.gen_model, 
-                    "prompt": prompt, 
+                    "model": self.gen_model,
+                    "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "num_predict": 5000,  # Increased for financial analysis
-                        "temperature": 0.5,   # More factual for financial data
+                        "num_predict": 12000,  # Increased for complete executive summary
+                        "num_ctx": 32768,      # Larger context window for full analysis
+                        "temperature": 0.5,    # More factual for financial data
                     }
                 },
-                timeout=480  # 8 minutes for comprehensive financial analysis
+                timeout=600  # 10 minutes for comprehensive financial analysis
             )
             if res.status_code == 200:
                 raw_response = res.json()['response'].strip()

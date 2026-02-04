@@ -561,6 +561,7 @@ class SimilarTicketFinder:
         df['Similar_Ticket_Count'] = 0
         df['Best_Match_Similarity'] = 0.0
         df['Resolution_Consistency'] = 'N/A'
+        df['Inconsistent_Resolution'] = False  # Boolean flag for dashboard filtering
         df['Similar_Ticket_IDs'] = ''
         df['Expected_Resolution_Days'] = np.nan
         df['Avg_Similar_Resolution_Days'] = np.nan
@@ -578,8 +579,11 @@ class SimilarTicketFinder:
             df.at[idx, 'Best_Match_Similarity'] = analysis.get('avg_similarity', 0)
             
             if analysis['resolution_analysis']:
-                df.at[idx, 'Resolution_Consistency'] = analysis['resolution_analysis']['status']
-                
+                status = analysis['resolution_analysis']['status']
+                df.at[idx, 'Resolution_Consistency'] = status
+                # Set boolean flag for easy dashboard filtering
+                df.at[idx, 'Inconsistent_Resolution'] = 'Inconsistent' in status
+
                 if analysis['resolution_analysis'].get('resolution_time'):
                     time_info = analysis['resolution_analysis']['resolution_time']
                     df.at[idx, 'Avg_Similar_Resolution_Days'] = time_info['avg_days']
