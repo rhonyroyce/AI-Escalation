@@ -4,6 +4,7 @@ Configuration settings for Escalation AI.
 Contains all constants, weights, thresholds, and column mappings.
 """
 
+import os
 import subprocess
 import logging
 
