@@ -527,7 +527,7 @@ class SimilarTicketFinder:
             expected_days = time_info['avg_days']
             recommendation += f"\n\n⏱️ EXPECTED: {time_info['avg_days']} days (range: {time_info['min_days']}-{time_info['max_days']} days)"
         
-        lessons = [t['lesson'] for t in similar if t.get('lesson')]
+        lessons = [t['lesson'] for t in similar if t.get('lesson') and isinstance(t['lesson'], str)]
         if lessons:
             recommendation += f"\n\n📚 LESSONS LEARNED:\n" + "\n".join([f"  • {l[:100]}" for l in lessons[:3]])
         
