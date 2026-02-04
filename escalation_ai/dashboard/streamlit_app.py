@@ -5781,7 +5781,7 @@ def render_analytics(df):
                 st.metric("Average Score (Simple)", f"{avg_score:.0f}/100")
                 fig = chart_learning_grades(df)
                 if fig:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key="learning_grades_simple")
         else:
             # Full comprehensive scorecard view
             summary_df = scorecard.get_summary_df()
@@ -5845,7 +5845,7 @@ def render_analytics(df):
                     # Organization-wide radar
                     fig = chart_scorecard_radar(df)
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True, key="radar_org_overview")
 
                 with col2:
                     # Pillar averages table
@@ -5871,7 +5871,7 @@ def render_analytics(df):
 
                 fig = chart_learning_grades(df)
                 if fig:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key="learning_grades_ranked")
 
                 # Detailed table
                 st.markdown("### Detailed Scores")
@@ -5901,7 +5901,7 @@ def render_analytics(df):
                     else:
                         fig = chart_scorecard_radar(df, selected_cat)
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True, key=f"radar_pillar_{selected_cat}")
 
                 with col2:
                     if selected_cat != 'Organization Average' and selected_cat in scorecard.category_scorecards:
@@ -5939,7 +5939,7 @@ def render_analytics(df):
                 if compare_cats:
                     fig = chart_scorecard_comparison(df, compare_cats)
                     if fig:
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True, key="scorecard_comparison")
 
             with lesson_tabs[3]:
                 # Trends & Patterns
@@ -5953,7 +5953,7 @@ def render_analytics(df):
                 fig = chart_learning_heatmap(df)
                 if fig:
                     st.markdown("#### Learning Effectiveness by Category & LOB")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key="learning_heatmap")
 
             with lesson_tabs[4]:
                 # At-Risk Categories
@@ -5967,7 +5967,7 @@ def render_analytics(df):
                             with col1:
                                 fig = chart_scorecard_radar(df, cat_sc.category)
                                 if fig:
-                                    st.plotly_chart(fig, use_container_width=True)
+                                    st.plotly_chart(fig, use_container_width=True, key=f"radar_atrisk_{cat_sc.category}")
                             with col2:
                                 st.markdown("**Weaknesses:**")
                                 for w in cat_sc.weaknesses:

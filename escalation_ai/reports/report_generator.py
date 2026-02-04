@@ -364,10 +364,17 @@ class ExcelReportWriter:
         ws.merge_cells(f'B{current_row}:J{current_row}')
         current_row += 1
 
-        # MECE categories with impact indicators
-        ws.row_dimensions[current_row].height = 18
-        mece_headers = [("B", "C", "CATEGORY"), ("D", "D", "COUNT"), ("E", "E", "%"), ("F", "F", "IMPACT"), ("G", "H", "ACTION")]
-        for start_col, end_col, header in mece_headers:
+        # MECE categories with impact indicators - use full width B:J
+        ws.row_dimensions[current_row].height = 20
+        # Headers: CATEGORY(B:D), COUNT(E), %(F), IMPACT(G), ACTION(H:J)
+        header_specs = [
+            ("B", "D", "CATEGORY"),
+            ("E", "E", "COUNT"),
+            ("F", "F", "%"),
+            ("G", "G", "IMPACT"),
+            ("H", "J", "ACTION")
+        ]
+        for start_col, end_col, header in header_specs:
             cell = ws[f'{start_col}{current_row}']
             cell.value = header
             cell.font = Font(bold=True, size=9, color="FFFFFF")
@@ -385,14 +392,14 @@ class ExcelReportWriter:
 
             # Action mapping for categories
             action_map = {
-                'Scheduling & Planning': 'Standardize scheduling',
-                'Documentation & Reporting': 'Improve templates',
-                'Validation & QA': 'Enhance QA checks',
-                'Process Compliance': 'Enforce SOPs',
-                'Configuration & Data Mismatch': 'Validate configs',
-                'Site Readiness': 'Pre-checks required',
-                'Communication & Response': 'Improve protocols',
-                'Nesting & Tool Errors': 'Tool training',
+                'Scheduling & Planning': 'Standardize scheduling protocols',
+                'Documentation & Reporting': 'Improve documentation templates',
+                'Validation & QA': 'Enhance QA validation checks',
+                'Process Compliance': 'Enforce SOP compliance',
+                'Configuration & Data Mismatch': 'Validate configurations pre-deploy',
+                'Site Readiness': 'Pre-deployment checks required',
+                'Communication & Response': 'Improve response protocols',
+                'Nesting & Tool Errors': 'Tool usage training',
             }
 
             for idx, (cat, count) in enumerate(cat_counts.items()):
@@ -403,38 +410,38 @@ class ExcelReportWriter:
                 ws.row_dimensions[current_row].height = 28
                 impact_fill = fill_critical if impact == "HIGH" else fill_warning if impact == "MED" else fill_success
 
-                # Category
+                # Category (full name, no truncation)
                 cell = ws[f'B{current_row}']
-                cell.value = cat[:25] if len(cat) > 25 else cat
+                cell.value = cat
                 cell.font = Font(size=10, color="333333")
                 cell.alignment = Alignment(horizontal='left', vertical='center')
                 cell.border = border_gray
-                ws.merge_cells(f'B{current_row}:C{current_row}')
+                ws.merge_cells(f'B{current_row}:D{current_row}')
 
                 # Count
-                cell = ws[f'D{current_row}']
+                cell = ws[f'E{current_row}']
                 cell.value = count
                 cell.font = Font(bold=True, size=10, color="333333")
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = border_gray
 
                 # Percentage
-                cell = ws[f'E{current_row}']
+                cell = ws[f'F{current_row}']
                 cell.value = f"{pct:.1f}%"
                 cell.font = Font(size=10, color="666666")
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = border_gray
 
                 # Impact
-                cell = ws[f'F{current_row}']
+                cell = ws[f'G{current_row}']
                 cell.value = impact
                 cell.font = Font(bold=True, size=10, color="333333")
                 cell.fill = impact_fill
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = border_gray
 
-                # Action
-                cell = ws[f'G{current_row}']
+                # Action (spans H:J)
+                cell = ws[f'H{current_row}']
                 cell.value = f"→ {action}"
                 cell.font = Font(size=9, bold=True, color="004C97")
                 cell.alignment = Alignment(horizontal='left', vertical='center')
@@ -757,39 +764,75 @@ class ExcelReportWriter:
 
         # Parse and display AI synthesis content
         if exec_summary_text and len(exec_summary_text.strip()) > 50:
-            # Split into paragraphs/sections
-            paragraphs = [p.strip() for p in exec_summary_text.split('\n\n') if p.strip()]
+            # Split into paragraphs/sections - handle both \n\n and single \n for SECTION headers
+            raw_paragraphs = exec_summary_text.strip().split('\n')
 
-            for para in paragraphs[:20]:  # Allow up to 20 sections for full AI analysis
-                # Clean up markdown formatting
-                para_clean = re.sub(r'\*\*([^*]+)\*\*', r'\1', para)
-                para_clean = re.sub(r'^#+\s*', '', para_clean, flags=re.MULTILINE)
-                para_clean = para_clean.strip()
-
-                if not para_clean or len(para_clean) < 10:
+            processed_items = []
+            for line in raw_paragraphs:
+                line = line.strip()
+                if not line:
                     continue
 
-                # Check if it's a section header (all caps or starts with SECTION)
-                is_header = para_clean.isupper() or para_clean.startswith('SECTION') or para_clean.startswith('THE BOTTOM LINE')
+                # Clean up markdown formatting
+                line_clean = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
+                line_clean = re.sub(r'^#+\s*', '', line_clean, flags=re.MULTILINE)
+                line_clean = line_clean.strip()
 
-                if is_header:
+                if not line_clean or len(line_clean) < 3:
+                    continue
+
+                # Check if line starts with SECTION pattern: "SECTION X - TITLE content..."
+                section_match = re.match(r'^(SECTION\s+\d+\s*[-–—:]\s*[A-Z][A-Z\s&/]+?)(\s+[A-Z][a-z].*|$)', line_clean)
+                if section_match:
+                    # Split header from content
+                    header = section_match.group(1).strip()
+                    content = section_match.group(2).strip() if section_match.group(2) else ""
+                    processed_items.append(('header', header))
+                    if content and len(content) > 10:
+                        processed_items.append(('content', content))
+                elif line_clean.isupper() and len(line_clean) < 100:
+                    # All caps short line = header
+                    processed_items.append(('header', line_clean))
+                elif re.match(r'^[A-D]\)\s+[A-Z]', line_clean):
+                    # Sub-header like "A) PROCESS GAPS"
+                    processed_items.append(('subheader', line_clean))
+                elif line_clean.startswith('- ') or line_clean.startswith('• '):
+                    # Bullet point
+                    processed_items.append(('bullet', line_clean))
+                elif re.match(r'^\d+\.\s+', line_clean):
+                    # Numbered item
+                    processed_items.append(('numbered', line_clean))
+                else:
+                    # Regular content
+                    processed_items.append(('content', line_clean))
+
+            for item_type, text in processed_items[:50]:  # Allow up to 50 items
+                if item_type == 'header':
                     ws.row_dimensions[current_row].height = 26
                     cell = ws.cell(row=current_row, column=2)
-                    cell.value = para_clean  # No truncation
+                    cell.value = text
                     cell.font = Font(bold=True, size=11, color="004C97")
                     cell.fill = fill_insight
                     cell.alignment = Alignment(horizontal='left', vertical='center')
                     cell.border = border_gray
                     ws.merge_cells(f'B{current_row}:J{current_row}')
+                elif item_type == 'subheader':
+                    ws.row_dimensions[current_row].height = 22
+                    cell = ws.cell(row=current_row, column=2)
+                    cell.value = text
+                    cell.font = Font(bold=True, size=10, color="004C97")
+                    cell.alignment = Alignment(horizontal='left', vertical='center')
+                    cell.border = border_gray
+                    ws.merge_cells(f'B{current_row}:J{current_row}')
                 else:
-                    # Regular content paragraph - calculate row height based on content
-                    # With wider columns, ~120 chars per line
-                    content_lines = len(para_clean) // 120 + 1
-                    row_height = max(40, min(content_lines * 15, 150))
+                    # Regular content, bullet, or numbered - calculate row height
+                    # ~100 chars per line with merged columns B:J
+                    content_lines = max(1, len(text) // 100 + 1)
+                    row_height = max(18, min(content_lines * 16, 200))
                     ws.row_dimensions[current_row].height = row_height
 
                     cell = ws.cell(row=current_row, column=2)
-                    cell.value = para_clean  # No truncation - full content
+                    cell.value = text
                     cell.font = Font(size=10, color="333333")
                     cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
                     cell.border = border_gray
@@ -966,20 +1009,31 @@ class ExcelReportWriter:
 
                             # Write summary text for each chart in this row
                             summary_start_row = current_row
-                            ws.row_dimensions[summary_start_row].height = 30
 
+                            # Calculate max row height needed for summaries in this row
+                            max_summary_height = 30
+                            summaries = []
                             for col_idx, chart_path in row_charts:
+                                summary = get_chart_summary(chart_path)
+                                summaries.append((col_idx, chart_path, summary))
+                                # Estimate lines needed: ~80 chars per line in merged cell width
+                                lines_needed = max(1, len(summary) // 80 + summary.count('\n') + 1)
+                                needed_height = max(30, lines_needed * 14)
+                                max_summary_height = max(max_summary_height, min(needed_height, 90))
+
+                            ws.row_dimensions[summary_start_row].height = max_summary_height
+
+                            for col_idx, chart_path, summary in summaries:
                                 col_letter = col_positions[col_idx]
                                 end_col = 'L' if col_idx == 0 else 'Z'
 
                                 # Write summary (vision AI or static)
-                                summary = get_chart_summary(chart_path)
                                 cell = ws[f'{col_letter}{summary_start_row}']
                                 cell.value = summary
                                 cell.font = summary_font
                                 # Use green fill for AI insights, gray for static
                                 cell.fill = vision_summary_fill if chart_path in vision_insights_cache else summary_fill
-                                cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+                                cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
                                 ws.merge_cells(f'{col_letter}{summary_start_row}:{end_col}{summary_start_row}')
 
                             # Position for chart images (below summary)
@@ -1013,20 +1067,23 @@ class ExcelReportWriter:
                     # Calculate row position
                     base_row = 5 + row_in_grid * rows_per_chart
 
-                    # Only write summary for first chart in each row position
-                    if col_idx == 0 or i == 0:
-                        ws.row_dimensions[base_row].height = 30
-
                     # Write summary (vision AI or static)
                     col_letter = col_positions[col_idx]
                     end_col = 'L' if col_idx == 0 else 'Z'
                     summary = get_chart_summary(path)
+
+                    # Calculate row height based on summary length
+                    lines_needed = max(1, len(summary) // 80 + summary.count('\n') + 1)
+                    needed_height = max(30, min(lines_needed * 14, 90))
+                    if ws.row_dimensions[base_row].height < needed_height:
+                        ws.row_dimensions[base_row].height = needed_height
+
                     cell = ws[f'{col_letter}{base_row}']
                     cell.value = summary
                     cell.font = summary_font
                     # Use green fill for AI insights, gray for static
                     cell.fill = vision_summary_fill if path in vision_insights_cache else summary_fill
-                    cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+                    cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
                     ws.merge_cells(f'{col_letter}{base_row}:{end_col}{base_row}')
 
                     try:
