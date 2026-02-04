@@ -20,7 +20,7 @@ from ..core.config import (
     COL_SUMMARY, COL_SEVERITY, COL_ORIGIN, COL_TYPE, COL_DATETIME,
     COL_ENGINEER, COL_LOB
 )
-from ..visualization import ChartGenerator, AdvancedChartGenerator
+from ..visualization import ChartGenerator, AdvancedChartGenerator, get_chart_analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -878,12 +878,41 @@ class ExcelReportWriter:
         # Summary text styling
         summary_font = Font(size=9, italic=True, color="333333")
         summary_fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+        vision_summary_fill = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")  # Light green for AI insights
+
+        # Initialize vision analyzer for deep insights
+        vision_analyzer = None
+        use_vision_insights = False
+        try:
+            vision_analyzer = get_chart_analyzer()
+            use_vision_insights = vision_analyzer.is_available()
+            if use_vision_insights:
+                logger.info("Vision model available - generating AI-powered chart insights")
+            else:
+                logger.info("Vision model not available - using static chart summaries")
+        except Exception as e:
+            logger.debug(f"Vision analyzer init failed: {e}")
 
         current_row = 5
         images_embedded = 0
+        vision_insights_cache = {}  # Cache vision insights
 
         def get_chart_summary(chart_path):
-            """Extract summary for a chart based on filename."""
+            """Extract summary for a chart - uses vision AI if available."""
+            # Try vision-based insight first
+            if use_vision_insights and vision_analyzer:
+                if chart_path not in vision_insights_cache:
+                    try:
+                        insight = vision_analyzer.analyze_chart(chart_path)
+                        formatted = vision_analyzer.format_insight_for_dashboard(insight)
+                        vision_insights_cache[chart_path] = formatted
+                        return formatted
+                    except Exception as e:
+                        logger.debug(f"Vision analysis failed for {chart_path}: {e}")
+                else:
+                    return vision_insights_cache[chart_path]
+
+            # Fall back to static summaries
             filename = os.path.basename(chart_path).lower()
             for key, summary in chart_summaries.items():
                 if key in filename:
@@ -929,12 +958,13 @@ class ExcelReportWriter:
                                 col_letter = col_positions[col_idx]
                                 end_col = 'L' if col_idx == 0 else 'Z'
 
-                                # Write summary
+                                # Write summary (vision AI or static)
                                 summary = get_chart_summary(chart_path)
                                 cell = ws[f'{col_letter}{summary_start_row}']
                                 cell.value = summary
                                 cell.font = summary_font
-                                cell.fill = summary_fill
+                                # Use green fill for AI insights, gray for static
+                                cell.fill = vision_summary_fill if chart_path in vision_insights_cache else summary_fill
                                 cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
                                 ws.merge_cells(f'{col_letter}{summary_start_row}:{end_col}{summary_start_row}')
 
@@ -973,14 +1003,15 @@ class ExcelReportWriter:
                     if col_idx == 0 or i == 0:
                         ws.row_dimensions[base_row].height = 30
 
-                    # Write summary
+                    # Write summary (vision AI or static)
                     col_letter = col_positions[col_idx]
                     end_col = 'L' if col_idx == 0 else 'Z'
                     summary = get_chart_summary(path)
                     cell = ws[f'{col_letter}{base_row}']
                     cell.value = summary
                     cell.font = summary_font
-                    cell.fill = summary_fill
+                    # Use green fill for AI insights, gray for static
+                    cell.fill = vision_summary_fill if path in vision_insights_cache else summary_fill
                     cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
                     ws.merge_cells(f'{col_letter}{base_row}:{end_col}{base_row}')
 
