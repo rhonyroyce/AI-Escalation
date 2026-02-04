@@ -4301,8 +4301,8 @@ def render_analytics(df):
                     **theme,
                     title='Financial Impact by Category',
                     xaxis_tickangle=-45,
-                    height=400,
-                    margin=dict(l=40, r=60, t=60, b=100)  # Room for labels
+                    height=420,
+                    margin=dict(l=40, r=60, t=80, b=100)  # Room for labels above bars
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
