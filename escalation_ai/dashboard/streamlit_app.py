@@ -65,6 +65,215 @@ if 'current_slide' not in st.session_state:
     st.session_state.current_slide = 0
 if 'action_items' not in st.session_state:
     st.session_state.action_items = []
+if 'uploaded_file_path' not in st.session_state:
+    st.session_state.uploaded_file_path = None
+
+# ============================================================================
+# EXCEL API REFRESH UTILITY
+# ============================================================================
+
+def is_excel_available():
+    """Check if Microsoft Excel is available on this system."""
+    import platform
+    if platform.system() != 'Windows':
+        return False
+    try:
+        import win32com.client
+        return True
+    except ImportError:
+        try:
+            import xlwings
+            return True
+        except ImportError:
+            return False
+
+
+def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tuple[bool, str]:
+    """
+    Refresh all data connections in an Excel file.
+
+    Args:
+        file_path: Path to the Excel file
+        timeout_seconds: Maximum time to wait for refresh
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    import platform
+
+    if platform.system() != 'Windows':
+        return False, "Excel refresh only available on Windows"
+
+    # Try xlwings first (more reliable)
+    try:
+        import xlwings as xw
+
+        # Open Excel in the background
+        app = xw.App(visible=False, add_book=False)
+        app.display_alerts = False
+        app.screen_updating = False
+
+        try:
+            # Open the workbook
+            wb = app.books.open(file_path)
+
+            # Check if there are any connections
+            has_connections = False
+            try:
+                if wb.api.Connections.Count > 0:
+                    has_connections = True
+            except:
+                pass
+
+            try:
+                if wb.api.Queries.Count > 0:
+                    has_connections = True
+            except:
+                pass
+
+            if not has_connections:
+                wb.close()
+                app.quit()
+                return False, "No API connections found in Excel file"
+
+            # Refresh all connections
+            wb.api.RefreshAll()
+
+            # Wait for refresh to complete
+            import time
+            start_time = time.time()
+            while time.time() - start_time < timeout_seconds:
+                try:
+                    # Check if any query is still refreshing
+                    still_refreshing = False
+                    for conn in wb.api.Connections:
+                        if conn.OLEDBConnection.Refreshing:
+                            still_refreshing = True
+                            break
+                except:
+                    pass
+
+                if not still_refreshing:
+                    break
+                time.sleep(1)
+
+            # Save the workbook
+            wb.save()
+            wb.close()
+            app.quit()
+
+            return True, "Successfully refreshed Excel data connections"
+
+        except Exception as e:
+            try:
+                wb.close()
+            except:
+                pass
+            app.quit()
+            raise e
+
+    except ImportError:
+        pass
+    except Exception as e:
+        # Try win32com as fallback
+        pass
+
+    # Fallback to win32com
+    try:
+        import win32com.client
+        import pythoncom
+
+        pythoncom.CoInitialize()
+
+        excel = win32com.client.Dispatch("Excel.Application")
+        excel.Visible = False
+        excel.DisplayAlerts = False
+
+        try:
+            wb = excel.Workbooks.Open(file_path)
+
+            # Check for connections
+            has_connections = wb.Connections.Count > 0
+
+            if not has_connections:
+                wb.Close(SaveChanges=False)
+                excel.Quit()
+                pythoncom.CoUninitialize()
+                return False, "No API connections found in Excel file"
+
+            # Refresh all
+            wb.RefreshAll()
+
+            # Wait for background queries
+            import time
+            time.sleep(5)  # Initial wait
+
+            # Try to wait for refresh completion
+            start_time = time.time()
+            while time.time() - start_time < timeout_seconds:
+                try:
+                    excel.CalculateUntilAsyncQueriesDone()
+                    break
+                except:
+                    time.sleep(2)
+
+            # Save and close
+            wb.Save()
+            wb.Close(SaveChanges=True)
+            excel.Quit()
+            pythoncom.CoUninitialize()
+
+            return True, "Successfully refreshed Excel data connections"
+
+        except Exception as e:
+            try:
+                wb.Close(SaveChanges=False)
+            except:
+                pass
+            excel.Quit()
+            pythoncom.CoUninitialize()
+            return False, f"Error refreshing Excel: {str(e)}"
+
+    except ImportError:
+        return False, "Neither xlwings nor pywin32 installed. Install with: pip install xlwings pywin32"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
+
+def load_excel_with_refresh(file_path: str, force_refresh: bool = True) -> tuple[pd.DataFrame, str, bool]:
+    """
+    Load Excel file, optionally refreshing API connections first.
+
+    Args:
+        file_path: Path to Excel file
+        force_refresh: Whether to attempt refresh
+
+    Returns:
+        Tuple of (dataframe, message, was_refreshed)
+    """
+    was_refreshed = False
+    message = ""
+
+    if force_refresh and is_excel_available():
+        success, msg = refresh_excel_connections(file_path)
+        was_refreshed = success
+        message = msg
+    elif force_refresh:
+        message = "Excel not available - loading file as-is"
+
+    # Load the Excel file
+    try:
+        # Try Scored Data sheet first
+        df = pd.read_excel(file_path, sheet_name="Scored Data")
+    except:
+        try:
+            # Try first sheet
+            df = pd.read_excel(file_path, sheet_name=0)
+        except Exception as e:
+            return None, f"Error loading Excel: {str(e)}", False
+
+    return df, message, was_refreshed
+
 
 # ============================================================================
 # ACTION ITEMS PERSISTENCE (JSON)
@@ -490,6 +699,45 @@ footer {visibility: hidden;}
 # DATA LOADING
 # ============================================================================
 
+def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Apply standard transformations to a loaded dataframe."""
+    # Map column names to expected format
+    if 'tickets_data_engineer_name' in df.columns and 'Engineer' not in df.columns:
+        df['Engineer'] = df['tickets_data_engineer_name']
+    if 'tickets_data_lob' in df.columns and 'LOB' not in df.columns:
+        df['LOB'] = df['tickets_data_lob']
+
+    # Use AI_Recurrence_Probability as the numeric recurrence risk
+    # (AI_Recurrence_Risk in file is string like "Elevated (50-70%)")
+    if 'AI_Recurrence_Probability' in df.columns:
+        df['AI_Recurrence_Risk'] = pd.to_numeric(df['AI_Recurrence_Probability'], errors='coerce').fillna(0.15)
+
+    # Ensure numeric columns are numeric
+    numeric_cols = ['Strategic_Friction_Score', 'Financial_Impact', 'Predicted_Resolution_Days',
+                   'AI_Confidence', 'Resolution_Prediction_Confidence']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+    return df
+
+
+@st.cache_data
+def load_excel_file(file_path: str) -> tuple:
+    """Load an Excel file and return processed dataframe."""
+    try:
+        df = pd.read_excel(file_path, sheet_name="Scored Data")
+        df = process_dataframe(df)
+        return df, file_path
+    except:
+        try:
+            df = pd.read_excel(file_path, sheet_name=0)
+            df = process_dataframe(df)
+            return df, file_path
+        except Exception as e:
+            return None, str(e)
+
+
 @st.cache_data
 def load_data():
     """Load the most recent analysis data."""
@@ -507,25 +755,7 @@ def load_data():
         if strategic_report.exists():
             try:
                 df = pd.read_excel(strategic_report, sheet_name="Scored Data")
-
-                # Map column names to expected format
-                if 'tickets_data_engineer_name' in df.columns and 'Engineer' not in df.columns:
-                    df['Engineer'] = df['tickets_data_engineer_name']
-                if 'tickets_data_lob' in df.columns and 'LOB' not in df.columns:
-                    df['LOB'] = df['tickets_data_lob']
-
-                # Use AI_Recurrence_Probability as the numeric recurrence risk
-                # (AI_Recurrence_Risk in file is string like "Elevated (50-70%)")
-                if 'AI_Recurrence_Probability' in df.columns:
-                    df['AI_Recurrence_Risk'] = pd.to_numeric(df['AI_Recurrence_Probability'], errors='coerce').fillna(0.15)
-
-                # Ensure numeric columns are numeric
-                numeric_cols = ['Strategic_Friction_Score', 'Financial_Impact', 'Predicted_Resolution_Days',
-                               'AI_Confidence', 'Resolution_Prediction_Confidence']
-                for col in numeric_cols:
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
+                df = process_dataframe(df)
                 print(f"✅ Loaded {len(df)} records from {strategic_report}")
                 return df, str(strategic_report)
             except Exception as e:
@@ -3485,19 +3715,88 @@ def main():
         )
         
         st.markdown("---")
-        
-        # Data info
-        df, data_source = load_data()
-        st.markdown(f"**Data Source:**")
+
+        # Data Source Section
+        st.markdown("### 📂 Data Source")
+
+        # File uploader for custom Excel files
+        uploaded_file = st.file_uploader(
+            "Upload Excel File",
+            type=['xlsx', 'xls'],
+            help="Upload an Excel file with API connections for auto-refresh"
+        )
+
+        # Process uploaded file or use default
+        if uploaded_file is not None:
+            # Save uploaded file temporarily
+            import tempfile
+            import os
+
+            temp_dir = tempfile.gettempdir()
+            temp_path = os.path.join(temp_dir, uploaded_file.name)
+
+            with open(temp_path, 'wb') as f:
+                f.write(uploaded_file.getvalue())
+
+            st.session_state.uploaded_file_path = temp_path
+
+            # Option to refresh API connections
+            refresh_api = st.checkbox(
+                "🔄 Refresh API connections",
+                value=True,
+                help="Refresh data from APIs in Excel before loading (Windows + Excel required)"
+            )
+
+            if st.button("📥 Load Data", type="primary"):
+                if refresh_api and is_excel_available():
+                    with st.spinner("🔄 Refreshing Excel API connections..."):
+                        success, msg = refresh_excel_connections(temp_path)
+                        if success:
+                            st.success(f"✅ {msg}")
+                        else:
+                            st.info(f"ℹ️ {msg}")
+
+                # Clear cache and reload
+                st.cache_data.clear()
+                st.rerun()
+
+            # Show Excel availability status
+            if is_excel_available():
+                st.caption("✅ Excel available - API refresh enabled")
+            else:
+                st.caption("ℹ️ Excel not available - using file as-is")
+
+            # Load from uploaded file
+            result = load_excel_file(temp_path)
+            if result[0] is not None:
+                df = result[0]
+                data_source = uploaded_file.name
+            else:
+                st.warning(f"Could not load file: {result[1]}")
+                df, data_source = load_data()
+        else:
+            # Use default data loading
+            df, data_source = load_data()
+
+        st.markdown("---")
+        st.markdown(f"**Current Source:**")
         st.caption(data_source)
         st.markdown(f"**Records:** {len(df):,}")
-        
+
         # Quick stats
         if 'Financial_Impact' in df.columns:
             total_cost = df['Financial_Impact'].sum()
             st.markdown(f"**Total Cost:** ${total_cost:,.0f}")
-        
+
         if st.button("🔄 Refresh Data"):
+            # If we have an uploaded file with Excel available, refresh it
+            if st.session_state.uploaded_file_path and is_excel_available():
+                with st.spinner("🔄 Refreshing Excel API connections..."):
+                    success, msg = refresh_excel_connections(st.session_state.uploaded_file_path)
+                    if success:
+                        st.toast(f"✅ {msg}")
+                    else:
+                        st.toast(f"ℹ️ {msg}")
             st.cache_data.clear()
             st.rerun()
         
