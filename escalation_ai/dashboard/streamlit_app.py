@@ -994,10 +994,13 @@ def chart_trend_timeline(df):
     ), secondary_y=True)
     
     fig.update_layout(
-        **create_plotly_theme(),
-        title=dict(text='Escalation Trend (7-Day Moving Average)', font=dict(size=16)),
+        **{
+            **create_plotly_theme(),
+            'margin': dict(l=60, r=60, t=80, b=60),
+        },
+        title=dict(text='Escalation Trend (7-Day Moving Average)', font=dict(size=16), y=0.95),
         height=450,
-        legend=dict(orientation='h', y=1.1),
+        legend=dict(orientation='h', y=1.02, x=0.5, xanchor='center', yanchor='bottom'),
         hovermode='x unified'
     )
     
