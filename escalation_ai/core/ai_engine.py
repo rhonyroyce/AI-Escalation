@@ -115,87 +115,94 @@ class OllamaBrain:
         return cleaned.strip()
 
     def generate_synthesis(self, context_text):
-        """Use the LLM to write a comprehensive executive summary with financial analysis"""
-        prompt = f"""You are a Principal Consultant specializing in Telecom Operations Risk Management and Financial Impact Analysis. Analyze this escalation data for a telecommunications network deployment project.
+        """Use the LLM to write a comprehensive executive summary using McKinsey frameworks"""
+        prompt = f"""You are a McKinsey Principal Consultant specializing in Telecom Operations. Write an executive-ready analysis using consulting best practices.
 
-CRITICAL RULES - READ CAREFULLY:
-1. ONLY use numbers, percentages, dollar amounts, and counts that appear in the DATA CONTEXT below
-2. The data includes FINANCIAL IMPACT METRICS - USE THEM in your analysis
-3. DO NOT fabricate statistics, dates, or specific incidents not in the data
-4. Every claim must be traceable to the data provided
-5. Reference actual dollar figures from the Financial Impact section
+CRITICAL RULES:
+1. ONLY use numbers, percentages, dollar amounts from the DATA CONTEXT below
+2. DO NOT fabricate statistics - every claim must be traceable to the data
+3. Apply MECE (Mutually Exclusive, Collectively Exhaustive) structure
+4. Use PYRAMID PRINCIPLE: Lead with the answer, then support
+5. Every finding needs a "SO WHAT?" implication
 
-DATA CONTEXT (Analyzed Escalation Report with Financial Metrics):
+DATA CONTEXT:
 {context_text}
 
-YOUR TASK:
-Produce a comprehensive Executive Risk & Financial Assessment using ONLY the data provided above.
+═══════════════════════════════════════════════════════════════
+PRODUCE THIS STRUCTURED OUTPUT:
+═══════════════════════════════════════════════════════════════
 
-SECTION 1 - CRITICAL ALERT (2-3 sentences):
-The single most urgent finding combining operational AND financial impact. Use actual ticket counts, percentages, AND the total financial impact figures from the data. State the direct cost exposure and revenue at risk.
+SECTION 1 - THE BOTTOM LINE (Pyramid Principle - Answer First)
+Write 2-3 sentences with THE KEY MESSAGE. State:
+- Total financial exposure ($X)
+- The #1 problem causing it
+- The recommended action
+Example format: "Analysis reveals $X in financial exposure driven primarily by [top category]. Immediate focus on [action] can reduce costs by X%."
 
-SECTION 2 - KEY FINDINGS (6-8 detailed observations):
-For each finding, cite specific numbers from the data:
-- Ticket counts and percentages by category
-- Financial impact by category (use the dollar figures provided)
-- Average cost per escalation and highest-cost categories
-- Severity distributions and their cost implications
-- High-cost tickets concentration (top 10% analysis)
-- Recurrence risk exposure in dollar terms
-- Friction score concentrations and cost correlation
-Explain both operational AND financial implications.
+SECTION 2 - SITUATION OVERVIEW
+In 3-4 bullet points, provide context:
+- Total tickets analyzed and time period scope
+- Total financial impact and revenue at risk
+- Critical vs Major vs Minor distribution
+- Overall health assessment (Critical/At Risk/Stable)
 
-SECTION 3 - FINANCIAL IMPACT ANALYSIS (2-3 paragraphs):
-Deep dive into the cost data:
-- Which categories are the biggest cost drivers? (use actual $ figures)
-- What is the labor cost vs opportunity cost breakdown?
-- How does severity correlate with financial impact?
-- What is the total revenue at risk and recurrence exposure?
-- What are the highest cost-per-ticket categories (even if low volume)?
-Connect financial patterns to operational root causes.
+SECTION 3 - KEY FINDINGS (MECE Structure)
+Organize findings into 4 MUTUALLY EXCLUSIVE categories. For each, include the data AND the "SO WHAT":
 
-SECTION 4 - ROOT CAUSE HYPOTHESIS (2-3 paragraphs):
-Based on the data patterns, what organizational or process issues might be driving these escalations? Consider:
-- What do the category distributions and their costs suggest about systemic issues?
-- What do repeat offenses indicate about organizational learning and cost waste?
-- What do the severity patterns reveal about escalation discipline?
-- Why might certain categories have higher cost-per-ticket despite lower volume?
-Ground your hypothesis in the actual data patterns.
+A) PROCESS GAPS (scheduling, workflow, compliance issues)
+   - Data: [specific numbers from context]
+   - So What: [business implication]
 
-SECTION 5 - STRATEGIC RECOMMENDATIONS (5-6 specific actions):
-Concrete steps leadership should take with financial justification:
-- Address the highest-cost categories (cite specific $ savings potential)
-- Tackle high cost-per-ticket categories even if low volume
-- Reduce recurrence risk exposure
-- Improve areas with highest friction scores
-- Fix process/documentation gaps
-For each recommendation, reference the financial benefit using data from the context.
+B) KNOWLEDGE GAPS (documentation, training, expertise issues)
+   - Data: [specific numbers from context]
+   - So What: [business implication]
 
-SECTION 6 - RISK OUTLOOK & COST PROJECTION:
-Describe likely trajectory if issues continue:
-- Which cost patterns suggest escalating financial exposure?
-- What does the recurrence risk indicate about future costs?
-- Which categories are trending toward higher financial impact?
-- What is the quarterly/annual exposure if current patterns continue? (extrapolate from the data period)
+C) SYSTEM/TOOL ISSUES (configuration, data, technical issues)
+   - Data: [specific numbers from context]
+   - So What: [business implication]
 
-SECTION 7 - EXECUTIVE BOTTOM LINE (3-4 sentences):
-Summarize the core message with specific financial stakes. State the total financial impact, revenue at risk, and the cost of inaction. Be direct about severity.
+D) COMMUNICATION FAILURES (response, handoff, coordination issues)
+   - Data: [specific numbers from context]
+   - So What: [business implication]
 
-FORMATTING RULES:
-- Format section headers in BOLD using **SECTION X - TITLE** format
-- Leave a BLANK LINE between each section for readability
-- Use dashes (-) for bullet points within sections
-- Reference actual numbers AND dollar figures from the data
-- Total length: 800-1000 words
-- Use $ figures from the Financial Impact section liberally
+SECTION 4 - 80/20 ANALYSIS (Pareto Principle)
+Identify the vital few driving majority of impact:
+- Which 2-3 categories drive 80% of financial impact? (use actual $ from data)
+- Which 2-3 root causes drive 80% of ticket volume?
+- Where should resources be concentrated for maximum ROI?
 
-EXAMPLE FORMAT:
-**SECTION 1 - CRITICAL ALERT**
-Content here...
+SECTION 5 - PRIORITIZED RECOMMENDATIONS (Impact-Effort Matrix)
+List 4-5 actions categorized by:
 
-**SECTION 2 - KEY FINDINGS**
-- Finding 1
-- Finding 2"""
+QUICK WINS (High Impact, Low Effort) - Do First:
+1. [Action] | Impact: $X savings | Timeline: Week 1-2
+
+MAJOR PROJECTS (High Impact, High Effort) - Plan For:
+2. [Action] | Impact: $X savings | Timeline: Month 2-3
+
+FILL-INS (Low Impact, Low Effort) - If Time Permits:
+3. [Action] | Impact: $X savings | Timeline: Ongoing
+
+For each, cite specific financial benefit from the data.
+
+SECTION 6 - RISK ASSESSMENT (RAG Status)
+Provide traffic light status for each area:
+- Financial Exposure: [RED/AMBER/GREEN] - [reason with $ figure]
+- Recurrence Risk: [RED/AMBER/GREEN] - [reason with %]
+- Process Maturity: [RED/AMBER/GREEN] - [reason]
+- Resolution Capability: [RED/AMBER/GREEN] - [reason]
+
+SECTION 7 - EXECUTIVE CALLOUT
+One powerful statement (2 sentences max) that a CEO should remember:
+"[Key insight with financial stake]. [Recommended action with expected outcome]."
+
+FORMATTING:
+- Use **SECTION X - TITLE** for headers
+- Blank line between sections
+- Use - for bullets, numbers for ordered lists
+- Include $ figures throughout
+- 600-800 words total
+- Be direct and actionable, not academic"""
         try:
             logger.info(f"  Requesting AI synthesis from {self.gen_model}...")
             res = requests.post(
