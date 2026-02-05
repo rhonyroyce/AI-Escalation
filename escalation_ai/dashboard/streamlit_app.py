@@ -1369,6 +1369,36 @@ def get_chart_insight(chart_key: str, df: pd.DataFrame) -> dict:
     }
 
 
+def render_spectacular_header(title: str, subtitle: str, icon: str = "📊"):
+    """Render a spectacular gradient header with timestamp."""
+    from datetime import datetime
+    current_time = datetime.now().strftime("%b %d, %Y at %I:%M %p")
+
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #0a1628 0%, #1a365d 50%, #0a1628 100%);
+                padding: 25px 35px; border-radius: 16px; margin-bottom: 20px;
+                border: 1px solid rgba(59, 130, 246, 0.3);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1 style="font-size: 2rem; font-weight: 800; margin: 0;
+                           background: linear-gradient(135deg, #ffffff 0%, #60a5fa 50%, #3b82f6 100%);
+                           -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                    {icon} {title}
+                </h1>
+                <p style="color: #94a3b8; font-size: 0.9rem; margin: 8px 0 0 0; letter-spacing: 1px;">
+                    {subtitle}
+                </p>
+            </div>
+            <div style="text-align: right;">
+                <div style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px;">Last Updated</div>
+                <div style="color: #60a5fa; font-size: 1rem; font-weight: 600; margin-top: 4px;">{current_time}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
 def render_chart_with_insight(chart_key: str, chart_fig, df: pd.DataFrame, container=None):
     """
     Render a chart with an expandable insight tooltip.
@@ -3357,8 +3387,7 @@ def generate_strategic_recommendations(df):
 
 def render_executive_summary(df):
     """Render the C-Suite Executive Summary page."""
-    st.markdown('<p class="exec-title">🎯 Executive Intelligence Brief</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header" style="text-align: center;">Strategic insights for leadership decision-making</p>', unsafe_allow_html=True)
+    render_spectacular_header("Executive Intelligence Brief", "Strategic insights for leadership decision-making", "🎯")
     
     # Top-line executive KPIs
     st.markdown("### 📊 Key Performance Indicators")
@@ -3489,8 +3518,7 @@ def render_financial_analysis(df):
         create_insights_table
     )
 
-    st.markdown('<p class="main-header">💰 Financial Impact Analysis</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Comprehensive financial metrics, ROI analysis, and cost optimization</p>', unsafe_allow_html=True)
+    render_spectacular_header("Financial Impact Analysis", "Comprehensive financial metrics, ROI analysis, and cost optimization", "💰")
 
     # Ensure Financial_Impact column exists
     if 'Financial_Impact' not in df.columns:
@@ -3850,8 +3878,7 @@ def render_financial_analysis(df):
 
 def render_benchmarking(df):
     """Render the Competitive Benchmarking page."""
-    st.markdown('<p class="main-header">🏆 Competitive Benchmarking</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">How you compare against industry standards</p>', unsafe_allow_html=True)
+    render_spectacular_header("Competitive Benchmarking", "How you compare against industry standards", "🏆")
     
     # Get safe values with defaults
     recurrence_rate = df['AI_Recurrence_Risk'].mean() if 'AI_Recurrence_Risk' in df.columns else 0.15
@@ -3962,8 +3989,7 @@ def render_benchmarking(df):
 
 def render_root_cause(df):
     """Render Root Cause Analysis page."""
-    st.markdown('<p class="main-header">🔬 Root Cause Analysis</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Identify and quantify the drivers of escalation friction</p>', unsafe_allow_html=True)
+    render_spectacular_header("Root Cause Analysis", "Identify and quantify the drivers of escalation friction", "🔬")
 
     col1, col2 = st.columns(2)
 
@@ -4024,8 +4050,7 @@ def render_root_cause(df):
 
 def render_action_tracker(df):
     """Render the Action Tracker page."""
-    st.markdown('<p class="main-header">📋 Action Tracker</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Strategic initiatives monitoring and accountability</p>', unsafe_allow_html=True)
+    render_spectacular_header("Action Tracker", "Strategic initiatives monitoring and accountability", "📋")
 
     # =========================================================================
     # TOP 5 SYSTEMIC ISSUES TABLE
@@ -4280,7 +4305,7 @@ def render_action_tracker(df):
 
 def render_presentation_mode(df):
     """Render Executive Presentation Mode with auto-cycling slides."""
-    st.markdown('<p class="exec-title">📽️ Executive Presentation</p>', unsafe_allow_html=True)
+    render_spectacular_header("Executive Presentation", "Auto-cycling executive slides", "📽️")
     
     slides = [
         "executive_summary",
@@ -4395,8 +4420,7 @@ def render_presentation_mode(df):
 
 def render_whatif_simulator(df):
     """Render the What-If Scenario Simulator page."""
-    st.markdown("### 🔮 What-If Scenario Simulator")
-    st.markdown("Adjust parameters to simulate impact on escalation metrics.")
+    render_spectacular_header("What-If Scenario Simulator", "Adjust parameters to simulate impact on escalation metrics", "🔮")
     
     # Get safe values with defaults
     recurrence_rate = df['AI_Recurrence_Risk'].mean() if 'AI_Recurrence_Risk' in df.columns else 0.15
@@ -4542,8 +4566,7 @@ def render_whatif_simulator(df):
 def render_drift_page(df):
     """Render the Category Drift Detection page."""
     try:
-        st.markdown("### 📊 Category Drift Detection")
-        st.markdown("Analyze how escalation patterns are changing over time.")
+        render_spectacular_header("Category Drift Detection", "Analyze how escalation patterns are changing over time", "📊")
 
         # Debug: Show available columns
         if st.checkbox("Show debug info", value=False):
@@ -4688,8 +4711,7 @@ def render_drift_page(df):
 
 def render_alerts_page(df):
     """Render the Smart Alerts page."""
-    st.markdown("### ⚠️ Smart Alert Thresholds")
-    st.markdown("Real-time monitoring of key metrics against dynamic thresholds.")
+    render_spectacular_header("Smart Alert Thresholds", "Real-time monitoring of key metrics against dynamic thresholds", "⚠️")
 
     # Find date column
     date_col = None
@@ -6134,8 +6156,7 @@ def main():
 
 def render_advanced_insights(df):
     """Render the Advanced Insights page with high-value visualizations."""
-    st.markdown('<p class="main-header">🚀 Advanced Insights</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Strategic visualizations for executive decision-making</p>', unsafe_allow_html=True)
+    render_spectacular_header("Advanced Insights", "Strategic visualizations for executive decision-making", "🚀")
     
     # Create tabs for different insight categories
     tabs = st.tabs(["📊 SLA & Aging", "👥 Engineer Efficiency", "💰 Cost Analysis", "🔄 Patterns"])
@@ -6282,8 +6303,7 @@ def render_advanced_insights(df):
 
 def render_dashboard(df):
     """Render the main dashboard page."""
-    st.markdown('<p class="main-header">📊 Dashboard</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Real-time escalation intelligence at a glance</p>', unsafe_allow_html=True)
+    render_spectacular_header("Dashboard", "Real-time escalation intelligence at a glance", "📊")
     
     # KPI Row
     col1, col2, col3, col4 = st.columns(4)
@@ -6356,8 +6376,7 @@ def render_dashboard(df):
 
 def render_analytics(df):
     """Render the analytics page with detailed charts."""
-    st.markdown('<p class="main-header">📈 Analytics</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Deep dive into escalation patterns and performance</p>', unsafe_allow_html=True)
+    render_spectacular_header("Analytics", "Deep dive into escalation patterns and performance", "📈")
 
     tabs = st.tabs(["🎯 Categories", "👥 Engineers", "📊 Distributions", "💰 Financial", "🔗 Similarity", "📚 Lessons Learned"])
 
