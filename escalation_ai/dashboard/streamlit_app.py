@@ -30,6 +30,7 @@ import json
 import time
 import base64
 import io
+import zipfile
 from streamlit_js_eval import streamlit_js_eval
 
 # Add parent to path for imports
@@ -7912,11 +7913,97 @@ def main():
 
         export_format = st.selectbox(
             "Select Report Type",
-            ["📊 Strategic Report (Excel)", "📄 Executive Report (PDF)", "🌐 Interactive Report (HTML)", "📁 Raw Data (CSV)"],
+            ["📦 All Reports (ZIP)", "📊 Strategic Report (Excel)", "📄 Executive Report (PDF)", "🌐 Interactive Report (HTML)", "📁 Raw Data (CSV)"],
             key="export_format_select"
         )
 
-        if export_format == "📊 Strategic Report (Excel)":
+        if export_format == "📦 All Reports (ZIP)":
+            st.markdown("""
+            <div style="background: rgba(251, 191, 36, 0.1); border-radius: 8px; padding: 12px; margin: 10px 0; border: 1px solid rgba(251, 191, 36, 0.3);">
+                <div style="color: #fcd34d; font-weight: 600;">📦 Complete Report Package</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">
+                    Download all reports in a single ZIP file: Strategic Report (Excel),
+                    Executive Report (PDF), Interactive Report (HTML), and Raw Data (CSV).
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.button("📥 Generate All Reports", key="gen_all_reports"):
+                with st.spinner("Generating all reports... This may take a moment."):
+                    # Create ZIP file in memory
+                    zip_buffer = io.BytesIO()
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+                    reports_generated = []
+                    reports_failed = []
+
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        # 1. Strategic Report (Excel)
+                        project_root = Path(__file__).parent.parent.parent
+                        strategic_paths = [
+                            project_root / "Strategic_Report.xlsx",
+                            Path.cwd() / "Strategic_Report.xlsx",
+                            Path("Strategic_Report.xlsx"),
+                        ]
+                        strategic_report_path = None
+                        for path in strategic_paths:
+                            if path.exists():
+                                strategic_report_path = path
+                                break
+
+                        if strategic_report_path:
+                            try:
+                                with open(strategic_report_path, "rb") as f:
+                                    zip_file.writestr(f"Strategic_Report_{timestamp}.xlsx", f.read())
+                                reports_generated.append("Strategic Report (Excel)")
+                            except Exception as e:
+                                reports_failed.append(f"Strategic Report: {e}")
+                        else:
+                            reports_failed.append("Strategic Report: File not found")
+
+                        # 2. Executive Report (PDF)
+                        try:
+                            pdf_data = generate_executive_pdf_report(df)
+                            if pdf_data:
+                                zip_file.writestr(f"Executive_Report_{timestamp}.pdf", pdf_data)
+                                reports_generated.append("Executive Report (PDF)")
+                            else:
+                                reports_failed.append("Executive Report: PDF generation not available")
+                        except Exception as e:
+                            reports_failed.append(f"Executive Report: {e}")
+
+                        # 3. Interactive Report (HTML)
+                        try:
+                            html_data = generate_magnificent_html_report(df)
+                            zip_file.writestr(f"Interactive_Report_{timestamp}.html", html_data)
+                            reports_generated.append("Interactive Report (HTML)")
+                        except Exception as e:
+                            reports_failed.append(f"Interactive Report: {e}")
+
+                        # 4. Raw Data (CSV)
+                        try:
+                            csv_data = df.to_csv(index=False)
+                            zip_file.writestr(f"Escalation_Data_{timestamp}.csv", csv_data)
+                            reports_generated.append("Raw Data (CSV)")
+                        except Exception as e:
+                            reports_failed.append(f"Raw Data: {e}")
+
+                    # Show status
+                    if reports_generated:
+                        st.success(f"✅ Generated: {', '.join(reports_generated)}")
+                    if reports_failed:
+                        st.warning(f"⚠️ Failed: {', '.join(reports_failed)}")
+
+                    # Download button
+                    zip_buffer.seek(0)
+                    st.download_button(
+                        label=f"⬇️ Download All Reports ({len(reports_generated)} files)",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"Escalation_Reports_{timestamp}.zip",
+                        mime="application/zip",
+                        key="download_all_zip"
+                    )
+
+        elif export_format == "📊 Strategic Report (Excel)":
             st.markdown("""
             <div style="background: rgba(34, 197, 94, 0.1); border-radius: 8px; padding: 12px; margin: 10px 0; border: 1px solid rgba(34, 197, 94, 0.3);">
                 <div style="color: #86efac; font-weight: 600;">📊 Strategic Report</div>
