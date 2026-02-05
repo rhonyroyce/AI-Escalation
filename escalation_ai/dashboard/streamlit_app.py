@@ -6736,17 +6736,78 @@ def render_deep_analysis(df):
                 </div>
                 """, unsafe_allow_html=True)
 
+            # Scoring Criteria Breakdown
+            with st.expander("📋 **How is the Learning Effectiveness Score Calculated?**", expanded=False):
+                st.markdown("""
+                <div style="background: rgba(30, 41, 59, 0.8); border-radius: 12px; padding: 20px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <div style="color: #60a5fa; font-weight: 700; font-size: 1.1rem; margin-bottom: 15px;">📊 Score Components (Total: 100 points)</div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div style="background: rgba(34, 197, 94, 0.1); border-radius: 8px; padding: 12px; border-left: 4px solid #22c55e;">
+                            <div style="color: #22c55e; font-weight: 600;">🔄 Recurrence Score</div>
+                            <div style="color: #94a3b8; font-size: 0.85rem;">35% weight</div>
+                            <div style="color: #e2e8f0; font-size: 0.8rem; margin-top: 5px;">100 - Recurrence Rate<br><i>Lower recurrence = higher score</i></div>
+                        </div>
+
+                        <div style="background: rgba(59, 130, 246, 0.1); border-radius: 8px; padding: 12px; border-left: 4px solid #3b82f6;">
+                            <div style="color: #3b82f6; font-weight: 600;">📝 Lesson Completion</div>
+                            <div style="color: #94a3b8; font-size: 0.85rem;">30% weight</div>
+                            <div style="color: #e2e8f0; font-size: 0.8rem; margin-top: 5px;">% of lessons marked complete<br><i>Higher completion = higher score</i></div>
+                        </div>
+
+                        <div style="background: rgba(249, 115, 22, 0.1); border-radius: 8px; padding: 12px; border-left: 4px solid #f97316;">
+                            <div style="color: #f97316; font-weight: 600;">⚙️ Resolution Consistency</div>
+                            <div style="color: #94a3b8; font-size: 0.85rem;">25% weight</div>
+                            <div style="color: #e2e8f0; font-size: 0.8rem; margin-top: 5px;">% with consistent resolution<br><i>More consistency = higher score</i></div>
+                        </div>
+
+                        <div style="background: rgba(139, 92, 246, 0.1); border-radius: 8px; padding: 12px; border-left: 4px solid #8b5cf6;">
+                            <div style="color: #8b5cf6; font-weight: 600;">✅ Documentation Bonus</div>
+                            <div style="color: #94a3b8; font-size: 0.85rem;">+10 points</div>
+                            <div style="color: #e2e8f0; font-size: 0.8rem; margin-top: 5px;">Awarded if any lessons<br><i>are documented for category</i></div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div style="color: #60a5fa; font-weight: 700; margin-bottom: 10px;">🎓 Grade Thresholds</div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <span style="background: #22c55e; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">A: ≥80</span>
+                            <span style="background: #3b82f6; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">B: 65-79</span>
+                            <span style="background: #f97316; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">C: 50-64</span>
+                            <span style="background: #ef4444; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">D: 35-49</span>
+                            <span style="background: #dc2626; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">F: &lt;35</span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
             # Row 2: Category Learning Scorecard
             st.markdown("#### 🎯 Category Learning Scorecard")
 
             # Sort by score descending
             sorted_grades = sorted(grades_data.items(), key=lambda x: x[1]['score'], reverse=True)
 
-            # Create scorecard visualization
+            # Create scorecard visualization with detailed hover
             categories = [g[0] for g in sorted_grades]
             scores = [g[1]['score'] for g in sorted_grades]
             grades = [g[1]['grade'] for g in sorted_grades]
-            recurrence_rates = [g[1]['recurrence_rate'] for g in sorted_grades]
+
+            # Build detailed hover data
+            hover_texts = []
+            for cat, data in sorted_grades:
+                recurrence_score = max(0, 100 - data['recurrence_rate'])
+                hover_texts.append(
+                    f"<b>{cat}</b><br><br>"
+                    f"<b>Total Score:</b> {data['score']:.1f}/100<br>"
+                    f"<b>Grade:</b> {data['grade']}<br><br>"
+                    f"<b>Score Breakdown:</b><br>"
+                    f"• Recurrence (35%): {recurrence_score:.1f} pts<br>"
+                    f"  └ Rate: {data['recurrence_rate']:.1f}%<br>"
+                    f"• Lesson Completion (30%): {data['lesson_completion']:.1f} pts<br>"
+                    f"• Consistency (25%): {data['consistency']:.1f} pts<br>"
+                    f"• Documentation Bonus: {'+10' if data.get('lessons_documented', 0) > 0 else '0'} pts<br><br>"
+                    f"<b>Tickets:</b> {data['ticket_count']}"
+                )
 
             fig_scorecard = go.Figure()
 
@@ -6758,8 +6819,8 @@ def render_deep_analysis(df):
                 marker_color=[grade_colors[g] for g in grades],
                 text=[f"{g} ({s:.0f})" for g, s in zip(grades, scores)],
                 textposition='outside',
-                hovertemplate='<b>%{y}</b><br>Score: %{x:.1f}<br>Recurrence: %{customdata:.1f}%<extra></extra>',
-                customdata=recurrence_rates
+                hovertemplate='%{customdata}<extra></extra>',
+                customdata=hover_texts
             ))
 
             fig_scorecard.update_layout(
