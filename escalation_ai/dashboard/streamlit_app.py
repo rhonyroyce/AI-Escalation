@@ -6363,6 +6363,84 @@ def render_deep_analysis(df):
                 )
                 st.plotly_chart(fig_sev_cat, use_container_width=True, key="sev_by_cat_deep")
 
+        # Sub-category column detection
+        sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else 'AI_SubCategory' if 'AI_SubCategory' in df.columns else None
+
+        # Cross-category sub-category analysis
+        st.markdown("#### 🏆 Top & Bottom Performing Sub-Categories (All Categories)")
+        if sub_cat_col and 'AI_Category' in df.columns:
+            # Calculate metrics for all sub-categories
+            all_sub_data = df.groupby([sub_cat_col, 'AI_Category']).agg({
+                'Financial_Impact': 'sum',
+                'AI_Recurrence_Risk': 'mean' if 'AI_Recurrence_Risk' in df.columns else 'count',
+                'Predicted_Resolution_Days': 'mean' if 'Predicted_Resolution_Days' in df.columns else 'count'
+            }).reset_index()
+            all_sub_data.columns = ['SubCategory', 'Category', 'Cost', 'Recurrence', 'Resolution']
+            all_sub_data['Count'] = df.groupby([sub_cat_col, 'AI_Category']).size().values
+
+            view_mode = st.radio(
+                "View by:",
+                ["💰 Highest Cost", "💚 Lowest Cost", "🔴 Highest Recurrence", "⏱️ Slowest Resolution"],
+                horizontal=True,
+                key="subcategory_view_mode"
+            )
+
+            if view_mode == "💰 Highest Cost":
+                display_data = all_sub_data.nlargest(10, 'Cost')
+                metric_col = 'Cost'
+                color_scale = 'Reds'
+                format_str = '${:,.0f}'
+            elif view_mode == "💚 Lowest Cost":
+                display_data = all_sub_data[all_sub_data['Count'] >= 2].nsmallest(10, 'Cost')
+                metric_col = 'Cost'
+                color_scale = 'Greens'
+                format_str = '${:,.0f}'
+            elif view_mode == "🔴 Highest Recurrence":
+                display_data = all_sub_data[all_sub_data['Count'] >= 2].nlargest(10, 'Recurrence')
+                metric_col = 'Recurrence'
+                color_scale = 'Reds'
+                format_str = '{:.1%}'
+            else:
+                display_data = all_sub_data[all_sub_data['Count'] >= 2].nlargest(10, 'Resolution')
+                metric_col = 'Resolution'
+                color_scale = 'Oranges'
+                format_str = '{:.1f}d'
+
+            display_data = display_data.sort_values(metric_col, ascending=True)
+
+            # Create labels with category context
+            labels = [f"{row['SubCategory'][:25]}... ({row['Category'][:15]})" if len(row['SubCategory']) > 25
+                     else f"{row['SubCategory']} ({row['Category'][:15]})"
+                     for _, row in display_data.iterrows()]
+
+            fig_all_sub = go.Figure(data=[go.Bar(
+                y=labels,
+                x=display_data[metric_col],
+                orientation='h',
+                marker=dict(
+                    color=display_data[metric_col],
+                    colorscale=color_scale,
+                    line=dict(color='rgba(255,255,255,0.3)', width=1)
+                ),
+                text=[format_str.format(v) if metric_col != 'Recurrence' else f'{v*100:.1f}%' for v in display_data[metric_col]],
+                textposition='outside',
+                textfont=dict(size=11, color='#e2e8f0'),
+                hovertemplate='<b>%{y}</b><br>Value: %{x}<br>Tickets: %{customdata}<extra></extra>',
+                customdata=display_data['Count']
+            )])
+            fig_all_sub.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                height=max(300, len(display_data) * 40),
+                margin=dict(l=10, r=80, t=10, b=10),
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', tickfont=dict(color='#94a3b8')),
+                yaxis=dict(showgrid=False, tickfont=dict(size=10, color='#e2e8f0')),
+                showlegend=False
+            )
+            st.plotly_chart(fig_all_sub, use_container_width=True)
+
+        st.markdown("---")
+
         # Category drill-down with inline selector
         st.markdown("#### 🔍 Category Drill-Down")
         if 'AI_Category' in df.columns:
@@ -6379,29 +6457,41 @@ def render_deep_analysis(df):
             m3.metric("Avg Cost", f"${cat_cost/cat_count:,.0f}" if cat_count > 0 else "$0")
             m4.metric("% of Total", f"{cat_count/len(df)*100:.1f}%")
 
-            # Sub-category breakdown (check both column name variants)
-            sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in cat_df.columns else 'AI_SubCategory' if 'AI_SubCategory' in cat_df.columns else None
+            # Sub-category breakdown - HORIZONTAL BAR with color coding
             if sub_cat_col:
                 sub_data = cat_df.groupby(sub_cat_col).agg({
                     'Financial_Impact': 'sum',
                     'AI_Category': 'count'
-                }).rename(columns={'AI_Category': 'Count'}).sort_values('Financial_Impact', ascending=False)
+                }).rename(columns={'AI_Category': 'Count'}).sort_values('Financial_Impact', ascending=True)
+
+                # Color gradient based on cost
+                max_cost = sub_data['Financial_Impact'].max()
+                colors = [f'rgba({int(59 + 180 * (v/max_cost))}, {int(130 - 62 * (v/max_cost))}, {int(246 - 178 * (v/max_cost))}, 0.9)'
+                         for v in sub_data['Financial_Impact']]
 
                 fig_sub = go.Figure(data=[go.Bar(
-                    x=sub_data.index,
-                    y=sub_data['Financial_Impact'],
-                    marker_color='#3b82f6',
-                    text=[f'${v:,.0f}' for v in sub_data['Financial_Impact']],
-                    textposition='outside'
+                    y=sub_data.index,
+                    x=sub_data['Financial_Impact'],
+                    orientation='h',
+                    marker=dict(
+                        color=colors,
+                        line=dict(color='rgba(255,255,255,0.3)', width=1)
+                    ),
+                    text=[f'${v:,.0f} ({c} tickets)' for v, c in zip(sub_data['Financial_Impact'], sub_data['Count'])],
+                    textposition='outside',
+                    textfont=dict(size=11, color='#e2e8f0'),
+                    hovertemplate='<b>%{y}</b><br>Cost: $%{x:,.0f}<extra></extra>'
                 )])
                 fig_sub.update_layout(
-                    title=f"Sub-Categories in {selected_cat}",
+                    title=dict(text=f"Sub-Categories in {selected_cat}", font=dict(size=14, color='#e2e8f0')),
                     paper_bgcolor='rgba(0,0,0,0)',
                     plot_bgcolor='rgba(0,0,0,0)',
-                    height=350,
-                    margin=dict(t=40, b=80),
-                    xaxis=dict(tickangle=-45, tickfont=dict(size=10, color='#94a3b8')),
-                    yaxis=dict(tickfont=dict(size=10, color='#94a3b8'), gridcolor='rgba(255,255,255,0.1)')
+                    height=max(250, len(sub_data) * 40),
+                    margin=dict(l=10, r=120, t=40, b=10),
+                    xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)',
+                              tickfont=dict(size=10, color='#94a3b8'), tickformat='$,.0f'),
+                    yaxis=dict(showgrid=False, tickfont=dict(size=11, color='#e2e8f0')),
+                    showlegend=False
                 )
                 st.plotly_chart(fig_sub, use_container_width=True)
 
