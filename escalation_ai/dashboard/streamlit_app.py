@@ -5295,6 +5295,347 @@ def generate_html_report(df):
     return html
 
 
+def generate_magnificent_html_report(df):
+    """Generate a magnificent HTML report with interactive Plotly charts."""
+    import plotly.io as pio
+
+    # Calculate metrics
+    total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+    revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 0.20
+    avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
+    recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
+    critical_count = len(df[df['tickets_data_severity'] == 'Critical']) if 'tickets_data_severity' in df.columns else 0
+    total_records = len(df)
+
+    # Generate charts as HTML
+    # 1. Category Sunburst
+    sunburst_fig = chart_category_sunburst(df)
+    sunburst_fig.update_layout(height=500, margin=dict(t=30, b=30, l=30, r=30))
+    sunburst_html = pio.to_html(sunburst_fig, full_html=False, include_plotlyjs=False)
+
+    # 2. Severity Distribution
+    if 'tickets_data_severity' in df.columns:
+        sev_data = df.groupby('tickets_data_severity')['Financial_Impact'].sum().reset_index()
+        sev_fig = go.Figure(data=[go.Pie(
+            labels=sev_data['tickets_data_severity'],
+            values=sev_data['Financial_Impact'],
+            hole=0.5,
+            marker=dict(colors=['#ef4444', '#f97316', '#22c55e']),
+            textinfo='label+percent'
+        )])
+        sev_fig.update_layout(height=400, margin=dict(t=30, b=30), showlegend=True,
+                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        severity_html = pio.to_html(sev_fig, full_html=False, include_plotlyjs=False)
+    else:
+        severity_html = "<p>Severity data not available</p>"
+
+    # 3. Friction by Category Bar
+    friction_fig = chart_friction_by_category(df)
+    friction_fig.update_layout(height=400, margin=dict(t=30, b=80, l=50, r=30))
+    friction_html = pio.to_html(friction_fig, full_html=False, include_plotlyjs=False)
+
+    # 4. Timeline Trend
+    trend_fig = chart_trend_timeline(df)
+    trend_fig.update_layout(height=350, margin=dict(t=30, b=50, l=50, r=30))
+    trend_html = pio.to_html(trend_fig, full_html=False, include_plotlyjs=False)
+
+    # 5. Engineer Performance
+    eng_fig = chart_engineer_performance(df)
+    eng_fig.update_layout(height=400, margin=dict(t=30, b=80, l=50, r=30))
+    engineer_html = pio.to_html(eng_fig, full_html=False, include_plotlyjs=False)
+
+    # Get recommendations
+    recommendations = generate_strategic_recommendations(df)
+
+    # Build HTML
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Escalation Intelligence Report</title>
+        <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+
+            body {{
+                font-family: 'Inter', sans-serif;
+                background: linear-gradient(135deg, #0a1628 0%, #1a365d 50%, #0a1628 100%);
+                color: #e2e8f0;
+                min-height: 100vh;
+                padding: 40px;
+            }}
+
+            .container {{ max-width: 1400px; margin: 0 auto; }}
+
+            .header {{
+                background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 58, 138, 0.9) 100%);
+                border-radius: 20px;
+                padding: 40px;
+                margin-bottom: 30px;
+                border: 1px solid rgba(59, 130, 246, 0.3);
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+                text-align: center;
+            }}
+
+            .header h1 {{
+                font-size: 3rem;
+                font-weight: 800;
+                background: linear-gradient(135deg, #ffffff 0%, #60a5fa 50%, #3b82f6 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                margin-bottom: 10px;
+            }}
+
+            .header .subtitle {{
+                color: #94a3b8;
+                font-size: 1.2rem;
+                letter-spacing: 2px;
+            }}
+
+            .header .meta {{
+                margin-top: 20px;
+                color: #64748b;
+                font-size: 0.9rem;
+            }}
+
+            .kpi-grid {{
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 20px;
+                margin-bottom: 30px;
+            }}
+
+            .kpi-card {{
+                background: linear-gradient(145deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.8) 100%);
+                border-radius: 16px;
+                padding: 25px;
+                text-align: center;
+                border: 1px solid rgba(59, 130, 246, 0.2);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            }}
+
+            .kpi-card.green {{ border-color: rgba(34, 197, 94, 0.4); }}
+            .kpi-card.red {{ border-color: rgba(239, 68, 68, 0.4); }}
+            .kpi-card.blue {{ border-color: rgba(59, 130, 246, 0.4); }}
+            .kpi-card.purple {{ border-color: rgba(139, 92, 246, 0.4); }}
+
+            .kpi-label {{
+                color: #94a3b8;
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+                margin-bottom: 10px;
+            }}
+
+            .kpi-value {{
+                font-size: 2.5rem;
+                font-weight: 800;
+                text-shadow: 0 0 30px currentColor;
+            }}
+
+            .kpi-value.green {{ color: #22c55e; }}
+            .kpi-value.red {{ color: #ef4444; }}
+            .kpi-value.blue {{ color: #3b82f6; }}
+            .kpi-value.purple {{ color: #8b5cf6; }}
+
+            .section {{
+                background: rgba(15, 23, 42, 0.6);
+                border-radius: 16px;
+                padding: 25px;
+                margin-bottom: 25px;
+                border: 1px solid rgba(59, 130, 246, 0.2);
+            }}
+
+            .section h2 {{
+                color: #e2e8f0;
+                font-size: 1.3rem;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+            }}
+
+            .section h2 span {{ margin-right: 10px; }}
+
+            .chart-grid {{
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 25px;
+                margin-bottom: 25px;
+            }}
+
+            .chart-box {{
+                background: rgba(15, 23, 42, 0.4);
+                border-radius: 12px;
+                padding: 20px;
+                border: 1px solid rgba(59, 130, 246, 0.15);
+            }}
+
+            .chart-box h3 {{
+                color: #94a3b8;
+                font-size: 0.9rem;
+                margin-bottom: 15px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }}
+
+            .rec-card {{
+                background: linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.8) 100%);
+                border-radius: 12px;
+                padding: 20px;
+                margin: 15px 0;
+                border-left: 4px solid #3b82f6;
+            }}
+
+            .rec-card.p1 {{ border-left-color: #ef4444; }}
+            .rec-card.p2 {{ border-left-color: #f97316; }}
+            .rec-card.p3 {{ border-left-color: #3b82f6; }}
+
+            .rec-header {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 12px;
+            }}
+
+            .rec-priority {{
+                padding: 4px 12px;
+                border-radius: 4px;
+                font-weight: 700;
+                font-size: 0.8rem;
+                color: white;
+            }}
+
+            .rec-priority.p1 {{ background: #ef4444; }}
+            .rec-priority.p2 {{ background: #f97316; }}
+            .rec-priority.p3 {{ background: #3b82f6; }}
+
+            .rec-confidence {{ color: #22c55e; font-size: 0.85rem; }}
+
+            .rec-title {{ color: #e2e8f0; font-weight: 600; font-size: 1.1rem; margin-bottom: 8px; }}
+            .rec-desc {{ color: #94a3b8; font-size: 0.9rem; margin-bottom: 15px; }}
+
+            .rec-metrics {{
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 10px;
+                font-size: 0.8rem;
+            }}
+
+            .rec-metric {{ color: #64748b; }}
+            .rec-metric strong {{ color: #e2e8f0; }}
+
+            .footer {{
+                text-align: center;
+                padding: 30px;
+                color: #64748b;
+                font-size: 0.85rem;
+            }}
+
+            .footer .confidential {{ color: #ef4444; font-weight: 600; margin-top: 10px; }}
+
+            @media print {{
+                body {{ background: white; color: #333; padding: 20px; }}
+                .header {{ background: #0066CC; color: white; }}
+                .header h1 {{ color: white; -webkit-text-fill-color: white; }}
+                .kpi-card, .section, .chart-box {{ background: #f8f9fa; border: 1px solid #ddd; }}
+                .kpi-label, .rec-desc {{ color: #666; }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>ESCALATION INTELLIGENCE</h1>
+                <div class="subtitle">EXECUTIVE ANALYTICS REPORT</div>
+                <div class="meta">
+                    Generated: {datetime.now().strftime('%B %d, %Y at %H:%M')} |
+                    Analysis Period: 90 Days | {total_records:,} Records Analyzed
+                </div>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-card green">
+                    <div class="kpi-label">💰 Total Financial Impact</div>
+                    <div class="kpi-value green">${total_cost/1000:,.0f}K</div>
+                </div>
+                <div class="kpi-card red">
+                    <div class="kpi-label">⚠️ Revenue at Risk</div>
+                    <div class="kpi-value red">${revenue_risk/1000:,.0f}K</div>
+                </div>
+                <div class="kpi-card blue">
+                    <div class="kpi-label">🔥 Critical Issues</div>
+                    <div class="kpi-value blue">{critical_count}</div>
+                </div>
+                <div class="kpi-card purple">
+                    <div class="kpi-label">⏱️ Avg Resolution</div>
+                    <div class="kpi-value purple">{avg_resolution:.1f}d</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2><span>🎯</span>Strategic Recommendations</h2>
+                {''.join([f'''
+                <div class="rec-card {rec['priority'].lower()}">
+                    <div class="rec-header">
+                        <span class="rec-priority {rec['priority'].lower()}">{rec['priority']}</span>
+                        <span class="rec-confidence">🎯 {rec['confidence']}% confidence</span>
+                    </div>
+                    <div class="rec-title">{rec['title']}</div>
+                    <div class="rec-desc">{rec['description']}</div>
+                    <div class="rec-metrics">
+                        <div class="rec-metric"><strong>Impact:</strong> {rec['impact']}</div>
+                        <div class="rec-metric"><strong>Timeline:</strong> {rec['timeline']}</div>
+                        <div class="rec-metric"><strong>Investment:</strong> {rec['investment']}</div>
+                        <div class="rec-metric"><strong>ROI:</strong> {rec['roi']}</div>
+                    </div>
+                </div>
+                ''' for rec in recommendations[:4]])}
+            </div>
+
+            <div class="chart-grid">
+                <div class="chart-box">
+                    <h3>📊 Category & Sub-Category Breakdown</h3>
+                    {sunburst_html}
+                </div>
+                <div class="chart-box">
+                    <h3>🎯 Severity Distribution</h3>
+                    {severity_html}
+                </div>
+            </div>
+
+            <div class="chart-grid">
+                <div class="chart-box">
+                    <h3>📈 Friction by Category</h3>
+                    {friction_html}
+                </div>
+                <div class="chart-box">
+                    <h3>👥 Engineer Performance</h3>
+                    {engineer_html}
+                </div>
+            </div>
+
+            <div class="section">
+                <h2><span>📈</span>Escalation Timeline</h2>
+                {trend_html}
+            </div>
+
+            <div class="footer">
+                <p>Generated by Escalation AI v2.3.0 | Powered by AI-Driven Analytics</p>
+                <p class="confidential">CONFIDENTIAL - FOR EXECUTIVE REVIEW ONLY</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return html
+
+
 # ============================================================================
 # EXCEL-STYLE DASHBOARD - INTERACTIVE & SPECTACULAR
 # ============================================================================
@@ -6668,77 +7009,105 @@ def main():
                 ]
         
         st.markdown("---")
-        st.markdown("### 📤 Export")
-        
-        export_format = st.selectbox("Format", ["PDF Report", "HTML Report", "Excel Data", "CSV Data"])
-        
-        if st.button("📥 Generate Report"):
-            with st.spinner("Generating report..."):
-                if export_format == "PDF Report":
+        st.markdown("### 📤 Export Reports")
+
+        export_format = st.selectbox(
+            "Select Report Type",
+            ["📊 Strategic Report (Excel)", "📄 Executive Report (PDF)", "🌐 Interactive Report (HTML)", "📁 Raw Data (CSV)"],
+            key="export_format_select"
+        )
+
+        if export_format == "📊 Strategic Report (Excel)":
+            st.markdown("""
+            <div style="background: rgba(34, 197, 94, 0.1); border-radius: 8px; padding: 12px; margin: 10px 0; border: 1px solid rgba(34, 197, 94, 0.3);">
+                <div style="color: #86efac; font-weight: 600;">📊 Strategic Report</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">
+                    Comprehensive Excel report with multiple sheets: Executive Summary, Financial Analysis,
+                    Category Breakdown, Engineer Performance, Recommendations, and Charts.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Load the Strategic Report file
+            strategic_report_path = "Strategic_Report.xlsx"
+            try:
+                with open(strategic_report_path, "rb") as f:
+                    st.download_button(
+                        label="⬇️ Download Strategic Report",
+                        data=f.read(),
+                        file_name=f"Strategic_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="download_strategic_report"
+                    )
+            except FileNotFoundError:
+                st.warning("Strategic Report not found. Please run the report generation pipeline first.")
+
+        elif export_format == "📄 Executive Report (PDF)":
+            st.markdown("""
+            <div style="background: rgba(239, 68, 68, 0.1); border-radius: 8px; padding: 12px; margin: 10px 0; border: 1px solid rgba(239, 68, 68, 0.3);">
+                <div style="color: #fca5a5; font-weight: 600;">📄 Executive Report</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">
+                    Professional PDF report with KPIs, strategic recommendations,
+                    and key insights for executive presentation.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.button("📥 Generate PDF Report", key="gen_pdf"):
+                with st.spinner("Generating executive report..."):
                     pdf_data = generate_executive_pdf_report(df)
                     if pdf_data:
                         st.download_button(
                             label="⬇️ Download PDF",
                             data=pdf_data,
-                            file_name=f"Escalation_AI_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-                            mime="application/pdf"
+                            file_name=f"Executive_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                            mime="application/pdf",
+                            key="download_pdf"
                         )
                     else:
-                        st.warning("PDF generation requires reportlab. Generating HTML instead...")
-                        html_data = generate_html_report(df)
-                        st.download_button(
-                            label="⬇️ Download HTML",
-                            data=html_data,
-                            file_name=f"Escalation_AI_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
-                            mime="text/html"
-                        )
-                
-                elif export_format == "HTML Report":
-                    html_data = generate_html_report(df)
+                        st.warning("PDF generation requires reportlab. Try the HTML report instead.")
+
+        elif export_format == "🌐 Interactive Report (HTML)":
+            st.markdown("""
+            <div style="background: rgba(59, 130, 246, 0.1); border-radius: 8px; padding: 12px; margin: 10px 0; border: 1px solid rgba(59, 130, 246, 0.3);">
+                <div style="color: #93c5fd; font-weight: 600;">🌐 Interactive Report</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">
+                    Beautiful HTML report with interactive charts. Open in any browser,
+                    hover over charts for details. Can be printed to PDF.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.button("📥 Generate HTML Report", key="gen_html"):
+                with st.spinner("Generating interactive report..."):
+                    html_data = generate_magnificent_html_report(df)
                     st.download_button(
                         label="⬇️ Download HTML",
                         data=html_data,
-                        file_name=f"Escalation_AI_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
-                        mime="text/html"
+                        file_name=f"Interactive_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+                        mime="text/html",
+                        key="download_html"
                     )
-                
-                elif export_format == "Excel Data":
-                    excel_buffer = io.BytesIO()
-                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                        df.to_excel(writer, sheet_name='All Records', index=False)
-                        
-                        # Add summary sheet with type breakdown
-                        type_col = 'tickets_data_type'
-                        escalations = len(df[df[type_col].astype(str).str.contains('Escalation', case=False, na=False)]) if type_col in df.columns else len(df)
-                        concerns = len(df[df[type_col].astype(str).str.contains('Concern', case=False, na=False)]) if type_col in df.columns else 0
-                        lessons = len(df[df[type_col].astype(str).str.contains('Lesson', case=False, na=False)]) if type_col in df.columns else 0
-                        
-                        summary_df = pd.DataFrame({
-                            'Metric': ['Total Records', 'Escalations', 'Concerns', 'Lessons Learned', 
-                                       'Critical Issues', 'Avg Resolution', 'Recurrence Rate'],
-                            'Value': [len(df), escalations, concerns, lessons,
-                                     len(df[df['tickets_data_severity']=='Critical']), 
-                                     f"{df['Predicted_Resolution_Days'].mean():.1f} days",
-                                     f"{df['AI_Recurrence_Risk'].mean()*100:.1f}%"]
-                        })
-                        summary_df.to_excel(writer, sheet_name='Summary', index=False)
-                    
-                    excel_buffer.seek(0)
-                    st.download_button(
-                        label="⬇️ Download Excel",
-                        data=excel_buffer.getvalue(),
-                        file_name=f"Escalation_Data_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                
-                elif export_format == "CSV Data":
-                    csv_data = df.to_csv(index=False)
-                    st.download_button(
-                        label="⬇️ Download CSV",
-                        data=csv_data,
-                        file_name=f"Escalation_Data_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv"
-                    )
+
+        elif export_format == "📁 Raw Data (CSV)":
+            st.markdown("""
+            <div style="background: rgba(168, 85, 247, 0.1); border-radius: 8px; padding: 12px; margin: 10px 0; border: 1px solid rgba(168, 85, 247, 0.3);">
+                <div style="color: #c4b5fd; font-weight: 600;">📁 Raw Data Export</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 5px;">
+                    Export all escalation data as CSV for further analysis in Excel,
+                    Power BI, or other tools.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            csv_data = df.to_csv(index=False)
+            st.download_button(
+                label="⬇️ Download CSV",
+                data=csv_data,
+                file_name=f"Escalation_Data_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                key="download_csv"
+            )
     
     # Main content - Route to appropriate page (6 consolidated tabs)
     if page == "📊 Executive Dashboard":
