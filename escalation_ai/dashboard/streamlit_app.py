@@ -5299,7 +5299,10 @@ def render_excel_dashboard(df):
         df['_year'] = 2024
 
     # ========== SPECTACULAR HEADER ==========
-    st.markdown("""
+    from datetime import datetime
+    current_time = datetime.now().strftime("%b %d, %Y at %I:%M %p")
+
+    st.markdown(f"""
     <div style="background: linear-gradient(135deg, #0a1628 0%, #1a365d 50%, #0a1628 100%);
                 padding: 25px 35px; border-radius: 16px; margin-bottom: 20px;
                 border: 1px solid rgba(59, 130, 246, 0.3);
@@ -5313,12 +5316,12 @@ def render_excel_dashboard(df):
                            -webkit-background-clip: text; -webkit-text-fill-color: transparent;">INTELLIGENCE</span>
                 </h1>
                 <p style="color: #94a3b8; font-size: 1rem; margin: 8px 0 0 0; letter-spacing: 2px;">
-                    EXECUTIVE ANALYTICS DASHBOARD • FY 2024-2025
+                    EXECUTIVE ANALYTICS DASHBOARD
                 </p>
             </div>
             <div style="text-align: right;">
-                <div style="color: #60a5fa; font-size: 0.85rem;">Real-time Intelligence</div>
-                <div style="color: #22c55e; font-size: 0.75rem; margin-top: 4px;">● Live Data Feed</div>
+                <div style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px;">Last Updated</div>
+                <div style="color: #60a5fa; font-size: 1rem; font-weight: 600; margin-top: 4px;">{current_time}</div>
             </div>
         </div>
     </div>
