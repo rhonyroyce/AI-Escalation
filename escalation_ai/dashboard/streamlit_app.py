@@ -6379,9 +6379,10 @@ def render_deep_analysis(df):
             m3.metric("Avg Cost", f"${cat_cost/cat_count:,.0f}" if cat_count > 0 else "$0")
             m4.metric("% of Total", f"{cat_count/len(df)*100:.1f}%")
 
-            # Sub-category breakdown
-            if 'AI_SubCategory' in cat_df.columns:
-                sub_data = cat_df.groupby('AI_SubCategory').agg({
+            # Sub-category breakdown (check both column name variants)
+            sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in cat_df.columns else 'AI_SubCategory' if 'AI_SubCategory' in cat_df.columns else None
+            if sub_cat_col:
+                sub_data = cat_df.groupby(sub_cat_col).agg({
                     'Financial_Impact': 'sum',
                     'AI_Category': 'count'
                 }).rename(columns={'AI_Category': 'Count'}).sort_values('Financial_Impact', ascending=False)
@@ -6410,10 +6411,65 @@ def render_deep_analysis(df):
         with col1:
             st.plotly_chart(chart_engineer_performance(df), use_container_width=True)
         with col2:
-            # Engineer quadrant from Advanced Insights
-            try:
-                from escalation_ai.advanced_insights import chart_engineer_quadrant
-                st.plotly_chart(chart_engineer_quadrant(df), use_container_width=True)
+            # Engineer Resolution Speed vs Volume Scatter
+            eng_col = 'tickets_data_engineer_name' if 'tickets_data_engineer_name' in df.columns else 'tickets_data_issue_resolved_by'
+            if eng_col in df.columns and 'Predicted_Resolution_Days' in df.columns:
+                eng_metrics = df.groupby(eng_col).agg({
+                    'Predicted_Resolution_Days': 'mean',
+                    'Financial_Impact': ['sum', 'count'],
+                    'AI_Recurrence_Risk': 'mean'
+                }).reset_index()
+                eng_metrics.columns = ['Engineer', 'Avg_Resolution', 'Total_Cost', 'Ticket_Count', 'Recurrence_Risk']
+                eng_metrics = eng_metrics[eng_metrics['Ticket_Count'] >= 3]  # Filter low volume
+
+                # Quadrant classification
+                avg_res_median = eng_metrics['Avg_Resolution'].median()
+                avg_risk_median = eng_metrics['Recurrence_Risk'].median()
+
+                def get_quadrant(row):
+                    fast = row['Avg_Resolution'] <= avg_res_median
+                    quality = row['Recurrence_Risk'] <= avg_risk_median
+                    if fast and quality: return 'Fast & Clean'
+                    elif not fast and quality: return 'Slow but Thorough'
+                    elif fast and not quality: return 'Fast but Sloppy'
+                    else: return 'Needs Support'
+
+                eng_metrics['Quadrant'] = eng_metrics.apply(get_quadrant, axis=1)
+                quadrant_colors = {
+                    'Fast & Clean': '#22c55e',
+                    'Slow but Thorough': '#3b82f6',
+                    'Fast but Sloppy': '#f97316',
+                    'Needs Support': '#ef4444'
+                }
+
+                fig_quad = go.Figure()
+                for quadrant in quadrant_colors:
+                    q_data = eng_metrics[eng_metrics['Quadrant'] == quadrant]
+                    if len(q_data) > 0:
+                        fig_quad.add_trace(go.Scatter(
+                            x=q_data['Avg_Resolution'],
+                            y=q_data['Recurrence_Risk'] * 100,
+                            mode='markers+text',
+                            name=quadrant,
+                            text=q_data['Engineer'].str.split().str[0],  # First name only
+                            textposition='top center',
+                            marker=dict(size=q_data['Ticket_Count'] * 2, color=quadrant_colors[quadrant], opacity=0.7),
+                            hovertemplate='<b>%{text}</b><br>Resolution: %{x:.1f}d<br>Recurrence: %{y:.1f}%<extra></extra>'
+                        ))
+
+                fig_quad.add_vline(x=avg_res_median, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+                fig_quad.add_hline(y=avg_risk_median * 100, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+
+                fig_quad.update_layout(
+                    title=dict(text='Engineer Performance Quadrant', font=dict(size=14, color='#e2e8f0')),
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    height=400,
+                    xaxis=dict(title='Avg Resolution (days)', gridcolor='rgba(255,255,255,0.1)', tickfont=dict(color='#94a3b8')),
+                    yaxis=dict(title='Recurrence Risk (%)', gridcolor='rgba(255,255,255,0.1)', tickfont=dict(color='#94a3b8')),
+                    legend=dict(orientation='h', yanchor='bottom', y=1.02, font=dict(color='#94a3b8', size=10))
+                )
+                st.plotly_chart(fig_quad, use_container_width=True)
+
                 st.markdown("""
                 <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; margin-top: 10px;">
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.8rem;">
@@ -6424,8 +6480,8 @@ def render_deep_analysis(df):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-            except:
-                st.info("Engineer quadrant analysis requires additional data")
+            else:
+                st.info("Engineer performance data not available")
 
     # ===== TAB 3: ROOT CAUSE =====
     with tabs[2]:
@@ -6535,53 +6591,95 @@ def render_deep_analysis(df):
 
     # ===== TAB 6: LESSONS LEARNED =====
     with tabs[5]:
-        if 'Learning_Effectiveness_Score' in df.columns:
-            # Scorecard overview
-            pillars = ['Documentation', 'Training', 'Process', 'Communication', 'Tools', 'Knowledge']
-            pillar_cols = [f'{p}_Score' for p in pillars if f'{p}_Score' in df.columns]
+        lessons_col = 'tickets_data_lessons_learned_preventive_actions'
+        has_lessons = lessons_col in df.columns
 
-            if pillar_cols:
-                pillar_means = {col.replace('_Score', ''): df[col].mean() for col in pillar_cols}
+        if has_lessons:
+            # Filter for records with lessons learned
+            df_lessons = df[df[lessons_col].notna() & (df[lessons_col] != '')]
 
-                fig_radar = go.Figure(data=go.Scatterpolar(
-                    r=list(pillar_means.values()),
-                    theta=list(pillar_means.keys()),
-                    fill='toself',
-                    marker_color='#8b5cf6'
-                ))
-                fig_radar.update_layout(
-                    polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    height=400
-                )
-                st.plotly_chart(fig_radar, use_container_width=True)
+            col1, col2 = st.columns(2)
 
-            # Category rankings
-            if 'AI_Category' in df.columns:
-                cat_learning = df.groupby('AI_Category')['Learning_Effectiveness_Score'].mean().sort_values(ascending=False)
+            with col1:
+                # Lessons by Category
+                if 'AI_Category' in df.columns and len(df_lessons) > 0:
+                    lessons_by_cat = df_lessons.groupby('AI_Category').size().sort_values(ascending=True)
 
-                def get_grade(score):
-                    if score >= 80: return 'A'
-                    elif score >= 70: return 'B'
-                    elif score >= 60: return 'C'
-                    elif score >= 50: return 'D'
-                    return 'F'
+                    fig_lessons_cat = go.Figure(data=[go.Bar(
+                        y=lessons_by_cat.index,
+                        x=lessons_by_cat.values,
+                        orientation='h',
+                        marker_color='#8b5cf6',
+                        text=lessons_by_cat.values,
+                        textposition='outside'
+                    )])
+                    fig_lessons_cat.update_layout(
+                        title=dict(text='Lessons Documented by Category', font=dict(size=14, color='#e2e8f0')),
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        height=350,
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickfont=dict(color='#94a3b8')),
+                        yaxis=dict(tickfont=dict(color='#e2e8f0'))
+                    )
+                    st.plotly_chart(fig_lessons_cat, use_container_width=True)
 
-                fig_learn = go.Figure(data=[go.Bar(
-                    x=cat_learning.index,
-                    y=cat_learning.values,
-                    marker_color=['#22c55e' if v >= 70 else '#f97316' if v >= 50 else '#ef4444' for v in cat_learning.values],
-                    text=[get_grade(v) for v in cat_learning.values],
-                    textposition='outside'
-                )])
-                fig_learn.update_layout(
-                    title="Learning Effectiveness by Category",
-                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                    height=350, xaxis_tickangle=-45
-                )
-                st.plotly_chart(fig_learn, use_container_width=True)
+            with col2:
+                # Coverage metrics
+                total_records = len(df)
+                lessons_count = len(df_lessons)
+                coverage_pct = (lessons_count / total_records * 100) if total_records > 0 else 0
+
+                st.markdown(f"""
+                <div style="background: rgba(139, 92, 246, 0.1); border-radius: 12px; padding: 20px; border: 1px solid rgba(139, 92, 246, 0.3);">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <div style="color: #c4b5fd; font-size: 0.8rem; text-transform: uppercase;">Documentation Coverage</div>
+                        <div style="color: #8b5cf6; font-size: 3rem; font-weight: 800;">{coverage_pct:.1f}%</div>
+                        <div style="color: #94a3b8; font-size: 0.9rem;">{lessons_count} of {total_records} records</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Recurrence comparison
+                if 'AI_Recurrence_Risk' in df.columns:
+                    with_lessons_risk = df_lessons['AI_Recurrence_Risk'].mean() * 100 if len(df_lessons) > 0 else 0
+                    without_lessons = df[~df.index.isin(df_lessons.index)]
+                    without_lessons_risk = without_lessons['AI_Recurrence_Risk'].mean() * 100 if len(without_lessons) > 0 else 0
+
+                    st.markdown(f"""
+                    <div style="background: rgba(34, 197, 94, 0.1); border-radius: 12px; padding: 15px; margin-top: 15px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                        <div style="color: #86efac; font-size: 0.8rem; font-weight: 600; margin-bottom: 10px;">📉 Recurrence Risk Comparison</div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <div style="text-align: center;">
+                                <div style="color: #22c55e; font-size: 1.5rem; font-weight: 700;">{with_lessons_risk:.1f}%</div>
+                                <div style="color: #94a3b8; font-size: 0.75rem;">With Lessons</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="color: #ef4444; font-size: 1.5rem; font-weight: 700;">{without_lessons_risk:.1f}%</div>
+                                <div style="color: #94a3b8; font-size: 0.75rem;">Without Lessons</div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Recent Lessons Table
+            st.markdown("#### 📚 Recent Lessons Learned")
+            if len(df_lessons) > 0:
+                recent_lessons = df_lessons.nlargest(5, 'Financial_Impact' if 'Financial_Impact' in df_lessons.columns else df_lessons.columns[0])
+                for _, row in recent_lessons.iterrows():
+                    lesson_text = str(row[lessons_col])[:200] + "..." if len(str(row[lessons_col])) > 200 else str(row[lessons_col])
+                    category = row.get('AI_Category', 'Unknown')
+                    cost = row.get('Financial_Impact', 0)
+
+                    st.markdown(f"""
+                    <div style="background: rgba(15, 23, 42, 0.6); border-radius: 8px; padding: 15px; margin: 10px 0; border-left: 4px solid #8b5cf6;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #c4b5fd; font-weight: 600;">{category}</span>
+                            <span style="color: #22c55e;">${cost:,.0f}</span>
+                        </div>
+                        <div style="color: #94a3b8; font-size: 0.9rem;">{lesson_text}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
         else:
-            st.info("Lessons learned analysis requires learning effectiveness scoring data")
+            st.info("No lessons learned data available in the current dataset")
 
 
 # ============================================================================
