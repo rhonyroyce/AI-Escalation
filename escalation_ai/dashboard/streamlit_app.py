@@ -5673,6 +5673,149 @@ def render_excel_dashboard(df):
             )
             st.plotly_chart(fig_orig, use_container_width=True, key="orig_bar")
 
+    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
+
+    # ========== ROW 5: SANKEY FLOW DIAGRAM ==========
+    st.markdown("""
+    <div style="background: rgba(15, 23, 42, 0.6); border-radius: 16px; padding: 20px;
+                border: 1px solid rgba(168, 85, 247, 0.3);">
+        <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.2rem;">
+            🔀 Issue Flow Analysis: Category → Severity → Resolution Speed
+        </h3>
+        <p style="color: #64748b; font-size: 0.85rem; margin: 0;">
+            Interactive flow diagram showing how issues move through the system. Hover for details.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Create Sankey data
+    if 'AI_Category' in df.columns and 'tickets_data_severity' in df.columns:
+        # Derive Resolution Speed from Predicted_Resolution_Days
+        df_sankey = df.copy()
+        if 'Predicted_Resolution_Days' in df_sankey.columns:
+            df_sankey['Resolution_Speed'] = pd.cut(
+                df_sankey['Predicted_Resolution_Days'],
+                bins=[0, 2, 5, float('inf')],
+                labels=['⚡ Quick (<2d)', '📋 Standard (2-5d)', '🐢 Extended (>5d)']
+            )
+        else:
+            df_sankey['Resolution_Speed'] = '📋 Standard'
+
+        # Get unique values for each level
+        categories = df_sankey['AI_Category'].unique().tolist()
+        severities = df_sankey['tickets_data_severity'].unique().tolist()
+        resolutions = df_sankey['Resolution_Speed'].dropna().unique().tolist()
+
+        # Create node labels
+        all_labels = categories + severities + resolutions
+
+        # Create color map
+        cat_colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1']
+        sev_colors = {'Critical': '#ef4444', 'Major': '#f97316', 'Minor': '#22c55e'}
+        res_colors = {'⚡ Quick (<2d)': '#22c55e', '📋 Standard (2-5d)': '#3b82f6', '🐢 Extended (>5d)': '#ef4444'}
+
+        node_colors = []
+        for label in all_labels:
+            if label in categories:
+                node_colors.append(cat_colors[categories.index(label) % len(cat_colors)])
+            elif label in sev_colors:
+                node_colors.append(sev_colors[label])
+            elif label in res_colors:
+                node_colors.append(res_colors[label])
+            else:
+                node_colors.append('#6b7280')
+
+        # Create links: Category -> Severity
+        links_cat_sev = df_sankey.groupby(['AI_Category', 'tickets_data_severity']).size().reset_index(name='count')
+
+        # Create links: Severity -> Resolution
+        links_sev_res = df_sankey.groupby(['tickets_data_severity', 'Resolution_Speed']).size().reset_index(name='count')
+
+        # Build source, target, value lists
+        sources = []
+        targets = []
+        values = []
+        link_colors = []
+
+        # Category -> Severity links
+        for _, row in links_cat_sev.iterrows():
+            src_idx = all_labels.index(row['AI_Category'])
+            tgt_idx = all_labels.index(row['tickets_data_severity'])
+            sources.append(src_idx)
+            targets.append(tgt_idx)
+            values.append(row['count'])
+            # Color based on severity
+            if row['tickets_data_severity'] == 'Critical':
+                link_colors.append('rgba(239, 68, 68, 0.4)')
+            elif row['tickets_data_severity'] == 'Major':
+                link_colors.append('rgba(249, 115, 22, 0.4)')
+            else:
+                link_colors.append('rgba(34, 197, 94, 0.4)')
+
+        # Severity -> Resolution links
+        for _, row in links_sev_res.iterrows():
+            if pd.notna(row['Resolution_Speed']):
+                src_idx = all_labels.index(row['tickets_data_severity'])
+                tgt_idx = all_labels.index(row['Resolution_Speed'])
+                sources.append(src_idx)
+                targets.append(tgt_idx)
+                values.append(row['count'])
+                # Color based on resolution speed
+                if 'Quick' in str(row['Resolution_Speed']):
+                    link_colors.append('rgba(34, 197, 94, 0.5)')
+                elif 'Extended' in str(row['Resolution_Speed']):
+                    link_colors.append('rgba(239, 68, 68, 0.5)')
+                else:
+                    link_colors.append('rgba(59, 130, 246, 0.5)')
+
+        # Create Sankey diagram
+        fig_sankey = go.Figure(data=[go.Sankey(
+            node=dict(
+                pad=20,
+                thickness=25,
+                line=dict(color='rgba(255,255,255,0.3)', width=1),
+                label=all_labels,
+                color=node_colors,
+                hovertemplate='<b>%{label}</b><br>Total: %{value}<extra></extra>'
+            ),
+            link=dict(
+                source=sources,
+                target=targets,
+                value=values,
+                color=link_colors,
+                hovertemplate='<b>%{source.label}</b> → <b>%{target.label}</b><br>Count: %{value}<extra></extra>'
+            )
+        )])
+
+        fig_sankey.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=20, r=20, t=20, b=20),
+            height=450,
+            font=dict(color='#e2e8f0', size=11)
+        )
+
+        st.plotly_chart(fig_sankey, use_container_width=True, key="issue_flow_sankey")
+
+        # Legend
+        st.markdown("""
+        <div style="display: flex; justify-content: center; gap: 30px; margin-top: 10px; flex-wrap: wrap;">
+            <div style="color: #94a3b8; font-size: 0.8rem;">
+                <span style="color: #3b82f6;">■</span> Categories
+            </div>
+            <div style="color: #94a3b8; font-size: 0.8rem;">
+                <span style="color: #ef4444;">■</span> Critical
+                <span style="color: #f97316; margin-left: 10px;">■</span> Major
+                <span style="color: #22c55e; margin-left: 10px;">■</span> Minor
+            </div>
+            <div style="color: #94a3b8; font-size: 0.8rem;">
+                <span style="color: #22c55e;">■</span> Quick
+                <span style="color: #3b82f6; margin-left: 10px;">■</span> Standard
+                <span style="color: #ef4444; margin-left: 10px;">■</span> Extended
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
 
 # ============================================================================
 # MAIN APP
