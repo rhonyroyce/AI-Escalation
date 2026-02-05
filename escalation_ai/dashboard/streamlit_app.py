@@ -30,6 +30,7 @@ import json
 import time
 import base64
 import io
+from streamlit_js_eval import streamlit_js_eval
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -7407,6 +7408,14 @@ def main():
                 key="download_csv"
             )
     
+    # Auto-scroll to top when switching pages
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = page
+
+    if st.session_state.current_page != page:
+        st.session_state.current_page = page
+        streamlit_js_eval(js_expressions="parent.document.querySelector('section.main').scrollTo(0, 0)")
+
     # Main content - Route to appropriate page (6 consolidated tabs)
     if page == "📊 Executive Dashboard":
         render_excel_dashboard(df)
