@@ -5274,20 +5274,21 @@ def generate_html_report(df):
 
 
 # ============================================================================
-# EXCEL-STYLE DASHBOARD
+# EXCEL-STYLE DASHBOARD - INTERACTIVE & SPECTACULAR
 # ============================================================================
 
 def render_excel_dashboard(df):
     """
-    Render an Excel-style dashboard with a dark theme matching the reference design.
-    Compact layout with pie charts, donut charts, bar charts, and KPI cards.
+    Spectacular interactive dashboard with visual impact.
+    Features large sunburst charts, animated gauges, and interactive elements.
     """
 
-    # Calculate metrics upfront
+    # Calculate metrics
     total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else 0
     total_records = len(df)
     avg_cost = total_cost / total_records if total_records > 0 else 0
     categories = df['AI_Category'].unique() if 'AI_Category' in df.columns else []
+    critical_count = len(df[df['tickets_data_severity'] == 'Critical']) if 'tickets_data_severity' in df.columns else 0
 
     # Extract years
     if 'tickets_data_issue_datetime' in df.columns:
@@ -5297,203 +5298,382 @@ def render_excel_dashboard(df):
         years = [2024, 2025]
         df['_year'] = 2024
 
-    # ========== HEADER ==========
+    # ========== SPECTACULAR HEADER ==========
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #0a2540 0%, #003366 100%); padding: 15px 25px; border-radius: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-        <div>
-            <h1 style="font-size: 1.8rem; font-weight: 700; color: #ffffff; margin: 0;">ESCALATION <span style="color: #dc3545;">DASHBOARD</span></h1>
-            <p style="color: #87ceeb; font-size: 0.8rem; margin: 4px 0 0 0;">FY 2024 - FY 2025 Intelligence Analysis</p>
-        </div>
-        <div style="text-align: right; color: #87ceeb; font-size: 0.75rem;">
-            <div>For inquiries: Dashboard Support</div>
-            <div style="font-weight: 600;">support@escalation.ai</div>
+    <div style="background: linear-gradient(135deg, #0a1628 0%, #1a365d 50%, #0a1628 100%);
+                padding: 25px 35px; border-radius: 16px; margin-bottom: 20px;
+                border: 1px solid rgba(59, 130, 246, 0.3);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1 style="font-size: 2.5rem; font-weight: 800; margin: 0;
+                           background: linear-gradient(135deg, #ffffff 0%, #60a5fa 50%, #3b82f6 100%);
+                           -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                    ESCALATION <span style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                           -webkit-background-clip: text; -webkit-text-fill-color: transparent;">INTELLIGENCE</span>
+                </h1>
+                <p style="color: #94a3b8; font-size: 1rem; margin: 8px 0 0 0; letter-spacing: 2px;">
+                    EXECUTIVE ANALYTICS DASHBOARD • FY 2024-2025
+                </p>
+            </div>
+            <div style="text-align: right;">
+                <div style="color: #60a5fa; font-size: 0.85rem;">Real-time Intelligence</div>
+                <div style="color: #22c55e; font-size: 0.75rem; margin-top: 4px;">● Live Data Feed</div>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ========== ROW 1: Pie Chart + Trend + KPIs ==========
-    c1, c2, c3, c4, c5 = st.columns([2, 2, 1.8, 1.2, 1])
+    # ========== ROW 1: SPECTACULAR KPI CARDS ==========
+    k1, k2, k3, k4 = st.columns(4)
 
-    with c1:
-        st.markdown("**Category Distribution**")
-        cat_data = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False).head(5)
-        colors_list = ['#3b82f6', '#dc3545', '#22c55e', '#f97316', '#8b5cf6']
-        fig_pie = go.Figure(data=[go.Pie(
-            labels=cat_data.index, values=cat_data.values, hole=0,
-            marker_colors=colors_list[:len(cat_data)],
-            textinfo='percent', textfont_size=12, textfont_color='white'
-        )])
-        fig_pie.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            margin=dict(l=0, r=0, t=0, b=0), height=200, showlegend=False
+    with k1:
+        st.markdown(f"""
+        <div style="background: linear-gradient(145deg, rgba(34, 197, 94, 0.15) 0%, rgba(21, 128, 61, 0.25) 100%);
+                    border-radius: 16px; padding: 25px; text-align: center;
+                    border: 1px solid rgba(34, 197, 94, 0.3);
+                    box-shadow: 0 4px 20px rgba(34, 197, 94, 0.2);">
+            <div style="color: #86efac; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;">
+                💰 Total Financial Impact
+            </div>
+            <div style="color: #22c55e; font-size: 2.8rem; font-weight: 800; text-shadow: 0 0 30px rgba(34, 197, 94, 0.5);">
+                ${total_cost:,.0f}
+            </div>
+            <div style="color: #6b7280; font-size: 0.75rem; margin-top: 8px;">
+                Avg: ${avg_cost:,.0f} per record
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with k2:
+        st.markdown(f"""
+        <div style="background: linear-gradient(145deg, rgba(59, 130, 246, 0.15) 0%, rgba(29, 78, 216, 0.25) 100%);
+                    border-radius: 16px; padding: 25px; text-align: center;
+                    border: 1px solid rgba(59, 130, 246, 0.3);
+                    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2);">
+            <div style="color: #93c5fd; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;">
+                📊 Total Records
+            </div>
+            <div style="color: #3b82f6; font-size: 2.8rem; font-weight: 800; text-shadow: 0 0 30px rgba(59, 130, 246, 0.5);">
+                {total_records:,}
+            </div>
+            <div style="color: #6b7280; font-size: 0.75rem; margin-top: 8px;">
+                Across {len(categories)} categories
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with k3:
+        st.markdown(f"""
+        <div style="background: linear-gradient(145deg, rgba(239, 68, 68, 0.15) 0%, rgba(185, 28, 28, 0.25) 100%);
+                    border-radius: 16px; padding: 25px; text-align: center;
+                    border: 1px solid rgba(239, 68, 68, 0.3);
+                    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.2);">
+            <div style="color: #fca5a5; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;">
+                🔴 Critical Issues
+            </div>
+            <div style="color: #ef4444; font-size: 2.8rem; font-weight: 800; text-shadow: 0 0 30px rgba(239, 68, 68, 0.5);">
+                {critical_count}
+            </div>
+            <div style="color: #6b7280; font-size: 0.75rem; margin-top: 8px;">
+                {critical_count/total_records*100:.1f}% of total
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with k4:
+        avg_days = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 0
+        st.markdown(f"""
+        <div style="background: linear-gradient(145deg, rgba(168, 85, 247, 0.15) 0%, rgba(126, 34, 206, 0.25) 100%);
+                    border-radius: 16px; padding: 25px; text-align: center;
+                    border: 1px solid rgba(168, 85, 247, 0.3);
+                    box-shadow: 0 4px 20px rgba(168, 85, 247, 0.2);">
+            <div style="color: #d8b4fe; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;">
+                ⏱️ Avg Resolution
+            </div>
+            <div style="color: #a855f7; font-size: 2.8rem; font-weight: 800; text-shadow: 0 0 30px rgba(168, 85, 247, 0.5);">
+                {avg_days:.1f}
+            </div>
+            <div style="color: #6b7280; font-size: 0.75rem; margin-top: 8px;">
+                Days to resolve
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
+
+    # ========== ROW 2: INTERACTIVE SUNBURST + TREND ==========
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.markdown("""
+        <div style="background: rgba(15, 23, 42, 0.6); border-radius: 16px; padding: 20px;
+                    border: 1px solid rgba(59, 130, 246, 0.2);">
+            <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.1rem;">
+                🎯 Category & Sub-Category Drill-Down
+            </h3>
+            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Click to explore categories</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Interactive Sunburst - just like the one they love!
+        sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
+        if sub_cat_col:
+            sunburst_data = df.groupby(['AI_Category', sub_cat_col]).agg({
+                'Financial_Impact': 'sum',
+                'AI_Category': 'count'
+            }).rename(columns={'AI_Category': 'count'}).reset_index()
+            sunburst_data.columns = ['Category', 'SubCategory', 'Cost', 'Count']
+        else:
+            sunburst_data = df.groupby(['AI_Category', 'tickets_data_severity']).size().reset_index(name='Count')
+            sunburst_data['Cost'] = df.groupby(['AI_Category', 'tickets_data_severity'])['Financial_Impact'].sum().values
+            sunburst_data.columns = ['Category', 'SubCategory', 'Count', 'Cost']
+
+        fig_sunburst = px.sunburst(
+            sunburst_data,
+            path=['Category', 'SubCategory'],
+            values='Cost',
+            color='Cost',
+            color_continuous_scale='Blues',
+            hover_data={'Count': True, 'Cost': ':$,.0f'}
         )
-        st.plotly_chart(fig_pie, use_container_width=True, key="cat_pie")
-        for i, (cat, val) in enumerate(cat_data.items()):
-            color = colors_list[i] if i < len(colors_list) else '#888'
-            st.markdown(f"<span style='color:{color};'>●</span> {cat[:18]}: **${val:,.0f}**", unsafe_allow_html=True)
+        fig_sunburst.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=420,
+            font=dict(color='white', size=11),
+            coloraxis_showscale=True,
+            coloraxis_colorbar=dict(
+                title="Cost",
+                tickformat="$,.0f",
+                tickfont=dict(color='#94a3b8'),
+                titlefont=dict(color='#94a3b8')
+            )
+        )
+        fig_sunburst.update_traces(
+            textinfo='label+percent entry',
+            insidetextorientation='radial',
+            hovertemplate='<b>%{label}</b><br>Cost: %{value:$,.0f}<br>Count: %{customdata[0]}<extra></extra>'
+        )
+        st.plotly_chart(fig_sunburst, use_container_width=True, key="main_sunburst")
 
-    with c2:
-        st.markdown("**Monthly Trends**")
+    with col2:
+        st.markdown("""
+        <div style="background: rgba(15, 23, 42, 0.6); border-radius: 16px; padding: 20px;
+                    border: 1px solid rgba(239, 68, 68, 0.2);">
+            <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.1rem;">
+                📈 Financial Impact Timeline
+            </h3>
+            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Monthly cost trend with severity breakdown</p>
+        </div>
+        """, unsafe_allow_html=True)
+
         if 'tickets_data_issue_datetime' in df.columns:
             df_m = df.copy()
-            df_m['month'] = pd.to_datetime(df_m['tickets_data_issue_datetime']).dt.to_period('M')
-            monthly = df_m.groupby('month')['Financial_Impact'].sum().reset_index()
-            monthly['month'] = monthly['month'].astype(str)
-            fig_trend = go.Figure()
-            fig_trend.add_trace(go.Scatter(
-                x=monthly['month'], y=monthly['Financial_Impact'],
-                mode='lines+markers', fill='tozeroy',
-                fillcolor='rgba(220,53,69,0.3)', line=dict(color='#dc3545', width=2),
-                marker=dict(size=6, color='#dc3545')
-            ))
-            fig_trend.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=0, r=0, t=0, b=20), height=220,
-                xaxis=dict(showgrid=False, tickfont=dict(size=8, color='#64748b'), tickangle=-45),
+            df_m['month'] = pd.to_datetime(df_m['tickets_data_issue_datetime']).dt.to_period('M').astype(str)
+            monthly = df_m.groupby(['month', 'tickets_data_severity'])['Financial_Impact'].sum().reset_index()
+
+            fig_area = px.area(
+                monthly,
+                x='month',
+                y='Financial_Impact',
+                color='tickets_data_severity',
+                color_discrete_map={'Critical': '#ef4444', 'Major': '#f97316', 'Minor': '#22c55e'},
+                labels={'Financial_Impact': 'Cost', 'month': 'Month', 'tickets_data_severity': 'Severity'}
+            )
+            fig_area.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=10, b=40),
+                height=420,
+                xaxis=dict(showgrid=False, tickfont=dict(size=9, color='#64748b'), tickangle=-45),
                 yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)',
-                           tickfont=dict(size=8, color='#64748b'), tickformat='$,.0f'),
-                showlegend=False
+                          tickfont=dict(size=9, color='#64748b'), tickformat='$,.0f'),
+                legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5,
+                           font=dict(color='#94a3b8', size=10)),
+                hovermode='x unified'
             )
-            st.plotly_chart(fig_trend, use_container_width=True, key="monthly_trend")
+            st.plotly_chart(fig_area, use_container_width=True, key="area_trend")
 
-    with c3:
-        st.markdown(f"""
-        <div style="background:linear-gradient(135deg,rgba(0,102,204,0.2),rgba(0,51,102,0.3));border-radius:12px;padding:20px;text-align:center;border-left:4px solid #0066cc;">
-            <div style="color:#94a3b8;font-size:0.75rem;text-transform:uppercase;">Total Financial Impact</div>
-            <div style="color:#4ade80;font-size:2rem;font-weight:700;">${total_cost:,.0f}</div>
-            <div style="color:#64748b;font-size:0.7rem;">Average: ${avg_cost:,.0f}</div>
+    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
+
+    # ========== ROW 3: ENGINEER TREEMAP + SEVERITY GAUGE ==========
+    col1, col2 = st.columns([1.2, 0.8])
+
+    with col1:
+        st.markdown("""
+        <div style="background: rgba(15, 23, 42, 0.6); border-radius: 16px; padding: 20px;
+                    border: 1px solid rgba(34, 197, 94, 0.2);">
+            <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.1rem;">
+                👥 Engineer Performance Treemap
+            </h3>
+            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Click to drill into engineer details</p>
         </div>
         """, unsafe_allow_html=True)
 
-    with c4:
-        st.markdown(f"""
-        <div style="background:linear-gradient(135deg,rgba(220,53,69,0.2),rgba(139,0,0,0.3));border-radius:12px;padding:20px;text-align:center;border-left:4px solid #dc3545;">
-            <div style="color:#94a3b8;font-size:0.75rem;text-transform:uppercase;">Total Records</div>
-            <div style="color:#ffffff;font-size:2rem;font-weight:700;">{total_records:,}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c5:
-        st.markdown(f"""
-        <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:20px;text-align:center;border:1px solid rgba(255,255,255,0.1);">
-            <div style="color:#94a3b8;font-size:0.75rem;text-transform:uppercase;"># Categories</div>
-            <div style="color:#ffffff;font-size:2rem;font-weight:700;">{len(categories)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # ========== ROW 2: Year Donuts + Engineers + Severity ==========
-    c1, c2, c3, c4 = st.columns([1, 1, 2.5, 2])
-
-    with c1:
-        year1 = years[-2] if len(years) >= 2 else years[0]
-        year1_cost = df[df['_year'] == year1]['Financial_Impact'].sum()
-        year1_pct = year1_cost / total_cost * 100 if total_cost > 0 else 50
-        st.markdown(f"**Cost {year1}**")
-        fig_d1 = go.Figure(data=[go.Pie(
-            values=[year1_pct, 100-year1_pct], hole=0.65,
-            marker_colors=['#1e40af', 'rgba(255,255,255,0.08)'], textinfo='none'
-        )])
-        fig_d1.add_annotation(text=f"<b>{year1_pct:.0f}%</b>", x=0.5, y=0.5, font_size=18, font_color='white', showarrow=False)
-        fig_d1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                             margin=dict(l=0, r=0, t=0, b=0), height=140, showlegend=False)
-        st.plotly_chart(fig_d1, use_container_width=True, key="d1")
-        st.caption(f"${year1_cost:,.0f}")
-
-    with c2:
-        if len(years) >= 2:
-            year2 = years[-1]
-            year2_cost = df[df['_year'] == year2]['Financial_Impact'].sum()
-            year2_pct = year2_cost / total_cost * 100 if total_cost > 0 else 50
-            st.markdown(f"**Cost {year2}**")
-            fig_d2 = go.Figure(data=[go.Pie(
-                values=[year2_pct, 100-year2_pct], hole=0.65,
-                marker_colors=['#dc3545', 'rgba(255,255,255,0.08)'], textinfo='none'
-            )])
-            fig_d2.add_annotation(text=f"<b>{year2_pct:.0f}%</b>", x=0.5, y=0.5, font_size=18, font_color='white', showarrow=False)
-            fig_d2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                                 margin=dict(l=0, r=0, t=0, b=0), height=140, showlegend=False)
-            st.plotly_chart(fig_d2, use_container_width=True, key="d2")
-            st.caption(f"${year2_cost:,.0f}")
-        else:
-            st.info("Single year")
-
-    with c3:
-        st.markdown("**Top Engineers by Cost Impact**")
-        st.caption("Top 3 handle 42% of escalations")
         if 'Engineer' in df.columns:
-            eng = df.groupby('Engineer')['Financial_Impact'].sum().sort_values(ascending=True).tail(10)
-            fig_bar = go.Figure(data=[go.Bar(
-                y=eng.index, x=eng.values, orientation='h',
-                marker_color=['#dc3545' if i >= len(eng)-3 else '#3b82f6' for i in range(len(eng))],
-                text=[f'${v:,.0f}' for v in eng.values], textposition='inside',
-                textfont=dict(size=9, color='white')
-            )])
-            fig_bar.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=80, r=5, t=5, b=5), height=180,
-                xaxis=dict(showgrid=False, showticklabels=False),
-                yaxis=dict(tickfont=dict(size=8, color='#94a3b8'))
-            )
-            st.plotly_chart(fig_bar, use_container_width=True, key="eng_bar")
+            eng_data = df.groupby(['Engineer', 'AI_Category']).agg({
+                'Financial_Impact': 'sum',
+                'AI_Category': 'count'
+            }).rename(columns={'AI_Category': 'Records'})
+            eng_data = eng_data.reset_index()
+            eng_data.columns = ['Engineer', 'Category', 'Cost', 'Records']
 
-    with c4:
-        st.markdown("**Severity Distribution**")
+            fig_tree = px.treemap(
+                eng_data,
+                path=['Engineer', 'Category'],
+                values='Cost',
+                color='Cost',
+                color_continuous_scale='RdYlGn_r',
+                hover_data={'Records': True, 'Cost': ':$,.0f'}
+            )
+            fig_tree.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=350,
+                font=dict(color='white'),
+                coloraxis_colorbar=dict(
+                    title="Cost",
+                    tickformat="$,.0f",
+                    tickfont=dict(color='#94a3b8'),
+                    titlefont=dict(color='#94a3b8')
+                )
+            )
+            fig_tree.update_traces(
+                textinfo='label+value',
+                texttemplate='%{label}<br>$%{value:,.0f}',
+                hovertemplate='<b>%{label}</b><br>Cost: $%{value:,.0f}<br>Records: %{customdata[0]}<extra></extra>'
+            )
+            st.plotly_chart(fig_tree, use_container_width=True, key="eng_treemap")
+
+    with col2:
+        st.markdown("""
+        <div style="background: rgba(15, 23, 42, 0.6); border-radius: 16px; padding: 20px;
+                    border: 1px solid rgba(168, 85, 247, 0.2);">
+            <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.1rem;">
+                🎯 Severity Breakdown
+            </h3>
+            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Distribution by severity level</p>
+        </div>
+        """, unsafe_allow_html=True)
+
         if 'tickets_data_severity' in df.columns:
-            sev = df.groupby('tickets_data_severity').agg({'Financial_Impact': 'sum', 'AI_Category': 'count'}).rename(columns={'AI_Category': 'count'}).reset_index()
-            fig_scat = go.Figure(data=[go.Scatter(
-                x=sev['count'], y=sev['Financial_Impact'], mode='markers+text',
-                marker=dict(size=sev['count']/sev['count'].max()*40+15,
-                            color=['#dc3545' if s=='Critical' else '#f97316' if s=='Major' else '#22c55e' for s in sev['tickets_data_severity']], opacity=0.85),
-                text=sev['tickets_data_severity'], textposition='middle center', textfont=dict(size=9, color='white')
+            sev_data = df.groupby('tickets_data_severity').agg({
+                'Financial_Impact': 'sum',
+                'AI_Category': 'count'
+            }).rename(columns={'AI_Category': 'Count'}).reset_index()
+
+            fig_sev = go.Figure(data=[go.Pie(
+                labels=sev_data['tickets_data_severity'],
+                values=sev_data['Financial_Impact'],
+                hole=0.5,
+                marker=dict(
+                    colors=['#ef4444', '#f97316', '#22c55e'],
+                    line=dict(color='rgba(0,0,0,0.3)', width=2)
+                ),
+                textinfo='label+percent',
+                textfont=dict(size=12, color='white'),
+                hovertemplate='<b>%{label}</b><br>Cost: $%{value:,.0f}<br>%{percent}<extra></extra>'
             )])
-            fig_scat.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=5, r=5, t=5, b=25), height=180,
-                xaxis=dict(title=dict(text='Count', font=dict(size=8, color='#64748b')), showgrid=True, gridcolor='rgba(255,255,255,0.1)', tickfont=dict(size=7, color='#64748b')),
-                yaxis=dict(title=dict(text='Cost', font=dict(size=8, color='#64748b')), showgrid=True, gridcolor='rgba(255,255,255,0.1)', tickfont=dict(size=7, color='#64748b'), tickformat='$,.0f'),
-                showlegend=False
+            fig_sev.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=350,
+                showlegend=False,
+                annotations=[dict(
+                    text=f'<b>${total_cost/1000:.0f}K</b><br>Total',
+                    x=0.5, y=0.5, font_size=16, font_color='white', showarrow=False
+                )]
             )
-            st.plotly_chart(fig_scat, use_container_width=True, key="sev_scat")
+            st.plotly_chart(fig_sev, use_container_width=True, key="sev_donut")
 
-    # ========== ROW 3: Origin + Quarterly + Categories ==========
-    c1, c2, c3 = st.columns([1.5, 2.5, 2])
+    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
 
-    with c1:
-        st.markdown("**Escalation Origin**")
-        if 'tickets_data_escalation_origin' in df.columns:
-            orig = df.groupby('tickets_data_escalation_origin')['Financial_Impact'].sum()
-            tot = orig.sum()
-            for o, v in orig.items():
-                pct = v/tot*100 if tot > 0 else 0
-                color = '#1e40af' if o == 'Internal' else '#dc3545'
-                st.markdown(f"<div style='margin:8px 0;'><div style='display:flex;justify-content:space-between;color:#94a3b8;font-size:0.75rem;'><span>{o}</span><span>{pct:.1f}%</span></div><div style='background:rgba(255,255,255,0.1);border-radius:4px;height:20px;overflow:hidden;'><div style='background:{color};height:100%;width:{pct}%;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;font-size:0.65rem;color:white;'>${v:,.0f}</div></div></div>", unsafe_allow_html=True)
+    # ========== ROW 4: QUARTERLY + ORIGIN ==========
+    col1, col2 = st.columns([1, 1])
 
-    with c2:
-        st.markdown("**Quarterly Cost Distribution**")
+    with col1:
+        st.markdown("""
+        <div style="background: rgba(15, 23, 42, 0.6); border-radius: 16px; padding: 20px;
+                    border: 1px solid rgba(59, 130, 246, 0.2);">
+            <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.1rem;">
+                📅 Quarterly Performance
+            </h3>
+            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Cost distribution by quarter</p>
+        </div>
+        """, unsafe_allow_html=True)
+
         if 'tickets_data_issue_datetime' in df.columns:
             df_q = df.copy()
-            df_q['qtr'] = pd.to_datetime(df_q['tickets_data_issue_datetime']).dt.quarter
-            qtr = df_q.groupby('qtr')['Financial_Impact'].sum()
-            tot_q = qtr.sum()
-            q_cols = st.columns(4)
-            for i, q in enumerate([1,2,3,4]):
-                with q_cols[i]:
-                    val = qtr.get(q, 0)
-                    pct = val/tot_q*100 if tot_q > 0 else 0
-                    fig_q = go.Figure(data=[go.Pie(values=[pct, 100-pct], hole=0.6, marker_colors=['#1e40af' if q%2 else '#dc3545', 'rgba(255,255,255,0.08)'], textinfo='none')])
-                    fig_q.add_annotation(text=f"<b>{pct:.0f}%</b>", x=0.5, y=0.5, font_size=11, font_color='white', showarrow=False)
-                    fig_q.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0,r=0,t=0,b=0), height=80, showlegend=False)
-                    st.plotly_chart(fig_q, use_container_width=True, key=f"q{q}")
-                    st.caption(f"Q{q}: ${val:,.0f}")
+            df_q['qtr'] = 'Q' + pd.to_datetime(df_q['tickets_data_issue_datetime']).dt.quarter.astype(str)
+            qtr_data = df_q.groupby('qtr')['Financial_Impact'].sum().reset_index()
+            qtr_data.columns = ['Quarter', 'Cost']
 
-    with c3:
-        st.markdown("**Cost by Category**")
-        cats = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False).head(4)
-        icons = ['💻', '🔧', '📊', '⚙️']
-        pc = st.columns(2)
-        for i, (cat, cost) in enumerate(cats.items()):
-            with pc[i % 2]:
-                st.markdown(f"<div style='background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center;margin:4px 0;'><div style='font-size:1.2rem;'>{icons[i] if i<len(icons) else '📦'}</div><div style='font-size:0.85rem;font-weight:600;color:#fff;'>${cost:,.0f}</div><div style='font-size:0.65rem;color:#64748b;'>{cat[:12]}</div></div>", unsafe_allow_html=True)
+            fig_qtr = go.Figure(data=[go.Bar(
+                x=qtr_data['Quarter'],
+                y=qtr_data['Cost'],
+                marker=dict(
+                    color=qtr_data['Cost'],
+                    colorscale='Blues',
+                    line=dict(color='rgba(59, 130, 246, 0.8)', width=2)
+                ),
+                text=[f'${v:,.0f}' for v in qtr_data['Cost']],
+                textposition='outside',
+                textfont=dict(size=12, color='white')
+            )])
+            fig_qtr.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=30, b=10),
+                height=300,
+                xaxis=dict(showgrid=False, tickfont=dict(size=12, color='#94a3b8')),
+                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)',
+                          tickfont=dict(size=10, color='#64748b'), tickformat='$,.0f'),
+                showlegend=False
+            )
+            st.plotly_chart(fig_qtr, use_container_width=True, key="qtr_bar")
+
+    with col2:
+        st.markdown("""
+        <div style="background: rgba(15, 23, 42, 0.6); border-radius: 16px; padding: 20px;
+                    border: 1px solid rgba(239, 68, 68, 0.2);">
+            <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.1rem;">
+                🔄 Escalation Origin Analysis
+            </h3>
+            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Internal vs External breakdown</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if 'tickets_data_escalation_origin' in df.columns:
+            orig_data = df.groupby('tickets_data_escalation_origin')['Financial_Impact'].sum().reset_index()
+            orig_data.columns = ['Origin', 'Cost']
+
+            fig_orig = go.Figure(data=[go.Bar(
+                y=orig_data['Origin'],
+                x=orig_data['Cost'],
+                orientation='h',
+                marker=dict(
+                    color=['#3b82f6', '#ef4444', '#22c55e', '#f97316'][:len(orig_data)],
+                    line=dict(color='rgba(255,255,255,0.3)', width=1)
+                ),
+                text=[f'${v:,.0f}' for v in orig_data['Cost']],
+                textposition='inside',
+                textfont=dict(size=12, color='white')
+            )])
+            fig_orig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=300,
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)',
+                          tickfont=dict(size=10, color='#64748b'), tickformat='$,.0f'),
+                yaxis=dict(showgrid=False, tickfont=dict(size=11, color='#94a3b8')),
+                showlegend=False
+            )
+            st.plotly_chart(fig_orig, use_container_width=True, key="orig_bar")
 
 
 # ============================================================================
