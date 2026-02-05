@@ -5564,12 +5564,12 @@ def render_excel_dashboard(df):
                 margin=dict(l=10, r=10, t=10, b=30),
                 height=200,
                 xaxis=dict(
-                    title='Count', titlefont=dict(size=9, color='#64748b'),
+                    title=dict(text='Count', font=dict(size=9, color='#64748b')),
                     showgrid=True, gridcolor='rgba(255,255,255,0.1)',
                     tickfont=dict(size=8, color='#64748b')
                 ),
                 yaxis=dict(
-                    title='Cost', titlefont=dict(size=9, color='#64748b'),
+                    title=dict(text='Cost', font=dict(size=9, color='#64748b')),
                     showgrid=True, gridcolor='rgba(255,255,255,0.1)',
                     tickfont=dict(size=8, color='#64748b'),
                     tickformat='$,.0f'
