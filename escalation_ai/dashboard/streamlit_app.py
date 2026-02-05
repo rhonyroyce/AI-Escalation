@@ -7449,7 +7449,7 @@ def render_planning_actions(df):
     """Render consolidated Planning & Actions page (What-If + Action Tracker)."""
     render_spectacular_header("Planning & Actions", "Scenario modeling and initiative tracking", "🎯")
 
-    tabs = st.tabs(["🔮 What-If Simulator", "📋 Action Tracker"])
+    tabs = st.tabs(["🔮 What-If Simulator", "📋 Action Tracker", "📚 Learning-Based Actions"])
 
     # ===== TAB 1: WHAT-IF SIMULATOR =====
     with tabs[0]:
@@ -7460,6 +7460,17 @@ def render_planning_actions(df):
         friction_sum = df['Strategic_Friction_Score'].sum() if 'Strategic_Friction_Score' in df.columns else 3000
         cost_sum = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else 375000
 
+        # Calculate current lesson coverage
+        lesson_col = None
+        for col in ['tickets_data_lessons_learned_title', 'tickets_data_lessons_learned_preventive_actions']:
+            if col in df.columns:
+                lesson_col = col
+                break
+        current_lesson_coverage = (df[lesson_col].notna().sum() / len(df) * 100) if lesson_col else 0
+
+        # Calculate similarity-based recurrence
+        similarity_recurrence = (df['Similar_Ticket_Count'] > 0).mean() * 100 if 'Similar_Ticket_Count' in df.columns else recurrence_rate * 100
+
         col1, col2 = st.columns(2)
 
         with col1:
@@ -7468,6 +7479,12 @@ def render_planning_actions(df):
             training = st.slider("Training Impact (% error reduction)", 0, 50, 0, key="whatif_train")
             volume = st.slider("Volume Changes (%)", -30, 50, 0, key="whatif_vol")
             process = st.slider("Process Improvements (% efficiency)", 0, 40, 0, key="whatif_proc")
+
+            st.markdown("##### 📚 Learning & Knowledge Parameters")
+            lesson_improvement = st.slider("Lesson Documentation Rate (+%)", 0, 50, 0, key="whatif_lesson",
+                                          help=f"Current: {current_lesson_coverage:.0f}% coverage")
+            lesson_application = st.slider("Lesson Application Effectiveness (%)", 0, 80, 0, key="whatif_apply",
+                                          help="How effectively lessons prevent recurrence")
 
         with col2:
             st.markdown("##### 📊 Projected Impact")
@@ -7478,14 +7495,21 @@ def render_planning_actions(df):
             volume_factor = 1 + (volume / 100)
             process_factor = 1 - (process / 100)
 
+            # Lesson-based recurrence reduction
+            # More lessons + better application = lower recurrence
+            lesson_coverage_factor = 1 - (lesson_improvement / 100 * 0.3)  # Each % of lesson coverage reduces recurrence by 0.3%
+            lesson_application_factor = 1 - (lesson_application / 100 * 0.5)  # Application effectiveness has bigger impact
+
             proj_resolution = avg_resolution * staff_factor * process_factor
-            proj_recurrence = recurrence_rate * training_factor
+            proj_recurrence = recurrence_rate * training_factor * lesson_coverage_factor * lesson_application_factor
+            proj_similarity_recurrence = similarity_recurrence * lesson_application_factor * training_factor
             proj_friction = friction_sum * volume_factor * process_factor / len(df)
-            proj_cost = cost_sum * volume_factor * staff_factor * process_factor / len(df)
+            proj_cost = cost_sum * volume_factor * staff_factor * process_factor * lesson_application_factor / len(df)
 
             metrics = [
                 ("Resolution Time", f"{avg_resolution:.1f}d", f"{proj_resolution:.1f}d", proj_resolution < avg_resolution),
                 ("Recurrence Rate", f"{recurrence_rate*100:.1f}%", f"{proj_recurrence*100:.1f}%", proj_recurrence < recurrence_rate),
+                ("Similar Issue Rate", f"{similarity_recurrence:.1f}%", f"{proj_similarity_recurrence:.1f}%", proj_similarity_recurrence < similarity_recurrence),
                 ("Avg Friction", f"{friction_sum/len(df):.1f}", f"{proj_friction:.1f}", proj_friction < friction_sum/len(df)),
                 ("Avg Cost", f"${cost_sum/len(df):,.0f}", f"${proj_cost:,.0f}", proj_cost < cost_sum/len(df))
             ]
@@ -7502,6 +7526,19 @@ def render_planning_actions(df):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+
+            # Show potential savings
+            if lesson_improvement > 0 or lesson_application > 0:
+                base_annual_cost = cost_sum * 4  # Assume quarterly data
+                projected_annual_cost = proj_cost * len(df) * 4
+                savings = base_annual_cost - projected_annual_cost
+                if savings > 0:
+                    st.markdown(f"""
+                    <div style="background: rgba(34, 197, 94, 0.1); border-radius: 8px; padding: 15px; margin-top: 15px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                        <div style="color: #86efac; font-size: 0.85rem;">💰 Projected Annual Savings from Learning Improvements</div>
+                        <div style="color: #22c55e; font-size: 1.8rem; font-weight: 700;">${savings:,.0f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
     # ===== TAB 2: ACTION TRACKER =====
     with tabs[1]:
@@ -7592,6 +7629,164 @@ def render_planning_actions(df):
                 if st.button("🗑️", key=f"del_{i}"):
                     st.session_state.action_items.pop(i)
                     st.rerun()
+
+    # ===== TAB 3: LEARNING-BASED ACTIONS =====
+    with tabs[2]:
+        st.markdown("#### 📚 AI-Generated Actions from Learning Analysis")
+        st.markdown("*Prioritized actions based on similarity patterns and lesson effectiveness*")
+
+        # Find lesson column
+        lesson_col = None
+        for col in ['tickets_data_lessons_learned_title', 'tickets_data_lessons_learned_preventive_actions', 'Lesson_Title']:
+            if col in df.columns:
+                lesson_col = col
+                break
+
+        if lesson_col and 'Similar_Ticket_Count' in df.columns and 'AI_Category' in df.columns:
+            # Calculate lesson effectiveness per category
+            df_analysis = df.copy()
+            df_analysis['Has_Lesson'] = df_analysis[lesson_col].notna() & (df_analysis[lesson_col].astype(str).str.strip() != '')
+            df_analysis['Has_Similar'] = df_analysis['Similar_Ticket_Count'] > 0
+
+            action_items = []
+
+            for cat in df_analysis['AI_Category'].dropna().unique():
+                cat_df = df_analysis[df_analysis['AI_Category'] == cat]
+                if len(cat_df) < 3:
+                    continue
+
+                total = len(cat_df)
+                with_lessons = cat_df['Has_Lesson'].sum()
+                recurring_with_lessons = ((cat_df['Has_Similar']) & (cat_df['Has_Lesson'])).sum()
+                recurring_without_lessons = ((cat_df['Has_Similar']) & (~cat_df['Has_Lesson'])).sum()
+
+                lesson_coverage = (with_lessons / total * 100) if total > 0 else 0
+                recurrence_rate = (cat_df['Has_Similar'].sum() / total * 100) if total > 0 else 0
+
+                # Calculate cost impact
+                cat_cost = cat_df['Financial_Impact'].sum() if 'Financial_Impact' in cat_df.columns else 0
+
+                # Determine action priority and type
+                priority = None
+                action_type = None
+                action_desc = None
+                potential_savings = 0
+
+                # Case 1: High recurrence, low lesson coverage - Need to document lessons
+                if recurrence_rate > 50 and lesson_coverage < 30:
+                    priority = "P1"
+                    action_type = "📝 Document Lessons"
+                    action_desc = f"Only {lesson_coverage:.0f}% of tickets have lessons but {recurrence_rate:.0f}% are recurring. Mandate lesson documentation for all resolved tickets."
+                    potential_savings = cat_cost * 0.3  # 30% cost reduction potential
+
+                # Case 2: Lessons exist but not working - Need to improve lesson quality/application
+                elif with_lessons > 0 and recurring_with_lessons > with_lessons * 0.4:
+                    priority = "P1"
+                    action_type = "🔄 Improve Lesson Application"
+                    action_desc = f"{recurring_with_lessons} issues recurred despite having lessons. Review lesson quality and ensure teams are applying documented solutions."
+                    potential_savings = cat_cost * 0.25
+
+                # Case 3: Moderate recurrence, some lessons - Need better knowledge sharing
+                elif recurrence_rate > 30 and lesson_coverage > 30 and lesson_coverage < 70:
+                    priority = "P2"
+                    action_type = "📢 Knowledge Sharing"
+                    action_desc = f"Lessons exist ({lesson_coverage:.0f}% coverage) but recurrence is {recurrence_rate:.0f}%. Improve cross-team knowledge sharing and training."
+                    potential_savings = cat_cost * 0.15
+
+                # Case 4: Low lesson coverage, moderate issues
+                elif lesson_coverage < 40 and total >= 10:
+                    priority = "P2"
+                    action_type = "📝 Document Lessons"
+                    action_desc = f"Low lesson coverage ({lesson_coverage:.0f}%) for {total} tickets. Establish lesson documentation as part of resolution workflow."
+                    potential_savings = cat_cost * 0.2
+
+                # Case 5: Good lesson coverage but could improve consistency
+                elif 'Resolution_Consistency' in df.columns:
+                    inconsistent = cat_df['Resolution_Consistency'].str.contains('Inconsistent', na=False).sum()
+                    if inconsistent > total * 0.2:
+                        priority = "P3"
+                        action_type = "⚙️ Standardize Resolution"
+                        action_desc = f"{inconsistent} tickets ({inconsistent/total*100:.0f}%) have inconsistent resolutions. Create standard operating procedures."
+                        potential_savings = cat_cost * 0.1
+
+                if priority:
+                    action_items.append({
+                        'category': cat,
+                        'priority': priority,
+                        'action_type': action_type,
+                        'description': action_desc,
+                        'ticket_count': total,
+                        'recurrence_rate': recurrence_rate,
+                        'lesson_coverage': lesson_coverage,
+                        'potential_savings': potential_savings,
+                        'cost': cat_cost
+                    })
+
+            # Sort by priority then by potential savings
+            priority_order = {'P1': 0, 'P2': 1, 'P3': 2}
+            action_items.sort(key=lambda x: (priority_order.get(x['priority'], 3), -x['potential_savings']))
+
+            if action_items:
+                # Summary metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    p1_count = sum(1 for a in action_items if a['priority'] == 'P1')
+                    st.metric("🔴 P1 Actions", p1_count, help="Critical - immediate action needed")
+                with col2:
+                    p2_count = sum(1 for a in action_items if a['priority'] == 'P2')
+                    st.metric("🟠 P2 Actions", p2_count, help="Important - plan within 30 days")
+                with col3:
+                    total_savings = sum(a['potential_savings'] for a in action_items)
+                    st.metric("💰 Potential Savings", f"${total_savings:,.0f}")
+
+                st.markdown("---")
+
+                # Display actions
+                for item in action_items[:10]:
+                    priority_color = '#ef4444' if item['priority'] == 'P1' else '#f97316' if item['priority'] == 'P2' else '#3b82f6'
+
+                    st.markdown(f"""
+                    <div style="background: rgba(15, 23, 42, 0.6); border-radius: 12px; padding: 16px; margin: 12px 0;
+                                border-left: 4px solid {priority_color};">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                            <div>
+                                <span style="background: {priority_color}; color: white; padding: 3px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">{item['priority']}</span>
+                                <span style="color: #60a5fa; margin-left: 10px; font-size: 0.9rem;">{item['action_type']}</span>
+                            </div>
+                            <span style="color: #22c55e; font-weight: 600;">Save ${item['potential_savings']:,.0f}</span>
+                        </div>
+                        <div style="color: #e2e8f0; font-weight: 600; font-size: 1.1rem; margin-bottom: 8px;">{item['category']}</div>
+                        <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">{item['description']}</div>
+                        <div style="display: flex; gap: 20px; font-size: 0.8rem; color: #64748b;">
+                            <span>📊 {item['ticket_count']} tickets</span>
+                            <span>🔄 {item['recurrence_rate']:.0f}% recurrence</span>
+                            <span>📝 {item['lesson_coverage']:.0f}% lesson coverage</span>
+                            <span>💰 ${item['cost']:,.0f} total cost</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # Export actions as table
+                with st.expander("📋 Export Action Items"):
+                    actions_df = pd.DataFrame(action_items)
+                    actions_df = actions_df.rename(columns={
+                        'category': 'Category',
+                        'priority': 'Priority',
+                        'action_type': 'Action Type',
+                        'description': 'Description',
+                        'ticket_count': 'Tickets',
+                        'recurrence_rate': 'Recurrence %',
+                        'lesson_coverage': 'Lesson Coverage %',
+                        'potential_savings': 'Potential Savings',
+                        'cost': 'Total Cost'
+                    })
+                    st.dataframe(actions_df, use_container_width=True, hide_index=True)
+
+            else:
+                st.success("✅ No critical learning-based actions identified. Categories are performing well!")
+
+        else:
+            st.info("📊 This analysis requires:\n- Lessons learned data column\n- Similar_Ticket_Count from similarity analysis\n- AI_Category classification\n\nRun the full analysis pipeline to enable learning-based action recommendations.")
 
 
 # ============================================================================
