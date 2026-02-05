@@ -5768,60 +5768,64 @@ def render_excel_dashboard(df):
 
     st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
 
-    # ========== ROW 2: INTERACTIVE SUNBURST + TREND ==========
+    # ========== ROW 2: STRATEGIC FRICTION + TREND ==========
     col1, col2 = st.columns([1, 1])
 
     with col1:
         st.markdown("""
         <div style="background: rgba(15, 23, 42, 0.6); border-radius: 16px; padding: 20px;
-                    border: 1px solid rgba(59, 130, 246, 0.2);">
+                    border: 1px solid rgba(239, 68, 68, 0.2);">
             <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.1rem;">
-                🎯 Category & Sub-Category Drill-Down
+                🔥 Strategic Friction by Category
             </h3>
-            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Click to explore categories</p>
+            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Highest friction areas requiring attention</p>
         </div>
         """, unsafe_allow_html=True)
 
-        # Interactive Sunburst - just like the one they love!
-        sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
-        if sub_cat_col:
-            sunburst_data = df.groupby(['AI_Category', sub_cat_col]).agg({
-                'Financial_Impact': 'sum',
-                'AI_Category': 'count'
-            }).rename(columns={'AI_Category': 'count'}).reset_index()
-            sunburst_data.columns = ['Category', 'SubCategory', 'Cost', 'Count']
-        else:
-            sunburst_data = df.groupby(['AI_Category', 'tickets_data_severity']).size().reset_index(name='Count')
-            sunburst_data['Cost'] = df.groupby(['AI_Category', 'tickets_data_severity'])['Financial_Impact'].sum().values
-            sunburst_data.columns = ['Category', 'SubCategory', 'Count', 'Cost']
+        # Strategic Friction by Category - Horizontal Bar Chart
+        if 'AI_Category' in df.columns and 'Strategic_Friction_Score' in df.columns:
+            friction_data = df.groupby('AI_Category').agg({
+                'Strategic_Friction_Score': 'sum',
+                'Financial_Impact': 'sum'
+            }).sort_values('Strategic_Friction_Score', ascending=True)
 
-        fig_sunburst = px.sunburst(
-            sunburst_data,
-            path=['Category', 'SubCategory'],
-            values='Cost',
-            color='Cost',
-            color_continuous_scale='Blues',
-            hover_data={'Count': True, 'Cost': ':$,.0f'}
-        )
-        fig_sunburst.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            margin=dict(l=10, r=10, t=10, b=10),
-            height=420,
-            font=dict(color='white', size=11),
-            coloraxis_showscale=True,
-            coloraxis_colorbar=dict(
-                title=dict(text="Cost", font=dict(color='#94a3b8')),
-                tickformat="$,.0f",
-                tickfont=dict(color='#94a3b8')
+            # Color gradient based on friction score
+            max_friction = friction_data['Strategic_Friction_Score'].max()
+            colors = [f'rgba({int(239 * (v/max_friction))}, {int(68 + 129 * (1 - v/max_friction))}, {int(68 + 178 * (1 - v/max_friction))}, 0.9)'
+                     for v in friction_data['Strategic_Friction_Score']]
+
+            fig_friction = go.Figure(data=[go.Bar(
+                y=friction_data.index,
+                x=friction_data['Strategic_Friction_Score'],
+                orientation='h',
+                marker=dict(
+                    color=colors,
+                    line=dict(color='rgba(255,255,255,0.3)', width=1)
+                ),
+                text=[f'{v:,.0f}' for v in friction_data['Strategic_Friction_Score']],
+                textposition='outside',
+                textfont=dict(size=11, color='#e2e8f0'),
+                customdata=friction_data['Financial_Impact'],
+                hovertemplate='<b>%{y}</b><br>Friction: %{x:,.0f}<br>Cost: $%{customdata:,.0f}<extra></extra>'
+            )])
+            fig_friction.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=60, t=10, b=10),
+                height=420,
+                xaxis=dict(
+                    showgrid=True,
+                    gridcolor='rgba(255,255,255,0.1)',
+                    tickfont=dict(size=10, color='#64748b'),
+                    title=dict(text='Friction Score', font=dict(size=10, color='#64748b'))
+                ),
+                yaxis=dict(
+                    showgrid=False,
+                    tickfont=dict(size=11, color='#e2e8f0')
+                ),
+                showlegend=False
             )
-        )
-        fig_sunburst.update_traces(
-            textinfo='label+percent entry',
-            insidetextorientation='radial',
-            hovertemplate='<b>%{label}</b><br>Cost: %{value:$,.0f}<br>Count: %{customdata[0]}<extra></extra>'
-        )
-        st.plotly_chart(fig_sunburst, use_container_width=True, key="main_sunburst")
+            st.plotly_chart(fig_friction, use_container_width=True, key="main_friction")
 
     with col2:
         st.markdown("""
