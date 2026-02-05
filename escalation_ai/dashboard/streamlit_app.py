@@ -6591,95 +6591,148 @@ def render_deep_analysis(df):
 
     # ===== TAB 6: LESSONS LEARNED =====
     with tabs[5]:
-        lessons_col = 'tickets_data_lessons_learned_preventive_actions'
-        has_lessons = lessons_col in df.columns
+        st.markdown("#### 📚 Learning Effectiveness Analysis")
+        st.markdown("*Analyzing how well lessons are being learned and applied to prevent recurrence*")
 
-        if has_lessons:
-            # Filter for records with lessons learned
-            df_lessons = df[df[lessons_col].notna() & (df[lessons_col] != '')]
+        # Calculate learning grades using comprehensive function
+        grades_data = _calculate_learning_grades(df)
 
-            col1, col2 = st.columns(2)
+        if grades_data:
+            # Row 1: Recurrence vs Lessons Quadrant Chart + Grade Summary
+            col1, col2 = st.columns([3, 2])
 
             with col1:
-                # Lessons by Category
-                if 'AI_Category' in df.columns and len(df_lessons) > 0:
-                    lessons_by_cat = df_lessons.groupby('AI_Category').size().sort_values(ascending=True)
-
-                    fig_lessons_cat = go.Figure(data=[go.Bar(
-                        y=lessons_by_cat.index,
-                        x=lessons_by_cat.values,
-                        orientation='h',
-                        marker_color='#8b5cf6',
-                        text=lessons_by_cat.values,
-                        textposition='outside'
-                    )])
-                    fig_lessons_cat.update_layout(
-                        title=dict(text='Lessons Documented by Category', font=dict(size=14, color='#e2e8f0')),
-                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                        height=350,
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.1)', tickfont=dict(color='#94a3b8')),
-                        yaxis=dict(tickfont=dict(color='#e2e8f0'))
-                    )
-                    st.plotly_chart(fig_lessons_cat, use_container_width=True)
+                # Recurrence vs Lesson Completion Quadrant
+                fig_recurrence = chart_recurrence_vs_lessons(df)
+                if fig_recurrence:
+                    st.plotly_chart(fig_recurrence, use_container_width=True)
+                else:
+                    st.info("Insufficient data for recurrence analysis")
 
             with col2:
-                # Coverage metrics
-                total_records = len(df)
-                lessons_count = len(df_lessons)
-                coverage_pct = (lessons_count / total_records * 100) if total_records > 0 else 0
+                # Learning Grade Summary Cards
+                grades_summary = {'A': 0, 'B': 0, 'C': 0, 'D': 0, 'F': 0}
+                for cat_data in grades_data.values():
+                    grades_summary[cat_data['grade']] += 1
 
-                st.markdown(f"""
+                st.markdown("""
                 <div style="background: rgba(139, 92, 246, 0.1); border-radius: 12px; padding: 20px; border: 1px solid rgba(139, 92, 246, 0.3);">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <div style="color: #c4b5fd; font-size: 0.8rem; text-transform: uppercase;">Documentation Coverage</div>
-                        <div style="color: #8b5cf6; font-size: 3rem; font-weight: 800;">{coverage_pct:.1f}%</div>
-                        <div style="color: #94a3b8; font-size: 0.9rem;">{lessons_count} of {total_records} records</div>
-                    </div>
+                    <div style="color: #c4b5fd; font-size: 0.85rem; font-weight: 600; margin-bottom: 15px;">📊 Learning Grade Distribution</div>
+                """, unsafe_allow_html=True)
+
+                grade_colors = {'A': '#22c55e', 'B': '#3b82f6', 'C': '#f97316', 'D': '#ef4444', 'F': '#dc2626'}
+                for grade, count in grades_summary.items():
+                    if count > 0:
+                        st.markdown(f"""
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin: 8px 0;">
+                            <span style="background: {grade_colors[grade]}; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 700;">Grade {grade}</span>
+                            <span style="color: #e2e8f0; font-size: 1.2rem; font-weight: 600;">{count} categories</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                # Key insight
+                avg_recurrence = sum(d['recurrence_rate'] for d in grades_data.values()) / len(grades_data)
+                st.markdown(f"""
+                <div style="background: rgba(239, 68, 68, 0.1); border-radius: 8px; padding: 15px; margin-top: 15px; border: 1px solid rgba(239, 68, 68, 0.3);">
+                    <div style="color: #fca5a5; font-size: 0.8rem;">Average Recurrence Rate</div>
+                    <div style="color: #ef4444; font-size: 2rem; font-weight: 700;">{avg_recurrence:.1f}%</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # Recurrence comparison
-                if 'AI_Recurrence_Risk' in df.columns:
-                    with_lessons_risk = df_lessons['AI_Recurrence_Risk'].mean() * 100 if len(df_lessons) > 0 else 0
-                    without_lessons = df[~df.index.isin(df_lessons.index)]
-                    without_lessons_risk = without_lessons['AI_Recurrence_Risk'].mean() * 100 if len(without_lessons) > 0 else 0
+            # Row 2: Category Learning Scorecard
+            st.markdown("#### 🎯 Category Learning Scorecard")
 
+            # Sort by score descending
+            sorted_grades = sorted(grades_data.items(), key=lambda x: x[1]['score'], reverse=True)
+
+            # Create scorecard visualization
+            categories = [g[0] for g in sorted_grades]
+            scores = [g[1]['score'] for g in sorted_grades]
+            grades = [g[1]['grade'] for g in sorted_grades]
+            recurrence_rates = [g[1]['recurrence_rate'] for g in sorted_grades]
+
+            fig_scorecard = go.Figure()
+
+            # Score bars
+            fig_scorecard.add_trace(go.Bar(
+                y=categories,
+                x=scores,
+                orientation='h',
+                marker_color=[grade_colors[g] for g in grades],
+                text=[f"{g} ({s:.0f})" for g, s in zip(grades, scores)],
+                textposition='outside',
+                hovertemplate='<b>%{y}</b><br>Score: %{x:.1f}<br>Recurrence: %{customdata:.1f}%<extra></extra>',
+                customdata=recurrence_rates
+            ))
+
+            fig_scorecard.update_layout(
+                title=dict(text='Learning Effectiveness Score by Category', font=dict(size=14, color='#e2e8f0')),
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                height=max(300, len(categories) * 35),
+                margin=dict(l=10, r=80, t=40, b=10),
+                xaxis=dict(range=[0, 110], gridcolor='rgba(255,255,255,0.1)', tickfont=dict(color='#94a3b8'), title='Score'),
+                yaxis=dict(tickfont=dict(color='#e2e8f0', size=10))
+            )
+            st.plotly_chart(fig_scorecard, use_container_width=True)
+
+            # Row 3: At-Risk Categories and Recommendations
+            st.markdown("#### ⚠️ Categories Needing Attention")
+
+            at_risk = [(cat, data) for cat, data in grades_data.items()
+                      if data['grade'] in ['D', 'F'] or data['recurrence_rate'] > 40]
+
+            if at_risk:
+                for cat, data in sorted(at_risk, key=lambda x: x[1]['score'])[:5]:
+                    risk_color = '#ef4444' if data['grade'] == 'F' else '#f97316'
                     st.markdown(f"""
-                    <div style="background: rgba(34, 197, 94, 0.1); border-radius: 12px; padding: 15px; margin-top: 15px; border: 1px solid rgba(34, 197, 94, 0.3);">
-                        <div style="color: #86efac; font-size: 0.8rem; font-weight: 600; margin-bottom: 10px;">📉 Recurrence Risk Comparison</div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <div style="text-align: center;">
-                                <div style="color: #22c55e; font-size: 1.5rem; font-weight: 700;">{with_lessons_risk:.1f}%</div>
-                                <div style="color: #94a3b8; font-size: 0.75rem;">With Lessons</div>
+                    <div style="background: rgba(239, 68, 68, 0.1); border-radius: 8px; padding: 15px; margin: 10px 0; border-left: 4px solid {risk_color};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <span style="color: #e2e8f0; font-weight: 600; font-size: 1.1rem;">{cat}</span>
+                            <span style="background: {risk_color}; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 700;">Grade {data['grade']}</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; font-size: 0.85rem;">
+                            <div>
+                                <div style="color: #94a3b8;">Recurrence Rate</div>
+                                <div style="color: #ef4444; font-weight: 600;">{data['recurrence_rate']:.1f}%</div>
                             </div>
-                            <div style="text-align: center;">
-                                <div style="color: #ef4444; font-size: 1.5rem; font-weight: 700;">{without_lessons_risk:.1f}%</div>
-                                <div style="color: #94a3b8; font-size: 0.75rem;">Without Lessons</div>
+                            <div>
+                                <div style="color: #94a3b8;">Lesson Completion</div>
+                                <div style="color: {'#22c55e' if data['lesson_completion'] > 50 else '#f97316'}; font-weight: 600;">{data['lesson_completion']:.1f}%</div>
                             </div>
+                            <div>
+                                <div style="color: #94a3b8;">Tickets</div>
+                                <div style="color: #3b82f6; font-weight: 600;">{data['ticket_count']}</div>
+                            </div>
+                        </div>
+                        <div style="color: #94a3b8; font-size: 0.8rem; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            💡 <b>Action:</b> {'Urgent - Mandate lesson documentation and review root causes' if data['recurrence_rate'] > 50 else 'Review and improve lesson application process'}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+            else:
+                st.success("✅ All categories are performing well on learning effectiveness!")
 
-            # Recent Lessons Table
-            st.markdown("#### 📚 Recent Lessons Learned")
-            if len(df_lessons) > 0:
-                recent_lessons = df_lessons.nlargest(5, 'Financial_Impact' if 'Financial_Impact' in df_lessons.columns else df_lessons.columns[0])
-                for _, row in recent_lessons.iterrows():
-                    lesson_text = str(row[lessons_col])[:200] + "..." if len(str(row[lessons_col])) > 200 else str(row[lessons_col])
-                    category = row.get('AI_Category', 'Unknown')
-                    cost = row.get('Financial_Impact', 0)
-
-                    st.markdown(f"""
-                    <div style="background: rgba(15, 23, 42, 0.6); border-radius: 8px; padding: 15px; margin: 10px 0; border-left: 4px solid #8b5cf6;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #c4b5fd; font-weight: 600;">{category}</span>
-                            <span style="color: #22c55e;">${cost:,.0f}</span>
-                        </div>
-                        <div style="color: #94a3b8; font-size: 0.9rem;">{lesson_text}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
         else:
-            st.info("No lessons learned data available in the current dataset")
+            # Fallback to basic lessons display
+            lessons_col = 'tickets_data_lessons_learned_preventive_actions'
+            if lessons_col in df.columns:
+                df_lessons = df[df[lessons_col].notna() & (df[lessons_col].astype(str) != '')]
+                st.markdown(f"**{len(df_lessons)}** records have documented lessons learned")
+
+                if len(df_lessons) > 0:
+                    st.markdown("#### 📚 Recent Lessons")
+                    for _, row in df_lessons.head(5).iterrows():
+                        lesson_text = str(row[lessons_col])[:200]
+                        st.markdown(f"""
+                        <div style="background: rgba(15, 23, 42, 0.6); border-radius: 8px; padding: 12px; margin: 8px 0; border-left: 3px solid #8b5cf6;">
+                            <div style="color: #c4b5fd; font-weight: 600;">{row.get('AI_Category', 'Unknown')}</div>
+                            <div style="color: #94a3b8; font-size: 0.9rem; margin-top: 5px;">{lesson_text}...</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            else:
+                st.info("No lessons learned data available")
 
 
 # ============================================================================
