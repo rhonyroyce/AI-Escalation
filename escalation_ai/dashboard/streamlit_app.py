@@ -6738,48 +6738,40 @@ def render_deep_analysis(df):
 
             # Scoring Criteria Breakdown
             with st.expander("📋 **How is the Learning Effectiveness Score Calculated?**", expanded=False):
-                st.markdown("""
-                <div style="background: rgba(30, 41, 59, 0.8); border-radius: 12px; padding: 20px; border: 1px solid rgba(59, 130, 246, 0.3);">
-                    <div style="color: #60a5fa; font-weight: 700; font-size: 1.1rem; margin-bottom: 15px;">📊 Score Components (Total: 100 points)</div>
+                st.markdown("##### 📊 Score Components (Total: 100 points)")
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div style="background: rgba(34, 197, 94, 0.1); border-radius: 8px; padding: 12px; border-left: 4px solid #22c55e;">
-                            <div style="color: #22c55e; font-weight: 600;">🔄 Recurrence Score</div>
-                            <div style="color: #94a3b8; font-size: 0.85rem;">35% weight</div>
-                            <div style="color: #e2e8f0; font-size: 0.8rem; margin-top: 5px;">100 - Recurrence Rate<br><i>Lower recurrence = higher score</i></div>
-                        </div>
+                score_cols = st.columns(2)
+                with score_cols[0]:
+                    st.success("🔄 **Recurrence Score** (35% weight)")
+                    st.caption("Formula: 100 - Recurrence Rate")
+                    st.caption("*Lower recurrence = higher score*")
 
-                        <div style="background: rgba(59, 130, 246, 0.1); border-radius: 8px; padding: 12px; border-left: 4px solid #3b82f6;">
-                            <div style="color: #3b82f6; font-weight: 600;">📝 Lesson Completion</div>
-                            <div style="color: #94a3b8; font-size: 0.85rem;">30% weight</div>
-                            <div style="color: #e2e8f0; font-size: 0.8rem; margin-top: 5px;">% of lessons marked complete<br><i>Higher completion = higher score</i></div>
-                        </div>
+                    st.warning("⚙️ **Resolution Consistency** (25% weight)")
+                    st.caption("% of tickets with consistent resolution")
+                    st.caption("*More consistency = higher score*")
 
-                        <div style="background: rgba(249, 115, 22, 0.1); border-radius: 8px; padding: 12px; border-left: 4px solid #f97316;">
-                            <div style="color: #f97316; font-weight: 600;">⚙️ Resolution Consistency</div>
-                            <div style="color: #94a3b8; font-size: 0.85rem;">25% weight</div>
-                            <div style="color: #e2e8f0; font-size: 0.8rem; margin-top: 5px;">% with consistent resolution<br><i>More consistency = higher score</i></div>
-                        </div>
+                with score_cols[1]:
+                    st.info("📝 **Lesson Completion** (30% weight)")
+                    st.caption("% of lessons marked complete/done/closed")
+                    st.caption("*Higher completion = higher score*")
 
-                        <div style="background: rgba(139, 92, 246, 0.1); border-radius: 8px; padding: 12px; border-left: 4px solid #8b5cf6;">
-                            <div style="color: #8b5cf6; font-weight: 600;">✅ Documentation Bonus</div>
-                            <div style="color: #94a3b8; font-size: 0.85rem;">+10 points</div>
-                            <div style="color: #e2e8f0; font-size: 0.8rem; margin-top: 5px;">Awarded if any lessons<br><i>are documented for category</i></div>
-                        </div>
-                    </div>
+                    st.markdown("✅ **Documentation Bonus** (+10 points)")
+                    st.caption("Awarded if any lessons are documented")
+                    st.caption("*for the category*")
 
-                    <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <div style="color: #60a5fa; font-weight: 700; margin-bottom: 10px;">🎓 Grade Thresholds</div>
-                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                            <span style="background: #22c55e; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">A: ≥80</span>
-                            <span style="background: #3b82f6; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">B: 65-79</span>
-                            <span style="background: #f97316; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">C: 50-64</span>
-                            <span style="background: #ef4444; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">D: 35-49</span>
-                            <span style="background: #dc2626; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">F: &lt;35</span>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown("---")
+                st.markdown("##### 🎓 Grade Thresholds")
+                grade_cols = st.columns(5)
+                with grade_cols[0]:
+                    st.markdown("🟢 **A**: ≥80")
+                with grade_cols[1]:
+                    st.markdown("🔵 **B**: 65-79")
+                with grade_cols[2]:
+                    st.markdown("🟠 **C**: 50-64")
+                with grade_cols[3]:
+                    st.markdown("🔴 **D**: 35-49")
+                with grade_cols[4]:
+                    st.markdown("⛔ **F**: <35")
 
             # Row 2: Category Learning Scorecard
             st.markdown("#### 🎯 Category Learning Scorecard")
