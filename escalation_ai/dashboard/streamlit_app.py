@@ -7071,6 +7071,149 @@ def render_deep_analysis(df):
             else:
                 st.success("✅ All categories are performing well on learning effectiveness!")
 
+            # Row 4: Similarity-Based "Lessons Not Learned" Analysis
+            st.markdown("#### 🔄 Lessons Not Learned - Recurrence Despite Documentation")
+            st.markdown("*Identifying cases where similar issues keep appearing despite having documented lessons*")
+
+            # Find lesson column
+            lesson_col = None
+            for col in ['tickets_data_lessons_learned_title', 'tickets_data_lessons_learned_preventive_actions', 'Lesson_Title']:
+                if col in df.columns:
+                    lesson_col = col
+                    break
+
+            if lesson_col and 'Similar_Ticket_Count' in df.columns and 'tickets_data_issue_datetime' in df.columns:
+                # Analyze if lessons are preventing recurrence
+                df_analysis = df.copy()
+                df_analysis['Has_Lesson'] = df_analysis[lesson_col].notna() & (df_analysis[lesson_col].astype(str).str.strip() != '')
+                df_analysis['Has_Similar'] = df_analysis['Similar_Ticket_Count'] > 0
+                df_analysis['Issue_Date'] = pd.to_datetime(df_analysis['tickets_data_issue_datetime'], errors='coerce')
+
+                # Calculate metrics by category
+                lesson_effectiveness = []
+                for cat in df_analysis['AI_Category'].dropna().unique():
+                    cat_df = df_analysis[df_analysis['AI_Category'] == cat]
+                    if len(cat_df) < 3:
+                        continue
+
+                    total = len(cat_df)
+                    with_lessons = cat_df['Has_Lesson'].sum()
+                    with_similar = cat_df['Has_Similar'].sum()
+
+                    # Key metric: Issues that have similar tickets (recurrence) but ALSO have lessons
+                    # This indicates lessons exist but similar issues still appear
+                    recurring_with_lessons = ((cat_df['Has_Similar']) & (cat_df['Has_Lesson'])).sum()
+                    recurring_without_lessons = ((cat_df['Has_Similar']) & (~cat_df['Has_Lesson'])).sum()
+
+                    # Calculate lesson effectiveness: lower recurrence when lessons exist = effective
+                    if with_lessons > 0:
+                        recurrence_with_lesson = recurring_with_lessons / with_lessons * 100
+                    else:
+                        recurrence_with_lesson = 0
+
+                    without_lessons = total - with_lessons
+                    if without_lessons > 0:
+                        recurrence_without_lesson = recurring_without_lessons / without_lessons * 100
+                    else:
+                        recurrence_without_lesson = 0
+
+                    # Effectiveness = how much lessons reduce recurrence
+                    if recurrence_without_lesson > 0:
+                        effectiveness = ((recurrence_without_lesson - recurrence_with_lesson) / recurrence_without_lesson) * 100
+                    else:
+                        effectiveness = 0 if recurrence_with_lesson > 0 else 100
+
+                    lesson_effectiveness.append({
+                        'category': cat,
+                        'total_tickets': total,
+                        'with_lessons': with_lessons,
+                        'recurring_with_lessons': recurring_with_lessons,
+                        'recurrence_with_lesson': recurrence_with_lesson,
+                        'recurrence_without_lesson': recurrence_without_lesson,
+                        'effectiveness': effectiveness,
+                        'lesson_coverage': (with_lessons / total * 100) if total > 0 else 0
+                    })
+
+                if lesson_effectiveness:
+                    # Sort by ineffectiveness (lessons not working)
+                    lesson_effectiveness.sort(key=lambda x: x['effectiveness'])
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        # Chart: Lesson Effectiveness by Category
+                        eff_df = pd.DataFrame(lesson_effectiveness)
+                        eff_df = eff_df.sort_values('effectiveness', ascending=True)
+
+                        fig_eff = go.Figure()
+                        fig_eff.add_trace(go.Bar(
+                            y=eff_df['category'],
+                            x=eff_df['effectiveness'],
+                            orientation='h',
+                            marker_color=[
+                                '#22c55e' if e >= 50 else '#f97316' if e >= 0 else '#ef4444'
+                                for e in eff_df['effectiveness']
+                            ],
+                            text=[f"{e:.0f}%" for e in eff_df['effectiveness']],
+                            textposition='outside',
+                            hovertemplate='<b>%{y}</b><br>Effectiveness: %{x:.1f}%<br>Recurrence WITH lessons: %{customdata[0]:.1f}%<br>Recurrence WITHOUT lessons: %{customdata[1]:.1f}%<extra></extra>',
+                            customdata=list(zip(eff_df['recurrence_with_lesson'], eff_df['recurrence_without_lesson']))
+                        ))
+                        fig_eff.update_layout(
+                            title='Lesson Effectiveness by Category<br><sub>Negative = lessons not preventing recurrence</sub>',
+                            xaxis_title='Effectiveness %',
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                            height=max(300, len(eff_df) * 35),
+                            margin=dict(l=10, r=80, t=60, b=30)
+                        )
+                        st.plotly_chart(fig_eff, use_container_width=True)
+
+                    with col2:
+                        # Metrics summary
+                        avg_effectiveness = np.mean([e['effectiveness'] for e in lesson_effectiveness])
+                        total_recurring_with_lessons = sum(e['recurring_with_lessons'] for e in lesson_effectiveness)
+                        total_with_lessons = sum(e['with_lessons'] for e in lesson_effectiveness)
+
+                        st.metric("Avg Lesson Effectiveness", f"{avg_effectiveness:.1f}%",
+                                 delta="Good" if avg_effectiveness > 30 else "Needs Improvement",
+                                 delta_color="normal" if avg_effectiveness > 30 else "inverse")
+
+                        st.metric("Issues Recurring Despite Lessons", f"{total_recurring_with_lessons}",
+                                 delta=f"of {total_with_lessons} with lessons",
+                                 delta_color="inverse")
+
+                        # Worst offenders
+                        st.markdown("##### ⚠️ Lessons Not Working")
+                        for item in lesson_effectiveness[:3]:
+                            if item['effectiveness'] < 30 and item['recurring_with_lessons'] > 0:
+                                st.markdown(f"""
+                                <div style="background: rgba(239, 68, 68, 0.1); border-radius: 6px; padding: 10px; margin: 5px 0; border-left: 3px solid #ef4444;">
+                                    <div style="color: #fca5a5; font-weight: 600;">{item['category']}</div>
+                                    <div style="color: #94a3b8; font-size: 0.8rem;">{item['recurring_with_lessons']} issues recurred despite having lessons</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+
+                    # Detailed table
+                    with st.expander("📊 **Detailed Lesson Effectiveness Data**"):
+                        eff_display = pd.DataFrame(lesson_effectiveness)
+                        eff_display = eff_display.rename(columns={
+                            'category': 'Category',
+                            'total_tickets': 'Total Tickets',
+                            'with_lessons': 'With Lessons',
+                            'recurring_with_lessons': 'Recurring (With Lessons)',
+                            'recurrence_with_lesson': 'Recurrence % (With)',
+                            'recurrence_without_lesson': 'Recurrence % (Without)',
+                            'effectiveness': 'Effectiveness %',
+                            'lesson_coverage': 'Lesson Coverage %'
+                        })
+                        eff_display = eff_display.round(1)
+                        st.dataframe(eff_display, use_container_width=True, hide_index=True)
+
+            elif 'Similar_Ticket_Count' in df.columns:
+                st.info("Lesson documentation column not found. Add lessons_learned data to enable effectiveness analysis.")
+            else:
+                st.info("Similar ticket analysis required for lessons effectiveness tracking. Run the similarity analysis pipeline.")
+
         else:
             # Fallback to basic lessons display
             lessons_col = 'tickets_data_lessons_learned_preventive_actions'
