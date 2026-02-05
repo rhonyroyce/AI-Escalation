@@ -13,6 +13,9 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, NamedSty
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.formatting.rule import ColorScaleRule, DataBarRule
+from openpyxl.chart import BarChart, PieChart, DoughnutChart, Reference
+from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.series import DataPoint
 import pandas as pd
 
 from ..core.config import (
@@ -860,10 +863,12 @@ class ExcelReportWriter:
 
     def write_summary_page(self, df, exec_summary_text, chart_paths):
         """
-        THE MONEY PAGE - Executive Summary that tells the whole story.
-        Design principles: Bold header, single row metrics, ONE large chart, color-coded impact.
+        MCKINSEY-GRADE DASHBOARD - Professional Excel dashboard with native charts.
+        Features: Executive KPIs, native Excel charts (donut, bar), innovative metrics.
         """
         import numpy as np
+        from openpyxl.chart.series import DataPoint as ChartDataPoint
+        from openpyxl.drawing.fill import PatternFillProperties, ColorChoice
 
         ws = self.wb.create_sheet("Summary", 0)
         ws.sheet_view.showGridLines = False
@@ -871,260 +876,333 @@ class ExcelReportWriter:
         report_date = datetime.now().strftime("%B %d, %Y")
 
         # ═══════════════════════════════════════════════════════════════════════
-        # COLOR PALETTE
+        # AMDOCS & MCKINSEY COLOR PALETTE
         # ═══════════════════════════════════════════════════════════════════════
-        AMDOCS_RED = "C41230"     # Official Amdocs Red
-        AMDOCS_PURPLE = "6B2574"
-        NAVY = "1B2A4E"
-        CHARCOAL = "2C3E50"
-        SLATE = "5D6D7E"
+        AMDOCS_RED = "C41230"       # Amdocs brand red - header
+        AMDOCS_PURPLE = "6B2574"    # Amdocs brand purple
+        NAVY = "1B365D"             # Dark professional navy
+        SLATE = "4A5568"            # Slate gray for secondary headers
+        CHARCOAL = "2D3748"         # Dark text
         WHITE = "FFFFFF"
-        LIGHT_BG = "F4F6F7"
+        LIGHT_BG = "F7FAFC"         # Light background
+        CARD_BG = "EDF2F7"          # Card background
 
-        # Impact colors
-        HIGH_BG = "E74C3C"      # Red
-        HIGH_TEXT = "FFFFFF"
-        MED_BG = "F39C12"       # Amber/Orange
-        MED_TEXT = "FFFFFF"
-        LOW_BG = "27AE60"       # Green
-        LOW_TEXT = "FFFFFF"
+        # RAG Colors (Red-Amber-Green)
+        HIGH_RED = "DC3545"         # Critical/High - Red
+        MED_AMBER = "FFC107"        # Medium - Amber
+        LOW_GREEN = "28A745"        # Low/Good - Green
+        TEAL = "17A2B8"             # Info/Accent
 
+        # Chart palette (vibrant, professional)
+        CHART_BLUE = "4285F4"
+        CHART_RED = "EA4335"
+        CHART_GREEN = "34A853"
+        CHART_AMBER = "FBBC05"
+        CHART_PURPLE = "9C27B0"
+        CHART_TEAL = "00BCD4"
+        CHART_COLORS = [CHART_BLUE, CHART_RED, CHART_GREEN, CHART_AMBER, CHART_PURPLE, CHART_TEAL]
+
+        # Fills
         fill_amdocs = PatternFill(start_color=AMDOCS_RED, end_color=AMDOCS_RED, fill_type="solid")
-        fill_purple = PatternFill(start_color=AMDOCS_PURPLE, end_color=AMDOCS_PURPLE, fill_type="solid")
         fill_navy = PatternFill(start_color=NAVY, end_color=NAVY, fill_type="solid")
-        fill_light = PatternFill(start_color=LIGHT_BG, end_color=LIGHT_BG, fill_type="solid")
+        fill_slate = PatternFill(start_color=SLATE, end_color=SLATE, fill_type="solid")
         fill_white = PatternFill(start_color=WHITE, end_color=WHITE, fill_type="solid")
-        fill_high = PatternFill(start_color=HIGH_BG, end_color=HIGH_BG, fill_type="solid")
-        fill_med = PatternFill(start_color=MED_BG, end_color=MED_BG, fill_type="solid")
-        fill_low = PatternFill(start_color=LOW_BG, end_color=LOW_BG, fill_type="solid")
+        fill_light = PatternFill(start_color=LIGHT_BG, end_color=LIGHT_BG, fill_type="solid")
+        fill_card = PatternFill(start_color=CARD_BG, end_color=CARD_BG, fill_type="solid")
+        fill_high = PatternFill(start_color="FECACA", end_color="FECACA", fill_type="solid")  # Light red
+        fill_med = PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid")   # Light amber
+        fill_low = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")   # Light green
 
         border_thin = Border(
-            left=Side(style='thin', color='D5D8DC'),
-            right=Side(style='thin', color='D5D8DC'),
-            top=Side(style='thin', color='D5D8DC'),
-            bottom=Side(style='thin', color='D5D8DC')
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
         )
-        border_thick = Border(
-            left=Side(style='medium', color=AMDOCS_PURPLE),
-            right=Side(style='medium', color=AMDOCS_PURPLE),
-            top=Side(style='medium', color=AMDOCS_PURPLE),
-            bottom=Side(style='medium', color=AMDOCS_PURPLE)
+        border_card = Border(
+            left=Side(style='medium', color='CBD5E0'),
+            right=Side(style='medium', color='CBD5E0'),
+            top=Side(style='medium', color='CBD5E0'),
+            bottom=Side(style='medium', color='CBD5E0')
         )
 
         # ═══════════════════════════════════════════════════════════════════════
-        # COLUMN SETUP - Full width, generous spacing
+        # COLUMN SETUP - Professional wide layout
         # ═══════════════════════════════════════════════════════════════════════
-        ws.column_dimensions['A'].width = 2     # Left margin
-        ws.column_dimensions['B'].width = 22    # Category names (wide)
-        ws.column_dimensions['C'].width = 8     # Count
-        ws.column_dimensions['D'].width = 6     # Percentage
-        ws.column_dimensions['E'].width = 8     # Impact
-        ws.column_dimensions['F'].width = 32    # Recommendation (WIDE - no cutoff)
-        ws.column_dimensions['G'].width = 2     # Gutter
-        for col in 'HIJKLMNOPQR':
-            ws.column_dimensions[col].width = 7  # Chart area
-        ws.column_dimensions['S'].width = 2     # Right margin
+        ws.column_dimensions['A'].width = 2      # Left margin
+        ws.column_dimensions['B'].width = 18     # KPI labels / Category
+        ws.column_dimensions['C'].width = 12     # KPI values / Count
+        ws.column_dimensions['D'].width = 10     # Secondary metrics
+        ws.column_dimensions['E'].width = 18     # KPI labels 2 / Impact
+        ws.column_dimensions['F'].width = 12     # KPI values 2
+        ws.column_dimensions['G'].width = 10     # Secondary metrics 2
+        ws.column_dimensions['H'].width = 3      # Gutter
+        ws.column_dimensions['I'].width = 12     # Chart data col 1
+        ws.column_dimensions['J'].width = 12     # Chart data col 2
+        ws.column_dimensions['K'].width = 12     # Chart area
+        ws.column_dimensions['L'].width = 12
+        ws.column_dimensions['M'].width = 12
+        ws.column_dimensions['N'].width = 12
+        ws.column_dimensions['O'].width = 12
+        ws.column_dimensions['P'].width = 2      # Right margin
 
         # ═══════════════════════════════════════════════════════════════════════
-        # CALCULATE ALL METRICS
+        # CALCULATE ALL METRICS (Standard + McKinsey Innovative)
         # ═══════════════════════════════════════════════════════════════════════
         total_tickets = len(df)
         total_financial = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else 0
         critical_count = (df['Severity_Norm'] == 'Critical').sum() if 'Severity_Norm' in df.columns else 0
+        high_count = (df['Severity_Norm'] == 'High').sum() if 'Severity_Norm' in df.columns else 0
         avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 0
         recurrence_rate = df['AI_Recurrence_Probability'].mean() * 100 if 'AI_Recurrence_Probability' in df.columns else 0
+        avg_friction = df['Strategic_Friction_Score'].mean() if 'Strategic_Friction_Score' in df.columns else 0
 
+        # MCKINSEY INNOVATIVE METRICS
+        # 1. Cost Per Escalation - efficiency metric
+        cost_per_escalation = total_financial / total_tickets if total_tickets > 0 else 0
+
+        # 2. Resolution Velocity Index (RVI) - how fast issues resolve (inverse of days, normalized)
+        resolution_velocity = 100 / (1 + avg_resolution) if avg_resolution > 0 else 100
+
+        # 3. Risk Concentration Index - % of financial impact from critical issues
+        critical_financial = 0
+        if 'Financial_Impact' in df.columns and 'Severity_Norm' in df.columns:
+            critical_financial = df[df['Severity_Norm'] == 'Critical']['Financial_Impact'].sum()
+        risk_concentration = (critical_financial / total_financial * 100) if total_financial > 0 else 0
+
+        # 4. Process Health Score (0-100) - composite of recurrence, resolution time, friction
+        process_health = max(0, min(100, 100 - recurrence_rate - (avg_friction * 2) - (avg_resolution * 2)))
+
+        # 5. Preventable Cost Ratio - estimated savings from addressing top 3 categories
+        top_cats_financial = 0
+        if 'AI_Category' in df.columns and 'Financial_Impact' in df.columns:
+            cat_financial = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
+            top_cats_financial = cat_financial.head(3).sum()
+        preventable_ratio = (top_cats_financial / total_financial * 100) if total_financial > 0 else 0
+
+        # Category data
         top_cats = []
         top_cats_pct = 0
+        cat_counts = None
         if 'AI_Category' in df.columns:
             cat_counts = df['AI_Category'].value_counts()
             top_cats = cat_counts.head(3).index.tolist()
             top_cats_pct = (cat_counts.head(3).sum() / total_tickets * 100) if total_tickets > 0 else 0
 
         # ═══════════════════════════════════════════════════════════════════════
-        # ROW 1-2: BOLD HEADER BANNER
+        # ROW 1: HEADER BANNER (Amdocs Red)
         # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[1].height = 50
-        for col in range(2, 19):  # B to R
-            ws.cell(row=1, column=col).fill = fill_amdocs  # Amdocs Red
+        ws.row_dimensions[1].height = 45
+        for col in range(2, 16):  # B to O
+            ws.cell(row=1, column=col).fill = fill_amdocs
         ws['B1'] = "STRATEGIC ESCALATION ANALYSIS"
-        ws['B1'].font = Font(bold=True, size=26, color="FFFFFF")
+        ws['B1'].font = Font(bold=True, size=24, color=WHITE)
         ws['B1'].alignment = Alignment(horizontal='center', vertical='center')
-        ws.merge_cells('B1:R1')
+        ws.merge_cells('B1:O1')
 
-        ws.row_dimensions[2].height = 24
-        for col in range(2, 19):
+        # ═══════════════════════════════════════════════════════════════════════
+        # ROW 2: SUB-HEADER (Navy)
+        # ═══════════════════════════════════════════════════════════════════════
+        ws.row_dimensions[2].height = 22
+        for col in range(2, 16):
             ws.cell(row=2, column=col).fill = fill_navy
-        ws['B2'] = f"Executive Summary  |  {report_date}  |  {total_tickets:,} Tickets Analyzed"
-        ws['B2'].font = Font(size=11, color="FFFFFF")
+        ws['B2'] = f"Executive Summary  |  {report_date}  |  {total_tickets:,} Escalations Analyzed"
+        ws['B2'].font = Font(size=10, color=WHITE)
         ws['B2'].alignment = Alignment(horizontal='center', vertical='center')
-        ws.merge_cells('B2:R2')
+        ws.merge_cells('B2:O2')
 
         # ═══════════════════════════════════════════════════════════════════════
         # ROW 3: SPACER
         # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[3].height = 10
+        ws.row_dimensions[3].height = 8
 
         # ═══════════════════════════════════════════════════════════════════════
-        # ROW 4-5: KEY FINDING BOX (Answer First - Pyramid Principle)
+        # ROW 4-5: KEY INSIGHT BOX (McKinsey Pyramid - Answer First)
         # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[4].height = 20
-        ws['B4'] = "THE BOTTOM LINE"
-        ws['B4'].font = Font(bold=True, size=11, color=AMDOCS_PURPLE)
-        ws.merge_cells('B4:R4')
+        ws.row_dimensions[4].height = 18
+        ws['B4'] = "KEY INSIGHT"
+        ws['B4'].font = Font(bold=True, size=10, color=AMDOCS_RED)
+        ws.merge_cells('B4:O4')
 
-        ws.row_dimensions[5].height = 50
-        for col in range(2, 19):
+        ws.row_dimensions[5].height = 40
+        for col in range(2, 16):
             cell = ws.cell(row=5, column=col)
-            cell.fill = fill_light
-            cell.border = border_thick
+            cell.fill = fill_card
+            cell.border = border_card
 
         top_cat_str = " and ".join(top_cats[:2]) if len(top_cats) >= 2 else (top_cats[0] if top_cats else "process issues")
-        key_finding = f"${total_financial:,.0f} total financial exposure. {top_cat_str} drive {top_cats_pct:.0f}% of escalations. {critical_count} critical issues need immediate action."
+        key_finding = f"${total_financial:,.0f} financial exposure with {preventable_ratio:.0f}% preventable. {top_cat_str} drive {top_cats_pct:.0f}% of escalations. Process health score: {process_health:.0f}/100."
 
         ws['B5'] = key_finding
-        ws['B5'].font = Font(size=13, bold=True, color=CHARCOAL)
+        ws['B5'].font = Font(size=12, bold=True, color=CHARCOAL)
         ws['B5'].alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-        ws.merge_cells('B5:R5')
+        ws.merge_cells('B5:O5')
 
         # ═══════════════════════════════════════════════════════════════════════
         # ROW 6: SPACER
         # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[6].height = 12
+        ws.row_dimensions[6].height = 10
 
         # ═══════════════════════════════════════════════════════════════════════
-        # ROW 7-9: FOUR METRICS IN ONE ROW (All visible, no gaps)
+        # ROW 7-10: SIX KPI CARDS (2 rows x 3 cards) - McKinsey Metric Grid
         # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[7].height = 18  # Label
-        ws.row_dimensions[8].height = 40  # Value (BIG)
-        ws.row_dimensions[9].height = 16  # Subtext
 
-        # Metrics span: B-D, E-G, H-J, K-M (4 metrics, ~3 cols each, no gaps)
-        metric_spans = [(2, 4), (5, 7), (8, 10), (11, 13)]  # B-D, E-G, H-J, K-M
-        metrics_data = [
-            ("FINANCIAL EXPOSURE", f"${total_financial:,.0f}", "Total Impact",
-             fill_high if total_financial > 500000 else fill_med, HIGH_TEXT),
-            ("CRITICAL ISSUES", f"{critical_count}", f"{critical_count/total_tickets*100:.1f}% of total" if total_tickets > 0 else "0%",
-             fill_high if critical_count > 30 else fill_med, HIGH_TEXT),
-            ("RECURRENCE RISK", f"{recurrence_rate:.1f}%", "Probability",
-             fill_med if recurrence_rate > 15 else fill_low, MED_TEXT if recurrence_rate > 15 else LOW_TEXT),
-            ("AVG RESOLUTION", f"{avg_resolution:.1f}d", "Predicted",
-             fill_low if avg_resolution < 5 else fill_med, LOW_TEXT if avg_resolution < 5 else MED_TEXT),
-        ]
+        # Helper function to create KPI card
+        def create_kpi_card(start_row, start_col, end_col, label, value, trend_text, bg_fill, text_color):
+            # Background fill for entire card (3 rows)
+            for row in range(start_row, start_row + 3):
+                for col in range(start_col, end_col + 1):
+                    cell = ws.cell(row=row, column=col)
+                    cell.fill = bg_fill
+                    cell.border = border_thin
 
-        for (start, end), (label, value, subtext, bg_fill, txt_color) in zip(metric_spans, metrics_data):
-            # Fill background
-            for row in [7, 8, 9]:
-                for col in range(start, end + 1):
-                    ws.cell(row=row, column=col).fill = bg_fill
-                    ws.cell(row=row, column=col).border = border_thin
-
-            # Label
-            cell = ws.cell(row=7, column=start)
+            # Label (small, top)
+            cell = ws.cell(row=start_row, column=start_col)
             cell.value = label
-            cell.font = Font(bold=True, size=9, color=txt_color)
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            ws.merge_cells(start_row=7, start_column=start, end_row=7, end_column=end)
+            cell.font = Font(bold=True, size=8, color=text_color)
+            cell.alignment = Alignment(horizontal='center', vertical='bottom')
+            ws.merge_cells(start_row=start_row, start_column=start_col, end_row=start_row, end_column=end_col)
 
-            # Value (BIG)
-            cell = ws.cell(row=8, column=start)
+            # Value (large, middle)
+            cell = ws.cell(row=start_row + 1, column=start_col)
             cell.value = value
-            cell.font = Font(bold=True, size=22, color=txt_color)
+            cell.font = Font(bold=True, size=20, color=text_color)
             cell.alignment = Alignment(horizontal='center', vertical='center')
-            ws.merge_cells(start_row=8, start_column=start, end_row=8, end_column=end)
+            ws.merge_cells(start_row=start_row + 1, start_column=start_col, end_row=start_row + 1, end_column=end_col)
 
-            # Subtext
-            cell = ws.cell(row=9, column=start)
-            cell.value = subtext
-            cell.font = Font(size=9, color=txt_color)
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            ws.merge_cells(start_row=9, start_column=start, end_row=9, end_column=end)
+            # Trend/subtext (small, bottom)
+            cell = ws.cell(row=start_row + 2, column=start_col)
+            cell.value = trend_text
+            cell.font = Font(size=8, color=SLATE)
+            cell.alignment = Alignment(horizontal='center', vertical='top')
+            ws.merge_cells(start_row=start_row + 2, start_column=start_col, end_row=start_row + 2, end_column=end_col)
+
+        # Row heights for KPI cards
+        for r in [7, 8, 9, 10, 11, 12]:
+            ws.row_dimensions[r].height = 22
+
+        # TOP ROW OF KPIs (Row 7-9): Financial Exposure | Critical Issues | Resolution Velocity
+        # Card 1: Financial Exposure
+        fin_fill = fill_high if total_financial > 500000 else (fill_med if total_financial > 100000 else fill_low)
+        fin_text = HIGH_RED if total_financial > 500000 else (MED_AMBER if total_financial > 100000 else LOW_GREEN)
+        create_kpi_card(7, 2, 4, "FINANCIAL EXPOSURE", f"${total_financial:,.0f}", "Total Impact", fin_fill, fin_text)
+
+        # Card 2: Critical Issues
+        crit_fill = fill_high if critical_count > 20 else (fill_med if critical_count > 5 else fill_low)
+        crit_text = HIGH_RED if critical_count > 20 else (MED_AMBER if critical_count > 5 else LOW_GREEN)
+        crit_pct = f"{critical_count/total_tickets*100:.1f}%" if total_tickets > 0 else "0%"
+        create_kpi_card(7, 5, 7, "CRITICAL ISSUES", f"{critical_count}", crit_pct + " of total", crit_fill, crit_text)
+
+        # Card 3: Resolution Velocity Index
+        vel_fill = fill_low if resolution_velocity > 50 else (fill_med if resolution_velocity > 25 else fill_high)
+        vel_text = LOW_GREEN if resolution_velocity > 50 else (MED_AMBER if resolution_velocity > 25 else HIGH_RED)
+        create_kpi_card(7, 9, 11, "RESOLUTION VELOCITY", f"{resolution_velocity:.0f}", "Index (higher=faster)", vel_fill, vel_text)
+
+        # BOTTOM ROW OF KPIs (Row 10-12): Process Health | Cost per Escalation | Preventable Costs
+        # Card 4: Process Health Score
+        health_fill = fill_low if process_health > 70 else (fill_med if process_health > 40 else fill_high)
+        health_text = LOW_GREEN if process_health > 70 else (MED_AMBER if process_health > 40 else HIGH_RED)
+        create_kpi_card(10, 2, 4, "PROCESS HEALTH", f"{process_health:.0f}", "Score (0-100)", health_fill, health_text)
+
+        # Card 5: Cost per Escalation
+        cpe_fill = fill_high if cost_per_escalation > 2000 else (fill_med if cost_per_escalation > 500 else fill_low)
+        cpe_text = HIGH_RED if cost_per_escalation > 2000 else (MED_AMBER if cost_per_escalation > 500 else LOW_GREEN)
+        create_kpi_card(10, 5, 7, "COST PER ESCALATION", f"${cost_per_escalation:,.0f}", "Avg Financial Impact", cpe_fill, cpe_text)
+
+        # Card 6: Preventable Cost %
+        prev_fill = fill_high if preventable_ratio > 70 else (fill_med if preventable_ratio > 40 else fill_low)
+        prev_text = HIGH_RED if preventable_ratio > 70 else (MED_AMBER if preventable_ratio > 40 else LOW_GREEN)
+        create_kpi_card(10, 9, 11, "PREVENTABLE COSTS", f"{preventable_ratio:.0f}%", f"${top_cats_financial:,.0f} addressable", prev_fill, prev_text)
 
         # ═══════════════════════════════════════════════════════════════════════
-        # ROW 10: SPACER
+        # ROW 13: SPACER
         # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[10].height = 15
+        ws.row_dimensions[13].height = 12
 
         # ═══════════════════════════════════════════════════════════════════════
-        # ROW 11: SECTION HEADERS (Issue Breakdown | Root Cause Chart)
+        # ROW 14: SECTION HEADERS
         # ═══════════════════════════════════════════════════════════════════════
-        current_row = 11
-        ws.row_dimensions[current_row].height = 26
+        current_row = 14
+        ws.row_dimensions[current_row].height = 24
 
-        # Left header: Issue Breakdown
-        for col in range(2, 7):  # B-F
+        # Left header: Category Breakdown
+        for col in range(2, 8):  # B-G
             ws.cell(row=current_row, column=col).fill = fill_navy
-        ws['B' + str(current_row)] = "ISSUE BREAKDOWN BY CATEGORY"
-        ws['B' + str(current_row)].font = Font(bold=True, size=12, color="FFFFFF")
+        ws['B' + str(current_row)] = "CATEGORY BREAKDOWN"
+        ws['B' + str(current_row)].font = Font(bold=True, size=11, color=WHITE)
         ws['B' + str(current_row)].alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'B{current_row}:F{current_row}')
+        ws.merge_cells(f'B{current_row}:G{current_row}')
 
-        # Right header: Performance Overview
-        for col in range(8, 19):  # H-R
+        # Right header: Risk Distribution (for chart)
+        for col in range(9, 16):  # I-O
             ws.cell(row=current_row, column=col).fill = fill_navy
-        ws['H' + str(current_row)] = "PERFORMANCE OVERVIEW"
-        ws['H' + str(current_row)].font = Font(bold=True, size=12, color="FFFFFF")
-        ws['H' + str(current_row)].alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'H{current_row}:R{current_row}')
+        ws['I' + str(current_row)] = "SEVERITY DISTRIBUTION"
+        ws['I' + str(current_row)].font = Font(bold=True, size=11, color=WHITE)
+        ws['I' + str(current_row)].alignment = Alignment(horizontal='left', vertical='center')
+        ws.merge_cells(f'I{current_row}:O{current_row}')
 
         current_row += 1
 
         # ═══════════════════════════════════════════════════════════════════════
-        # ROW 12: TABLE HEADERS
+        # ROW 15: TABLE HEADERS
         # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[current_row].height = 22
+        ws.row_dimensions[current_row].height = 20
         table_headers = [
-            ('B', 'B', 'CATEGORY'),
-            ('C', 'C', 'COUNT'),
-            ('D', 'D', '%'),
-            ('E', 'E', 'IMPACT'),
-            ('F', 'F', 'RECOMMENDATION'),
+            ('B', 'CATEGORY'),
+            ('C', 'COUNT'),
+            ('D', '%'),
+            ('E', 'IMPACT'),
+            ('F', 'FINANCIAL'),
+            ('G', 'ACTION'),
         ]
-        for start, end, header in table_headers:
-            cell = ws[f'{start}{current_row}']
+        for col_letter, header in table_headers:
+            cell = ws[f'{col_letter}{current_row}']
             cell.value = header
-            cell.font = Font(bold=True, size=9, color="FFFFFF")
-            cell.fill = PatternFill(start_color=SLATE, end_color=SLATE, fill_type="solid")
+            cell.font = Font(bold=True, size=8, color=WHITE)
+            cell.fill = fill_slate
             cell.alignment = Alignment(horizontal='center', vertical='center')
             cell.border = border_thin
-            if start != end:
-                ws.merge_cells(f'{start}{current_row}:{end}{current_row}')
 
         current_row += 1
         table_start_row = current_row
 
         # ═══════════════════════════════════════════════════════════════════════
-        # ISSUE BREAKDOWN TABLE WITH IMPACT COLOR CODING
+        # CATEGORY TABLE WITH FINANCIALS
         # ═══════════════════════════════════════════════════════════════════════
-        if 'AI_Category' in df.columns:
-            cat_counts = df['AI_Category'].value_counts()
+        if cat_counts is not None:
             cat_total = cat_counts.sum()
 
+            # Get financial by category
+            cat_financial_map = {}
+            if 'AI_Category' in df.columns and 'Financial_Impact' in df.columns:
+                cat_financial_map = df.groupby('AI_Category')['Financial_Impact'].sum().to_dict()
+
             action_map = {
-                'Scheduling & Planning': 'Automate scheduling workflows',
+                'Scheduling & Planning': 'Automate workflows',
                 'Documentation & Reporting': 'Standardize templates',
-                'Validation & QA': 'Implement automated QA checks',
+                'Validation & QA': 'Implement auto QA',
                 'Process Compliance': 'Enforce SOPs',
-                'Configuration & Data Mismatch': 'Add pre-deployment validation',
-                'Site Readiness': 'Create readiness checklists',
-                'Communication & Response': 'Establish response protocols',
-                'Nesting & Tool Errors': 'Provide tool training',
+                'Configuration & Data Mismatch': 'Pre-deploy validation',
+                'Site Readiness': 'Readiness checklists',
+                'Communication & Response': 'Response protocols',
+                'Nesting & Tool Errors': 'Tool training',
             }
 
-            for idx, (cat, count) in enumerate(cat_counts.items()):
+            for idx, (cat, count) in enumerate(cat_counts.head(8).items()):  # Top 8 categories
                 pct = (count / cat_total) * 100 if cat_total > 0 else 0
                 impact = "HIGH" if pct > 20 else "MED" if pct > 8 else "LOW"
                 impact_fill = fill_high if impact == "HIGH" else fill_med if impact == "MED" else fill_low
-                impact_text = HIGH_TEXT if impact == "HIGH" else MED_TEXT if impact == "MED" else LOW_TEXT
+                impact_text = HIGH_RED if impact == "HIGH" else MED_AMBER if impact == "MED" else LOW_GREEN
+                cat_fin = cat_financial_map.get(cat, 0)
                 action = action_map.get(cat, "Review process")
                 row_fill = fill_white if idx % 2 == 0 else fill_light
 
-                ws.row_dimensions[current_row].height = 24
+                ws.row_dimensions[current_row].height = 22
 
                 # Category
                 cell = ws[f'B{current_row}']
-                cell.value = cat
-                cell.font = Font(size=10, color=CHARCOAL)
+                cell.value = cat[:20] if len(str(cat)) > 20 else cat  # Truncate if too long
+                cell.font = Font(size=9, color=CHARCOAL)
                 cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='left', vertical='center')
                 cell.border = border_thin
@@ -1132,7 +1210,7 @@ class ExcelReportWriter:
                 # Count
                 cell = ws[f'C{current_row}']
                 cell.value = count
-                cell.font = Font(bold=True, size=11, color=CHARCOAL)
+                cell.font = Font(bold=True, size=10, color=CHARCOAL)
                 cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = border_thin
@@ -1140,7 +1218,7 @@ class ExcelReportWriter:
                 # Percentage
                 cell = ws[f'D{current_row}']
                 cell.value = f"{pct:.0f}%"
-                cell.font = Font(size=10, color=SLATE)
+                cell.font = Font(size=9, color=SLATE)
                 cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = border_thin
@@ -1148,15 +1226,23 @@ class ExcelReportWriter:
                 # Impact (COLOR CODED)
                 cell = ws[f'E{current_row}']
                 cell.value = impact
-                cell.font = Font(bold=True, size=10, color=impact_text)
+                cell.font = Font(bold=True, size=9, color=impact_text)
                 cell.fill = impact_fill
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.border = border_thin
 
-                # Recommendation (FULL WIDTH - no cutoff)
+                # Financial
                 cell = ws[f'F{current_row}']
+                cell.value = f"${cat_fin:,.0f}"
+                cell.font = Font(size=9, color=CHARCOAL)
+                cell.fill = row_fill
+                cell.alignment = Alignment(horizontal='right', vertical='center')
+                cell.border = border_thin
+
+                # Action
+                cell = ws[f'G{current_row}']
                 cell.value = action
-                cell.font = Font(size=10, color=AMDOCS_PURPLE)
+                cell.font = Font(size=8, color=AMDOCS_PURPLE)
                 cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='left', vertical='center')
                 cell.border = border_thin
@@ -1164,76 +1250,111 @@ class ExcelReportWriter:
                 current_row += 1
 
         # ═══════════════════════════════════════════════════════════════════════
-        # RIGHT PANEL: ONE LARGE CHART (Executive Scorecard or Financial - NOT category counts)
-        # Table already shows category breakdown, so chart should show DIFFERENT data
+        # NATIVE EXCEL DONUT CHART - Severity Distribution
         # ═══════════════════════════════════════════════════════════════════════
-        chart_embedded = False
+        chart_data_row = table_start_row
 
-        # Priority: Executive Scorecard, Financial Impact, SLA - NOT root cause (duplicates table)
-        # These patterns show DIFFERENT information than the category table
-        priority_patterns = ['executive_scorecard', 'scorecard', 'financial', 'cost_avoidance', 'sla_compliance']
-        # AVOID these - they duplicate the table
-        avoid_patterns = ['root_cause', 'category', 'friction_by_category', 'top_escalation']
+        # Create data for severity chart in hidden area (columns I-J)
+        severity_labels = ['Critical', 'High', 'Medium', 'Low']
+        severity_counts = []
+        if 'Severity_Norm' in df.columns:
+            sev_counts = df['Severity_Norm'].value_counts()
+            severity_counts = [sev_counts.get(s, 0) for s in severity_labels]
+        else:
+            severity_counts = [critical_count, high_count, total_tickets - critical_count - high_count, 0]
 
-        # First: Check 09_executive directory for scorecard
-        for dir_name in ['09_executive', '07_sla', '08_efficiency']:
-            if chart_embedded:
-                break
-            dir_path = os.path.join(self.output_dir, dir_name) if self.output_dir else dir_name
-            if os.path.exists(dir_path):
-                for f in sorted(os.listdir(dir_path)):
-                    if f.endswith('.png'):
-                        # Check if it matches priority patterns
-                        fname_lower = f.lower()
-                        is_priority = any(p in fname_lower for p in priority_patterns)
-                        is_avoid = any(p in fname_lower for p in avoid_patterns)
-                        if is_priority or (not is_avoid and 'executive' in dir_name):
-                            try:
-                                img = XLImage(os.path.join(dir_path, f))
-                                img.width = 480
-                                img.height = 320
-                                ws.add_image(img, f'H{table_start_row}')
-                                chart_embedded = True
-                                logger.info(f"Embedded chart: {f}")
-                                break
-                            except Exception as e:
-                                logger.warning(f"Failed to embed chart: {e}")
+        # Write chart data (hidden but needed for chart reference)
+        ws[f'I{chart_data_row}'] = "Severity"
+        ws[f'J{chart_data_row}'] = "Count"
+        ws[f'I{chart_data_row}'].font = Font(size=1, color=WHITE)  # Hidden
+        ws[f'J{chart_data_row}'].font = Font(size=1, color=WHITE)
 
-        # Fallback: any chart from financial category
-        if not chart_embedded and chart_paths and isinstance(chart_paths, dict):
-            for category in ['financial', 'predictive']:
-                if category in chart_paths:
-                    for path in chart_paths[category]:
-                        if os.path.exists(path):
-                            fname_lower = os.path.basename(path).lower()
-                            is_avoid = any(p in fname_lower for p in avoid_patterns)
-                            if not is_avoid:
-                                try:
-                                    img = XLImage(path)
-                                    img.width = 480
-                                    img.height = 320
-                                    ws.add_image(img, f'H{table_start_row}')
-                                    chart_embedded = True
-                                    break
-                                except:
-                                    pass
-                        if chart_embedded:
-                            break
-                if chart_embedded:
-                    break
+        for i, (label, count) in enumerate(zip(severity_labels, severity_counts)):
+            row = chart_data_row + 1 + i
+            ws[f'I{row}'] = label
+            ws[f'J{row}'] = count
+            ws[f'I{row}'].font = Font(size=1, color=LIGHT_BG)  # Nearly invisible
+            ws[f'J{row}'].font = Font(size=1, color=LIGHT_BG)
+
+        # Create Donut Chart
+        try:
+            chart = DoughnutChart()
+            chart.title = "Severity Distribution"
+            chart.style = 10
+
+            # Data references
+            labels = Reference(ws, min_col=9, min_row=chart_data_row+1, max_row=chart_data_row+4)
+            data = Reference(ws, min_col=10, min_row=chart_data_row, max_row=chart_data_row+4)
+
+            chart.add_data(data, titles_from_data=True)
+            chart.set_categories(labels)
+
+            # Style the chart
+            chart.width = 14
+            chart.height = 10
+
+            # Position chart
+            ws.add_chart(chart, f'K{table_start_row}')
+            logger.info("Native Donut chart created for severity distribution")
+        except Exception as e:
+            logger.warning(f"Failed to create donut chart: {e}")
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # ROW AFTER TABLE: MCKINSEY INSIGHT BOX - Strategic Recommendations
+        # ═══════════════════════════════════════════════════════════════════════
+        insight_row = max(current_row + 1, table_start_row + 10)
+        ws.row_dimensions[insight_row].height = 8  # Spacer
+
+        insight_row += 1
+        ws.row_dimensions[insight_row].height = 22
+        for col in range(2, 16):  # B-O
+            ws.cell(row=insight_row, column=col).fill = fill_navy
+        ws[f'B{insight_row}'] = "STRATEGIC RECOMMENDATIONS"
+        ws[f'B{insight_row}'].font = Font(bold=True, size=11, color=WHITE)
+        ws[f'B{insight_row}'].alignment = Alignment(horizontal='left', vertical='center')
+        ws.merge_cells(f'B{insight_row}:O{insight_row}')
+
+        insight_row += 1
+
+        # Three recommendation cards
+        recommendations = [
+            ("QUICK WIN", f"Address {top_cats[0] if top_cats else 'top category'} - {top_cats_pct/3:.0f}% of escalations", LOW_GREEN),
+            ("HIGH IMPACT", f"Focus on ${top_cats_financial:,.0f} preventable costs through automation", MED_AMBER),
+            ("STRATEGIC", f"Improve process health from {process_health:.0f} to 80+ target", AMDOCS_RED),
+        ]
+
+        for i, (title, desc, color) in enumerate(recommendations):
+            rec_row = insight_row + (i * 2)
+            ws.row_dimensions[rec_row].height = 18
+            ws.row_dimensions[rec_row + 1].height = 22
+
+            # Title
+            cell = ws[f'B{rec_row}']
+            cell.value = title
+            cell.font = Font(bold=True, size=9, color=color)
+            cell.fill = fill_light
+            ws.merge_cells(f'B{rec_row}:D{rec_row}')
+
+            # Description
+            cell = ws[f'E{rec_row}']
+            cell.value = desc
+            cell.font = Font(size=9, color=CHARCOAL)
+            cell.fill = fill_light
+            cell.alignment = Alignment(wrap_text=True)
+            ws.merge_cells(f'E{rec_row}:O{rec_row}')
 
         # ═══════════════════════════════════════════════════════════════════════
         # FOOTER
         # ═══════════════════════════════════════════════════════════════════════
-        footer_row = max(current_row + 2, table_start_row + 16)
-        ws.row_dimensions[footer_row].height = 20
-        footer_text = f"Generated by Escalation AI v{REPORT_VERSION}  |  {report_date}  |  Confidential"
+        footer_row = insight_row + 8
+        ws.row_dimensions[footer_row].height = 18
+        footer_text = f"Generated by Escalation AI v{REPORT_VERSION}  |  {report_date}  |  Confidential - Internal Use Only"
         ws[f'B{footer_row}'] = footer_text
-        ws[f'B{footer_row}'].font = Font(size=9, italic=True, color=SLATE)
+        ws[f'B{footer_row}'].font = Font(size=8, italic=True, color=SLATE)
         ws[f'B{footer_row}'].alignment = Alignment(horizontal='center')
-        ws.merge_cells(f'B{footer_row}:R{footer_row}')
+        ws.merge_cells(f'B{footer_row}:O{footer_row}')
 
-        logger.info("Summary page created successfully")
+        logger.info("McKinsey-grade Summary page created successfully")
 
     def write_dashboard(self, df, chart_paths):
         """Write the Visual Analytics sheet with embedded chart images in a grid layout."""
