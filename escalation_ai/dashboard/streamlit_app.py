@@ -5927,6 +5927,627 @@ def render_excel_dashboard(df):
         </div>
         """, unsafe_allow_html=True)
 
+    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
+
+    # ========== ROW 6: STRATEGIC RECOMMENDATIONS ==========
+    st.markdown("""
+    <div style="background: rgba(15, 23, 42, 0.6); border-radius: 16px; padding: 20px;
+                border: 1px solid rgba(34, 197, 94, 0.3);">
+        <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.2rem;">
+            🎯 Strategic Recommendations
+        </h3>
+        <p style="color: #64748b; font-size: 0.85rem; margin: 0;">
+            AI-generated insights with confidence scoring
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    recommendations = generate_strategic_recommendations(df)
+
+    rec_cols = st.columns(2)
+    for i, rec in enumerate(recommendations[:4]):
+        with rec_cols[i % 2]:
+            priority_color = '#ef4444' if rec['priority'] == 'P1' else '#f97316' if rec['priority'] == 'P2' else '#3b82f6'
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.8) 100%);
+                        border-radius: 12px; padding: 18px; margin: 10px 0;
+                        border-left: 4px solid {priority_color};">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <span style="background: {priority_color}; color: white; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.8rem;">
+                        {rec['priority']}
+                    </span>
+                    <span style="color: #22c55e; font-size: 0.8rem;">🎯 {rec['confidence']}% confidence</span>
+                </div>
+                <div style="color: #e2e8f0; font-weight: 600; font-size: 1rem; margin-bottom: 8px;">{rec['title']}</div>
+                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 12px;">{rec['description']}</div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.75rem;">
+                    <div><span style="color: #22c55e;">Impact:</span> <span style="color: #e2e8f0;">{rec['impact']}</span></div>
+                    <div><span style="color: #3b82f6;">Timeline:</span> <span style="color: #e2e8f0;">{rec['timeline']}</span></div>
+                    <div><span style="color: #f97316;">Investment:</span> <span style="color: #e2e8f0;">{rec['investment']}</span></div>
+                    <div><span style="color: #8b5cf6;">ROI:</span> <span style="color: #e2e8f0;">{rec['roi']}</span></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+
+# ============================================================================
+# CONSOLIDATED TAB 2: DEEP ANALYSIS
+# ============================================================================
+
+def render_deep_analysis(df):
+    """Render consolidated Deep Analysis page (Analytics + Root Cause + Advanced Insights)."""
+    render_spectacular_header("Deep Analysis", "Comprehensive drill-down for detailed insights", "📈")
+
+    # Main tabs - flattened structure
+    tabs = st.tabs(["🎯 Categories", "👥 Engineers", "🔬 Root Cause", "📊 Patterns & SLA", "🔗 Similarity", "📚 Lessons Learned"])
+
+    # ===== TAB 1: CATEGORIES =====
+    with tabs[0]:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(chart_category_sunburst(df), use_container_width=True)
+        with col2:
+            st.plotly_chart(chart_friction_by_category(df), use_container_width=True)
+
+        # Category drill-down with inline selector
+        st.markdown("#### 🔍 Category Drill-Down")
+        if 'AI_Category' in df.columns:
+            categories = sorted(df['AI_Category'].unique().tolist())
+            selected_cat = st.selectbox("Select a category to explore:", categories, key="deep_cat_select")
+
+            cat_df = df[df['AI_Category'] == selected_cat]
+            cat_cost = cat_df['Financial_Impact'].sum() if 'Financial_Impact' in cat_df.columns else 0
+            cat_count = len(cat_df)
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Tickets", f"{cat_count:,}")
+            m2.metric("Total Cost", f"${cat_cost:,.0f}")
+            m3.metric("Avg Cost", f"${cat_cost/cat_count:,.0f}" if cat_count > 0 else "$0")
+            m4.metric("% of Total", f"{cat_count/len(df)*100:.1f}%")
+
+            # Sub-category breakdown
+            if 'AI_SubCategory' in cat_df.columns:
+                sub_data = cat_df.groupby('AI_SubCategory').agg({
+                    'Financial_Impact': 'sum',
+                    'AI_Category': 'count'
+                }).rename(columns={'AI_Category': 'Count'}).sort_values('Financial_Impact', ascending=False)
+
+                fig_sub = go.Figure(data=[go.Bar(
+                    x=sub_data.index,
+                    y=sub_data['Financial_Impact'],
+                    marker_color='#3b82f6',
+                    text=[f'${v:,.0f}' for v in sub_data['Financial_Impact']],
+                    textposition='outside'
+                )])
+                fig_sub.update_layout(
+                    title=f"Sub-Categories in {selected_cat}",
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    height=350,
+                    margin=dict(t=40, b=80),
+                    xaxis=dict(tickangle=-45, tickfont=dict(size=10, color='#94a3b8')),
+                    yaxis=dict(tickfont=dict(size=10, color='#94a3b8'), gridcolor='rgba(255,255,255,0.1)')
+                )
+                st.plotly_chart(fig_sub, use_container_width=True)
+
+    # ===== TAB 2: ENGINEERS =====
+    with tabs[1]:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.plotly_chart(chart_engineer_performance(df), use_container_width=True)
+        with col2:
+            # Engineer quadrant from Advanced Insights
+            try:
+                from escalation_ai.advanced_insights import chart_engineer_quadrant
+                st.plotly_chart(chart_engineer_quadrant(df), use_container_width=True)
+                st.markdown("""
+                <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; margin-top: 10px;">
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 0.8rem;">
+                        <div><span style="color: #22c55e;">●</span> <b>Fast & Clean:</b> High performers</div>
+                        <div><span style="color: #3b82f6;">●</span> <b>Slow but Thorough:</b> Quality focused</div>
+                        <div><span style="color: #f97316;">●</span> <b>Fast but Sloppy:</b> Speed over quality</div>
+                        <div><span style="color: #ef4444;">●</span> <b>Needs Support:</b> Training required</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            except:
+                st.info("Engineer quadrant analysis requires additional data")
+
+    # ===== TAB 3: ROOT CAUSE =====
+    with tabs[2]:
+        col1, col2 = st.columns(2)
+        with col1:
+            render_chart_with_insight('pareto_analysis', chart_pareto_analysis(df), df)
+        with col2:
+            st.plotly_chart(chart_driver_tree(df), use_container_width=True)
+
+        st.markdown("#### 📊 Root Cause Impact Quantification")
+        col3, col4 = st.columns(2)
+        with col3:
+            render_chart_with_insight('root_cause_impact', chart_root_cause_impact(df), df)
+        with col4:
+            render_chart_with_insight('risk_heatmap', chart_risk_heatmap(df), df)
+
+    # ===== TAB 4: PATTERNS & SLA =====
+    with tabs[3]:
+        try:
+            from escalation_ai.advanced_insights import (
+                chart_sla_funnel, chart_aging_analysis, chart_time_heatmap,
+                chart_resolution_consistency, chart_recurrence_patterns
+            )
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("##### 📊 SLA Compliance Funnel")
+                st.plotly_chart(chart_sla_funnel(df), use_container_width=True)
+            with col2:
+                st.markdown("##### ⏱️ Ticket Aging Analysis")
+                st.plotly_chart(chart_aging_analysis(df), use_container_width=True)
+
+            col3, col4 = st.columns(2)
+            with col3:
+                st.markdown("##### 🕐 Peak Escalation Times")
+                st.plotly_chart(chart_time_heatmap(df), use_container_width=True)
+            with col4:
+                st.markdown("##### 🔄 Recurrence Patterns")
+                st.plotly_chart(chart_recurrence_patterns(df), use_container_width=True)
+
+        except ImportError:
+            st.plotly_chart(chart_recurrence_risk(df), use_container_width=True)
+            st.plotly_chart(chart_resolution_distribution(df), use_container_width=True)
+
+    # ===== TAB 5: SIMILARITY =====
+    with tabs[4]:
+        if 'Similarity_Score' in df.columns or 'Similar_Ticket_Count' in df.columns:
+            col1, col2 = st.columns(2)
+            with col1:
+                if 'Similar_Ticket_Count' in df.columns:
+                    fig_sim = go.Figure(data=[go.Histogram(x=df['Similar_Ticket_Count'], nbinsx=20, marker_color='#8b5cf6')])
+                    fig_sim.update_layout(
+                        title="Similar Ticket Distribution",
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        height=300
+                    )
+                    st.plotly_chart(fig_sim, use_container_width=True)
+            with col2:
+                if 'Similarity_Score' in df.columns:
+                    fig_score = go.Figure(data=[go.Histogram(x=df['Similarity_Score'], nbinsx=20, marker_color='#06b6d4')])
+                    fig_score.update_layout(
+                        title="Similarity Score Distribution",
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        height=300
+                    )
+                    st.plotly_chart(fig_score, use_container_width=True)
+
+            # Consistency analysis
+            if 'AI_Category' in df.columns and 'Similarity_Score' in df.columns:
+                consistency = df.groupby('AI_Category')['Similarity_Score'].agg(['mean', 'std', 'count'])
+                consistency = consistency[consistency['count'] >= 5].sort_values('mean', ascending=False)
+
+                fig_cons = go.Figure(data=[go.Bar(
+                    x=consistency.index,
+                    y=consistency['mean'],
+                    error_y=dict(type='data', array=consistency['std'], visible=True),
+                    marker_color='#3b82f6'
+                )])
+                fig_cons.update_layout(
+                    title="Resolution Consistency by Category",
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    height=350, xaxis_tickangle=-45
+                )
+                st.plotly_chart(fig_cons, use_container_width=True)
+        else:
+            st.info("Similarity analysis requires similarity scoring data")
+
+    # ===== TAB 6: LESSONS LEARNED =====
+    with tabs[5]:
+        if 'Learning_Effectiveness_Score' in df.columns:
+            # Scorecard overview
+            pillars = ['Documentation', 'Training', 'Process', 'Communication', 'Tools', 'Knowledge']
+            pillar_cols = [f'{p}_Score' for p in pillars if f'{p}_Score' in df.columns]
+
+            if pillar_cols:
+                pillar_means = {col.replace('_Score', ''): df[col].mean() for col in pillar_cols}
+
+                fig_radar = go.Figure(data=go.Scatterpolar(
+                    r=list(pillar_means.values()),
+                    theta=list(pillar_means.keys()),
+                    fill='toself',
+                    marker_color='#8b5cf6'
+                ))
+                fig_radar.update_layout(
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    height=400
+                )
+                st.plotly_chart(fig_radar, use_container_width=True)
+
+            # Category rankings
+            if 'AI_Category' in df.columns:
+                cat_learning = df.groupby('AI_Category')['Learning_Effectiveness_Score'].mean().sort_values(ascending=False)
+
+                def get_grade(score):
+                    if score >= 80: return 'A'
+                    elif score >= 70: return 'B'
+                    elif score >= 60: return 'C'
+                    elif score >= 50: return 'D'
+                    return 'F'
+
+                fig_learn = go.Figure(data=[go.Bar(
+                    x=cat_learning.index,
+                    y=cat_learning.values,
+                    marker_color=['#22c55e' if v >= 70 else '#f97316' if v >= 50 else '#ef4444' for v in cat_learning.values],
+                    text=[get_grade(v) for v in cat_learning.values],
+                    textposition='outside'
+                )])
+                fig_learn.update_layout(
+                    title="Learning Effectiveness by Category",
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    height=350, xaxis_tickangle=-45
+                )
+                st.plotly_chart(fig_learn, use_container_width=True)
+        else:
+            st.info("Lessons learned analysis requires learning effectiveness scoring data")
+
+
+# ============================================================================
+# CONSOLIDATED TAB 4: BENCHMARKING & MONITORING
+# ============================================================================
+
+def render_benchmarking_monitoring(df):
+    """Render consolidated Benchmarking, Alerts, and Drift Detection page."""
+    render_spectacular_header("Benchmarking & Monitoring", "Performance tracking against standards and thresholds", "🏆")
+
+    tabs = st.tabs(["🏆 Industry Benchmarks", "⚠️ Alert Thresholds", "📊 Drift Detection"])
+
+    # ===== TAB 1: BENCHMARKING =====
+    with tabs[0]:
+        recurrence_rate = df['AI_Recurrence_Risk'].mean() if 'AI_Recurrence_Risk' in df.columns else 0.15
+        resolution_days = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
+
+        current_metrics = {
+            'Resolution Time': {'value': resolution_days, 'unit': 'days', 'best': 2, 'avg': 5, 'lower_better': True},
+            'Recurrence Rate': {'value': recurrence_rate * 100, 'unit': '%', 'best': 5, 'avg': 15, 'lower_better': True},
+            'SLA Breach': {'value': 12, 'unit': '%', 'best': 5, 'avg': 15, 'lower_better': True},
+            'First Contact Resolution': {'value': 45, 'unit': '%', 'best': 70, 'avg': 50, 'lower_better': False},
+            'Cost per Escalation': {'value': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else 850, 'unit': '$', 'best': 500, 'avg': 900, 'lower_better': True},
+            'Customer Satisfaction': {'value': 72, 'unit': '%', 'best': 90, 'avg': 75, 'lower_better': False}
+        }
+
+        cols = st.columns(3)
+        for i, (metric_name, data) in enumerate(current_metrics.items()):
+            with cols[i % 3]:
+                value = data['value']
+                best = data['best']
+                avg = data['avg']
+
+                if data['lower_better']:
+                    position = 'Best-in-Class' if value <= best else 'Above Average' if value <= avg else 'Below Average'
+                    color = '#22c55e' if value <= best else '#f97316' if value <= avg else '#ef4444'
+                else:
+                    position = 'Best-in-Class' if value >= best else 'Above Average' if value >= avg else 'Below Average'
+                    color = '#22c55e' if value >= best else '#f97316' if value >= avg else '#ef4444'
+
+                st.markdown(f"""
+                <div style="background: rgba(15, 23, 42, 0.6); border-radius: 12px; padding: 20px; margin: 10px 0;
+                            border: 1px solid {color}40;">
+                    <div style="color: #94a3b8; font-size: 0.8rem; text-transform: uppercase;">{metric_name}</div>
+                    <div style="color: {color}; font-size: 2rem; font-weight: 700; margin: 8px 0;">
+                        {f'${value:,.0f}' if data['unit'] == '$' else f'{value:.1f}{data["unit"]}'}
+                    </div>
+                    <div style="color: #64748b; font-size: 0.75rem;">
+                        Best: {f'${best}' if data['unit'] == '$' else f'{best}{data["unit"]}'} |
+                        Avg: {f'${avg}' if data['unit'] == '$' else f'{avg}{data["unit"]}'}
+                    </div>
+                    <div style="color: {color}; font-size: 0.85rem; margin-top: 8px; font-weight: 600;">{position}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # ===== TAB 2: ALERTS =====
+    with tabs[1]:
+        date_col = None
+        for col in ['Issue_Date', 'tickets_data_issue_datetime', 'Created_Date', 'Date']:
+            if col in df.columns:
+                date_col = col
+                break
+
+        if date_col:
+            df_alert = df.copy()
+            df_alert['date'] = pd.to_datetime(df_alert[date_col]).dt.date
+
+            daily_metrics = df_alert.groupby('date').agg({
+                'Financial_Impact': 'sum',
+                'Strategic_Friction_Score': 'mean' if 'Strategic_Friction_Score' in df.columns else 'count',
+                'AI_Recurrence_Risk': 'mean' if 'AI_Recurrence_Risk' in df.columns else 'count'
+            }).reset_index()
+            daily_metrics['escalation_count'] = df_alert.groupby('date').size().values
+
+            # Calculate thresholds
+            esc_warning = daily_metrics['escalation_count'].quantile(0.75)
+            esc_critical = daily_metrics['escalation_count'].quantile(0.90)
+            current_esc = daily_metrics['escalation_count'].iloc[-1] if len(daily_metrics) > 0 else 0
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                status = 'Critical' if current_esc > esc_critical else 'Warning' if current_esc > esc_warning else 'Normal'
+                color = '#ef4444' if status == 'Critical' else '#f97316' if status == 'Warning' else '#22c55e'
+                st.markdown(f"""
+                <div style="background: rgba(15, 23, 42, 0.6); border-radius: 12px; padding: 20px; border: 2px solid {color};">
+                    <div style="color: #94a3b8; font-size: 0.8rem;">DAILY ESCALATIONS</div>
+                    <div style="color: {color}; font-size: 2.5rem; font-weight: 700;">{current_esc:.0f}</div>
+                    <div style="color: {color}; font-size: 0.9rem;">● {status}</div>
+                    <div style="color: #64748b; font-size: 0.7rem; margin-top: 8px;">
+                        Warning: >{esc_warning:.0f} | Critical: >{esc_critical:.0f}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                if 'Strategic_Friction_Score' in df.columns:
+                    friction_warning = daily_metrics['Strategic_Friction_Score'].quantile(0.75)
+                    friction_critical = daily_metrics['Strategic_Friction_Score'].quantile(0.90)
+                    current_friction = daily_metrics['Strategic_Friction_Score'].iloc[-1] if len(daily_metrics) > 0 else 0
+                    status = 'Critical' if current_friction > friction_critical else 'Warning' if current_friction > friction_warning else 'Normal'
+                    color = '#ef4444' if status == 'Critical' else '#f97316' if status == 'Warning' else '#22c55e'
+                    st.markdown(f"""
+                    <div style="background: rgba(15, 23, 42, 0.6); border-radius: 12px; padding: 20px; border: 2px solid {color};">
+                        <div style="color: #94a3b8; font-size: 0.8rem;">DAILY FRICTION SCORE</div>
+                        <div style="color: {color}; font-size: 2.5rem; font-weight: 700;">{current_friction:.1f}</div>
+                        <div style="color: {color}; font-size: 0.9rem;">● {status}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            with col3:
+                if 'AI_Recurrence_Risk' in df.columns:
+                    risk_warning = daily_metrics['AI_Recurrence_Risk'].quantile(0.75) * 100
+                    risk_critical = daily_metrics['AI_Recurrence_Risk'].quantile(0.90) * 100
+                    current_risk = (daily_metrics['AI_Recurrence_Risk'].iloc[-1] if len(daily_metrics) > 0 else 0) * 100
+                    status = 'Critical' if current_risk > risk_critical else 'Warning' if current_risk > risk_warning else 'Normal'
+                    color = '#ef4444' if status == 'Critical' else '#f97316' if status == 'Warning' else '#22c55e'
+                    st.markdown(f"""
+                    <div style="background: rgba(15, 23, 42, 0.6); border-radius: 12px; padding: 20px; border: 2px solid {color};">
+                        <div style="color: #94a3b8; font-size: 0.8rem;">RECURRENCE RISK</div>
+                        <div style="color: {color}; font-size: 2.5rem; font-weight: 700;">{current_risk:.1f}%</div>
+                        <div style="color: {color}; font-size: 0.9rem;">● {status}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Timeline chart
+            fig_timeline = go.Figure()
+            fig_timeline.add_trace(go.Scatter(
+                x=daily_metrics['date'], y=daily_metrics['escalation_count'],
+                mode='lines+markers', name='Escalations', line=dict(color='#3b82f6')
+            ))
+            fig_timeline.add_hline(y=esc_warning, line_dash="dash", line_color="#f97316", annotation_text="Warning")
+            fig_timeline.add_hline(y=esc_critical, line_dash="dash", line_color="#ef4444", annotation_text="Critical")
+            fig_timeline.update_layout(
+                title="Escalation Trend with Thresholds",
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                height=350
+            )
+            st.plotly_chart(fig_timeline, use_container_width=True)
+        else:
+            st.warning("Date column not found for alert analysis")
+
+    # ===== TAB 3: DRIFT DETECTION =====
+    with tabs[2]:
+        date_col = None
+        for col in ['Issue_Date', 'tickets_data_issue_datetime', 'Created_Date']:
+            if col in df.columns:
+                date_col = col
+                break
+
+        if date_col and 'AI_Category' in df.columns:
+            df_drift = df.copy()
+            df_drift['date'] = pd.to_datetime(df_drift[date_col])
+            df_drift = df_drift.sort_values('date')
+
+            # Split into baseline and current
+            split_idx = int(len(df_drift) * 0.6)
+            baseline = df_drift.iloc[:split_idx]
+            current = df_drift.iloc[split_idx:]
+
+            baseline_dist = baseline['AI_Category'].value_counts(normalize=True)
+            current_dist = current['AI_Category'].value_counts(normalize=True)
+
+            all_cats = sorted(set(baseline_dist.index) | set(current_dist.index))
+
+            fig_drift = go.Figure()
+            fig_drift.add_trace(go.Bar(
+                name='Baseline (60%)',
+                x=all_cats,
+                y=[baseline_dist.get(c, 0) * 100 for c in all_cats],
+                marker_color='#3b82f6'
+            ))
+            fig_drift.add_trace(go.Bar(
+                name='Current (40%)',
+                x=all_cats,
+                y=[current_dist.get(c, 0) * 100 for c in all_cats],
+                marker_color='#22c55e'
+            ))
+            fig_drift.update_layout(
+                title="Category Distribution: Baseline vs Current",
+                barmode='group',
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                height=400,
+                xaxis_tickangle=-45,
+                yaxis_title="Percentage (%)"
+            )
+            st.plotly_chart(fig_drift, use_container_width=True)
+
+            # Drift metrics
+            st.markdown("#### 📊 Drift Analysis")
+            drift_data = []
+            for cat in all_cats:
+                b_pct = baseline_dist.get(cat, 0) * 100
+                c_pct = current_dist.get(cat, 0) * 100
+                change = c_pct - b_pct
+                drift_data.append({
+                    'Category': cat,
+                    'Baseline %': f'{b_pct:.1f}%',
+                    'Current %': f'{c_pct:.1f}%',
+                    'Change': f'{change:+.1f}%',
+                    'Status': '📈 Increasing' if change > 2 else '📉 Decreasing' if change < -2 else '➡️ Stable'
+                })
+
+            st.dataframe(pd.DataFrame(drift_data), use_container_width=True, hide_index=True)
+        else:
+            st.warning("Date and Category columns required for drift detection")
+
+
+# ============================================================================
+# CONSOLIDATED TAB 5: PLANNING & ACTIONS
+# ============================================================================
+
+def render_planning_actions(df):
+    """Render consolidated Planning & Actions page (What-If + Action Tracker)."""
+    render_spectacular_header("Planning & Actions", "Scenario modeling and initiative tracking", "🎯")
+
+    tabs = st.tabs(["🔮 What-If Simulator", "📋 Action Tracker"])
+
+    # ===== TAB 1: WHAT-IF SIMULATOR =====
+    with tabs[0]:
+        st.markdown("#### Adjust parameters to simulate impact on escalation metrics")
+
+        recurrence_rate = df['AI_Recurrence_Risk'].mean() if 'AI_Recurrence_Risk' in df.columns else 0.15
+        avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
+        friction_sum = df['Strategic_Friction_Score'].sum() if 'Strategic_Friction_Score' in df.columns else 3000
+        cost_sum = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else 375000
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("##### 🎛️ Scenario Parameters")
+            staffing = st.slider("Staffing Changes (engineers)", -5, 10, 0, key="whatif_staff")
+            training = st.slider("Training Impact (% error reduction)", 0, 50, 0, key="whatif_train")
+            volume = st.slider("Volume Changes (%)", -30, 50, 0, key="whatif_vol")
+            process = st.slider("Process Improvements (% efficiency)", 0, 40, 0, key="whatif_proc")
+
+        with col2:
+            st.markdown("##### 📊 Projected Impact")
+
+            # Calculate projections
+            staff_factor = 1 - (staffing * 0.03)
+            training_factor = 1 - (training / 100)
+            volume_factor = 1 + (volume / 100)
+            process_factor = 1 - (process / 100)
+
+            proj_resolution = avg_resolution * staff_factor * process_factor
+            proj_recurrence = recurrence_rate * training_factor
+            proj_friction = friction_sum * volume_factor * process_factor / len(df)
+            proj_cost = cost_sum * volume_factor * staff_factor * process_factor / len(df)
+
+            metrics = [
+                ("Resolution Time", f"{avg_resolution:.1f}d", f"{proj_resolution:.1f}d", proj_resolution < avg_resolution),
+                ("Recurrence Rate", f"{recurrence_rate*100:.1f}%", f"{proj_recurrence*100:.1f}%", proj_recurrence < recurrence_rate),
+                ("Avg Friction", f"{friction_sum/len(df):.1f}", f"{proj_friction:.1f}", proj_friction < friction_sum/len(df)),
+                ("Avg Cost", f"${cost_sum/len(df):,.0f}", f"${proj_cost:,.0f}", proj_cost < cost_sum/len(df))
+            ]
+
+            for name, baseline, projected, is_better in metrics:
+                color = '#22c55e' if is_better else '#ef4444'
+                st.markdown(f"""
+                <div style="background: rgba(15, 23, 42, 0.6); border-radius: 8px; padding: 12px; margin: 8px 0;
+                            display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #94a3b8;">{name}</span>
+                    <div>
+                        <span style="color: #64748b; text-decoration: line-through; margin-right: 10px;">{baseline}</span>
+                        <span style="color: {color}; font-weight: 700;">{projected}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # ===== TAB 2: ACTION TRACKER =====
+    with tabs[1]:
+        # Top Systemic Issues
+        st.markdown("#### 🎯 Top 5 Systemic Issues")
+        st.markdown("*Data-driven analysis of highest-impact recurring problems*")
+
+        if 'AI_Category' in df.columns:
+            issue_analysis = df.groupby('AI_Category').agg({
+                'Financial_Impact': ['sum', 'count'],
+                'AI_Recurrence_Risk': 'mean' if 'AI_Recurrence_Risk' in df.columns else 'count'
+            }).reset_index()
+            issue_analysis.columns = ['Category', 'Total_Cost', 'Count', 'Recurrence']
+            issue_analysis = issue_analysis.sort_values('Total_Cost', ascending=False).head(5)
+
+            for idx, row in issue_analysis.iterrows():
+                rec = generate_strategic_recommendations(df[df['AI_Category'] == row['Category']])
+                fix = rec[0]['description'] if rec else "Implement process improvements"
+
+                st.markdown(f"""
+                <div style="background: rgba(15, 23, 42, 0.6); border-radius: 12px; padding: 16px; margin: 10px 0;
+                            border-left: 4px solid #ef4444;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <span style="color: #e2e8f0; font-weight: 700; font-size: 1.1rem;">{row['Category']}</span>
+                            <span style="color: #64748b; margin-left: 15px;">{row['Count']} tickets</span>
+                        </div>
+                        <span style="color: #ef4444; font-weight: 700; font-size: 1.2rem;">${row['Total_Cost']:,.0f}</span>
+                    </div>
+                    <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 8px;">
+                        <b>Recommended Fix:</b> {fix[:150]}...
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # Initiative Management
+        st.markdown("---")
+        st.markdown("#### 📋 Initiative Management")
+
+        if 'action_items' not in st.session_state:
+            st.session_state.action_items = []
+
+        # Add new initiative
+        with st.expander("➕ Add New Initiative"):
+            new_title = st.text_input("Initiative Title", key="new_init_title")
+            new_priority = st.selectbox("Priority", ["P1", "P2", "P3"], key="new_init_priority")
+            new_owner = st.text_input("Owner", key="new_init_owner")
+            new_due = st.date_input("Due Date", key="new_init_due")
+
+            if st.button("Add Initiative", key="add_init_btn"):
+                if new_title:
+                    st.session_state.action_items.append({
+                        'title': new_title,
+                        'priority': new_priority,
+                        'owner': new_owner,
+                        'due': str(new_due),
+                        'status': 'Not Started',
+                        'progress': 0
+                    })
+                    st.success(f"Added: {new_title}")
+                    st.rerun()
+
+        # Display initiatives
+        for i, item in enumerate(st.session_state.action_items):
+            priority_color = '#ef4444' if item['priority'] == 'P1' else '#f97316' if item['priority'] == 'P2' else '#3b82f6'
+            status_color = '#22c55e' if item['status'] == 'Complete' else '#f97316' if item['status'] == 'In Progress' else '#64748b'
+
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                st.markdown(f"""
+                <div style="background: rgba(15, 23, 42, 0.6); border-radius: 8px; padding: 12px;
+                            border-left: 4px solid {priority_color};">
+                    <span style="background: {priority_color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">{item['priority']}</span>
+                    <span style="color: #e2e8f0; font-weight: 600; margin-left: 10px;">{item['title']}</span>
+                    <div style="color: #64748b; font-size: 0.8rem; margin-top: 5px;">
+                        Owner: {item['owner']} | Due: {item['due']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col2:
+                new_status = st.selectbox("Status", ["Not Started", "In Progress", "Complete"],
+                                         index=["Not Started", "In Progress", "Complete"].index(item['status']),
+                                         key=f"status_{i}", label_visibility="collapsed")
+                if new_status != item['status']:
+                    st.session_state.action_items[i]['status'] = new_status
+                    st.rerun()
+            with col3:
+                if st.button("🗑️", key=f"del_{i}"):
+                    st.session_state.action_items.pop(i)
+                    st.rerun()
+
 
 # ============================================================================
 # MAIN APP
@@ -5943,18 +6564,16 @@ def main():
         
         page = st.radio(
             "Navigation",
-            ["📊 Excel Dashboard", "🎯 Executive Summary", "📊 Dashboard", "📈 Analytics",
-             "💰 Financial Analysis", "🏆 Benchmarking", "🔬 Root Cause",
-             "🚀 Advanced Insights", "🔍 Drift Detection", "⚠️ Alerts",
-             "🔮 What-If Simulator", "📋 Action Tracker", "📽️ Presentation Mode"],
+            ["📊 Executive Dashboard", "📈 Deep Analysis", "💰 Financial Intelligence",
+             "🏆 Benchmarking & Monitoring", "🎯 Planning & Actions", "📽️ Presentation Mode"],
             label_visibility="collapsed"
         )
         
         # Load data from default source
         df, data_source = load_data()
 
-        # Excel-style filters (shown for Excel Dashboard page)
-        if page == "📊 Excel Dashboard":
+        # Excel-style filters (shown for Executive Dashboard page)
+        if page == "📊 Executive Dashboard":
             st.markdown("---")
             st.markdown("### Add filter(s)")
 
@@ -6121,31 +6740,17 @@ def main():
                         mime="text/csv"
                     )
     
-    # Main content - Route to appropriate page
-    if page == "📊 Excel Dashboard":
+    # Main content - Route to appropriate page (6 consolidated tabs)
+    if page == "📊 Executive Dashboard":
         render_excel_dashboard(df)
-    elif page == "🎯 Executive Summary":
-        render_executive_summary(df)
-    elif page == "📊 Dashboard":
-        render_dashboard(df)
-    elif page == "📈 Analytics":
-        render_analytics(df)
-    elif page == "💰 Financial Analysis":
+    elif page == "📈 Deep Analysis":
+        render_deep_analysis(df)
+    elif page == "💰 Financial Intelligence":
         render_financial_analysis(df)
-    elif page == "🏆 Benchmarking":
-        render_benchmarking(df)
-    elif page == "🔬 Root Cause":
-        render_root_cause(df)
-    elif page == "🚀 Advanced Insights":
-        render_advanced_insights(df)
-    elif page == "🔍 Drift Detection":
-        render_drift_page(df)
-    elif page == "⚠️ Alerts":
-        render_alerts_page(df)
-    elif page == "🔮 What-If Simulator":
-        render_whatif_simulator(df)
-    elif page == "📋 Action Tracker":
-        render_action_tracker(df)
+    elif page == "🏆 Benchmarking & Monitoring":
+        render_benchmarking_monitoring(df)
+    elif page == "🎯 Planning & Actions":
+        render_planning_actions(df)
     elif page == "📽️ Presentation Mode":
         render_presentation_mode(df)
 
