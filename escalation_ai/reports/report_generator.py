@@ -860,399 +860,371 @@ class ExcelReportWriter:
 
     def write_summary_page(self, df, exec_summary_text, chart_paths):
         """
-        Write the unified Summary page - the 'Money Page' for executives.
-        Combines Executive Summary + Dashboard elements with full-width Amdocs branding.
+        McKinsey-Grade Executive Summary Page.
+        Pyramid Principle: Lead with the answer, support with data.
         """
         import re
         import numpy as np
 
-        ws = self.wb.create_sheet("Summary", 0)  # Insert as first sheet
+        ws = self.wb.create_sheet("Summary", 0)
         ws.sheet_view.showGridLines = False
 
         report_date = datetime.now().strftime("%B %d, %Y")
-        report_time = datetime.now().strftime("%H:%M")
 
         # ═══════════════════════════════════════════════════════════════════════
-        # AMDOCS COLOR PALETTE
+        # PROFESSIONAL COLOR PALETTE (Consulting-Grade)
         # ═══════════════════════════════════════════════════════════════════════
-        AMDOCS_RED = "C63F42"       # Primary brand red (Mojo)
-        AMDOCS_GREY = "D9DBE2"      # Light grey (Mischka)
-        AMDOCS_BLACK = "000000"     # Black
-        AMDOCS_DARK = "1A1A2E"      # Dark blue-black for headers
+        NAVY = "1B2A4E"           # Professional navy (headers)
+        ACCENT = "6B2574"         # Amdocs purple (accent)
+        CHARCOAL = "2C3E50"       # Text color
+        SLATE = "5D6D7E"          # Secondary text
+        LIGHT_GREY = "F8F9FA"     # Background
+        WHITE = "FFFFFF"
 
-        # Derived colors for status indicators
-        fill_header = PatternFill(start_color=AMDOCS_RED, end_color=AMDOCS_RED, fill_type="solid")
-        fill_dark = PatternFill(start_color=AMDOCS_DARK, end_color=AMDOCS_DARK, fill_type="solid")
-        fill_light = PatternFill(start_color=AMDOCS_GREY, end_color=AMDOCS_GREY, fill_type="solid")
-        fill_critical = PatternFill(start_color="FCEAEA", end_color="FCEAEA", fill_type="solid")  # Red tint
-        fill_warning = PatternFill(start_color="FFF3E0", end_color="FFF3E0", fill_type="solid")   # Amber tint
-        fill_success = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")   # Green tint
-        fill_info = PatternFill(start_color="E3F2FD", end_color="E3F2FD", fill_type="solid")      # Blue tint
-        fill_white = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+        # Status colors (muted, professional)
+        RED_BG = "FADBD8"
+        RED_TEXT = "922B21"
+        AMBER_BG = "FCF3CF"
+        AMBER_TEXT = "7D6608"
+        GREEN_BG = "D5F5E3"
+        GREEN_TEXT = "1E8449"
 
-        border_gray = Border(
+        fill_navy = PatternFill(start_color=NAVY, end_color=NAVY, fill_type="solid")
+        fill_accent = PatternFill(start_color=ACCENT, end_color=ACCENT, fill_type="solid")
+        fill_light = PatternFill(start_color=LIGHT_GREY, end_color=LIGHT_GREY, fill_type="solid")
+        fill_white = PatternFill(start_color=WHITE, end_color=WHITE, fill_type="solid")
+        fill_red = PatternFill(start_color=RED_BG, end_color=RED_BG, fill_type="solid")
+        fill_amber = PatternFill(start_color=AMBER_BG, end_color=AMBER_BG, fill_type="solid")
+        fill_green = PatternFill(start_color=GREEN_BG, end_color=GREEN_BG, fill_type="solid")
+
+        border_thin = Border(
             left=Side(style='thin', color='E0E0E0'),
             right=Side(style='thin', color='E0E0E0'),
             top=Side(style='thin', color='E0E0E0'),
             bottom=Side(style='thin', color='E0E0E0')
         )
-        border_red = Border(
-            left=Side(style='medium', color=AMDOCS_RED),
-            right=Side(style='medium', color=AMDOCS_RED),
-            top=Side(style='medium', color=AMDOCS_RED),
-            bottom=Side(style='medium', color=AMDOCS_RED)
-        )
+        border_bottom = Border(bottom=Side(style='thin', color='E0E0E0'))
 
         # ═══════════════════════════════════════════════════════════════════════
-        # FULL-WIDTH COLUMN SETUP (A-Z, ~180 chars wide)
+        # COLUMN SETUP - Clean two-panel layout
         # ═══════════════════════════════════════════════════════════════════════
-        # Layout: |margin|LEFT PANEL (metrics+MECE)|gutter|RIGHT PANEL (charts)|margin|
-        for col in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
-            ws.column_dimensions[col].width = 7  # Base width
-
-        # Adjust specific columns for layout
-        ws.column_dimensions['A'].width = 2   # Left margin
-        ws.column_dimensions['Z'].width = 2   # Right margin
-        ws.column_dimensions['M'].width = 2   # Gutter between panels
-
-        # ═══════════════════════════════════════════════════════════════════════
-        # ROW 1-3: HEADER BANNER WITH DATE
-        # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[1].height = 8   # Top margin
-        ws.row_dimensions[2].height = 40  # Main title
-        ws.row_dimensions[3].height = 22  # Subtitle with date
-
-        # Title banner with Amdocs red
-        for col in range(2, 26):  # B to Y
-            ws.cell(row=2, column=col).fill = fill_header
-
-        ws['B2'] = "📊 STRATEGIC ESCALATION ANALYSIS"
-        ws['B2'].font = Font(bold=True, size=22, color="FFFFFF")
-        ws['B2'].alignment = Alignment(horizontal='center', vertical='center')
-        ws.merge_cells('B2:Y2')
-
-        # Date and metadata row
-        for col in range(2, 26):
-            ws.cell(row=3, column=col).fill = fill_dark
-
-        ws['B3'] = f"📅 {report_date}  •  🕐 {report_time}  •  🤖 AI Model: {GEN_MODEL}  •  📋 Version {REPORT_VERSION}"
-        ws['B3'].font = Font(size=11, color="FFFFFF")
-        ws['B3'].alignment = Alignment(horizontal='center', vertical='center')
-        ws.merge_cells('B3:Y3')
+        ws.column_dimensions['A'].width = 2    # Left margin
+        for col in 'BCDEFGHIJ':
+            ws.column_dimensions[col].width = 9  # Left panel
+        ws.column_dimensions['K'].width = 2    # Gutter
+        for col in 'LMNOPQRSTUVWX':
+            ws.column_dimensions[col].width = 6  # Right panel
+        ws.column_dimensions['Y'].width = 2    # Right margin
 
         # ═══════════════════════════════════════════════════════════════════════
-        # ROW 5-10: KPI SCORECARD (6 metrics across full width)
+        # CALCULATE ALL METRICS UPFRONT
         # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[4].height = 8   # Spacer
-        ws.row_dimensions[5].height = 20  # Section header
-        ws.row_dimensions[6].height = 8   # Spacer
-        ws.row_dimensions[7].height = 18  # KPI labels
-        ws.row_dimensions[8].height = 38  # KPI values (large)
-        ws.row_dimensions[9].height = 16  # KPI subtexts
-
-        # Section header
-        ws['B5'] = "⚡ KEY PERFORMANCE INDICATORS"
-        ws['B5'].font = Font(bold=True, size=12, color=AMDOCS_RED)
-        ws.merge_cells('B5:Y5')
-
-        # Calculate metrics
         total_tickets = len(df)
-        total_friction = df['Strategic_Friction_Score'].sum() if 'Strategic_Friction_Score' in df.columns else 0
-        avg_friction = df['Strategic_Friction_Score'].mean() if 'Strategic_Friction_Score' in df.columns else 0
-        critical_count = (df['Severity_Norm'] == 'Critical').sum() if 'Severity_Norm' in df.columns else 0
-        major_count = (df['Severity_Norm'] == 'Major').sum() if 'Severity_Norm' in df.columns else 0
         total_financial = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else 0
+        critical_count = (df['Severity_Norm'] == 'Critical').sum() if 'Severity_Norm' in df.columns else 0
         avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 0
         recurrence_rate = df['AI_Recurrence_Probability'].mean() * 100 if 'AI_Recurrence_Probability' in df.columns else 0
-        num_categories = df['AI_Category'].nunique() if 'AI_Category' in df.columns else 0
 
-        # 6 KPI cards - evenly distributed B to Y (each ~4 columns)
-        kpi_data = [
-            ("🎫 TICKETS", f"{total_tickets:,}", f"Analyzed", fill_info, "004C97"),
-            ("💰 FINANCIAL", f"${total_financial:,.0f}", f"Total Impact", fill_critical if total_financial > 500000 else fill_warning, AMDOCS_RED),
-            ("🚨 CRITICAL", f"{critical_count}", f"{critical_count/total_tickets*100:.1f}% of total" if total_tickets > 0 else "0%", fill_critical, AMDOCS_RED),
-            ("📊 FRICTION", f"{total_friction:,.0f}", f"Avg: {avg_friction:.1f}", fill_warning, "F57C00"),
-            ("🔄 RECURRENCE", f"{recurrence_rate:.1f}%", "Risk Rate", fill_warning if recurrence_rate > 20 else fill_success, "F57C00" if recurrence_rate > 20 else "2E7D32"),
-            ("⏱️ RESOLUTION", f"{avg_resolution:.1f}", "Days (Avg)", fill_success if avg_resolution < 5 else fill_warning, "2E7D32" if avg_resolution < 5 else "F57C00"),
-        ]
-
-        # KPI positions: B-E, F-I, J-L, N-Q, R-U, V-Y (skip M as gutter)
-        kpi_ranges = [
-            (2, 5),   # B-E
-            (6, 9),   # F-I
-            (10, 12), # J-L
-            (14, 17), # N-Q
-            (18, 21), # R-U
-            (22, 25), # V-Y
-        ]
-
-        for i, (label, value, subtext, fill, text_color) in enumerate(kpi_data):
-            start_col, end_col = kpi_ranges[i]
-
-            # Apply fill to card area
-            for row in [7, 8, 9]:
-                for col in range(start_col, end_col + 1):
-                    cell = ws.cell(row=row, column=col)
-                    cell.fill = fill
-                    cell.border = border_gray
-
-            # Label
-            cell = ws.cell(row=7, column=start_col)
-            cell.value = label
-            cell.font = Font(bold=True, size=9, color="666666")
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            ws.merge_cells(start_row=7, start_column=start_col, end_row=7, end_column=end_col)
-
-            # Value
-            cell = ws.cell(row=8, column=start_col)
-            cell.value = value
-            cell.font = Font(bold=True, size=20, color=text_color)
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            ws.merge_cells(start_row=8, start_column=start_col, end_row=8, end_column=end_col)
-
-            # Subtext
-            cell = ws.cell(row=9, column=start_col)
-            cell.value = subtext
-            cell.font = Font(size=8, italic=True, color="666666")
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            ws.merge_cells(start_row=9, start_column=start_col, end_row=9, end_column=end_col)
-
-        # ═══════════════════════════════════════════════════════════════════════
-        # ROW 11-14: THE BOTTOM LINE (Executive Insight)
-        # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[10].height = 10  # Spacer
-        ws.row_dimensions[11].height = 26  # Header
-        ws.row_dimensions[12].height = 50  # Content
-
-        # Header
-        for col in range(2, 26):
-            ws.cell(row=11, column=col).fill = fill_dark
-        ws['B11'] = "📌 THE BOTTOM LINE"
-        ws['B11'].font = Font(bold=True, size=12, color="FFFFFF")
-        ws['B11'].alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells('B11:Y11')
-
-        # Extract key insight from AI summary or generate one
+        # Get top categories
+        top_cats = []
         if 'AI_Category' in df.columns:
-            top_cats = df['AI_Category'].value_counts().head(2).index.tolist()
-            top_cats_str = " and ".join(top_cats[:2]) if len(top_cats) >= 2 else top_cats[0] if top_cats else "process issues"
-        else:
-            top_cats_str = "process issues"
-
-        bottom_line = f"Analysis of {total_tickets:,} escalation tickets reveals ${total_financial:,.0f} in total financial exposure. Primary drivers: {top_cats_str} account for majority of impact. {critical_count} critical issues require immediate attention. Addressing top 3 categories can reduce escalation volume by up to 60%."
-
-        cell = ws['B12']
-        cell.value = bottom_line
-        cell.font = Font(size=11, bold=True, color="263238")
-        cell.fill = fill_info
-        cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-        cell.border = border_red
-        ws.merge_cells('B12:Y12')
+            cat_counts = df['AI_Category'].value_counts()
+            top_cats = cat_counts.head(3).index.tolist()
+            top_cats_pct = (cat_counts.head(3).sum() / total_tickets * 100) if total_tickets > 0 else 0
 
         # ═══════════════════════════════════════════════════════════════════════
-        # ROW 14-28: LEFT PANEL (MECE + Actions) | RIGHT PANEL (Charts)
+        # ROW 1: HEADER
         # ═══════════════════════════════════════════════════════════════════════
-        ws.row_dimensions[13].height = 10  # Spacer
+        ws.row_dimensions[1].height = 45
+        for col in range(2, 25):
+            ws.cell(row=1, column=col).fill = fill_navy
+        ws['B1'] = "ESCALATION ANALYSIS  |  EXECUTIVE SUMMARY"
+        ws['B1'].font = Font(bold=True, size=20, color="FFFFFF")
+        ws['B1'].alignment = Alignment(horizontal='left', vertical='center')
+        ws.merge_cells('B1:X1')
 
-        current_row = 14
+        # ═══════════════════════════════════════════════════════════════════════
+        # ROW 2: THE SITUATION (One sentence)
+        # ═══════════════════════════════════════════════════════════════════════
+        ws.row_dimensions[2].height = 6  # Spacer
 
-        # ─────────────────────────────────────────────────────────────────────
-        # LEFT PANEL: MECE BREAKDOWN (columns B-L)
-        # ─────────────────────────────────────────────────────────────────────
+        ws.row_dimensions[3].height = 28
+        for col in range(2, 25):
+            ws.cell(row=3, column=col).fill = fill_light
+        situation = f"Analysis of {total_tickets:,} escalation tickets from {report_date}"
+        ws['B3'] = situation
+        ws['B3'].font = Font(size=11, color=CHARCOAL)
+        ws['B3'].alignment = Alignment(horizontal='left', vertical='center')
+        ws.merge_cells('B3:X3')
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # ROW 4-5: THE ANSWER (Pyramid Principle - Answer First)
+        # ═══════════════════════════════════════════════════════════════════════
+        ws.row_dimensions[4].height = 22
+        ws['B4'] = "KEY FINDING"
+        ws['B4'].font = Font(bold=True, size=10, color=ACCENT)
+        ws.merge_cells('B4:X4')
+
+        ws.row_dimensions[5].height = 55
+        for col in range(2, 25):
+            ws.cell(row=5, column=col).fill = fill_white
+            ws.cell(row=5, column=col).border = border_thin
+
+        # Construct the key finding dynamically
+        top_cat_str = " and ".join(top_cats[:2]) if len(top_cats) >= 2 else (top_cats[0] if top_cats else "process issues")
+        key_finding = f"${total_financial:,.0f} in financial exposure driven primarily by {top_cat_str}. " \
+                      f"These top categories represent {top_cats_pct:.0f}% of all escalations. " \
+                      f"{critical_count} critical issues require immediate attention."
+
+        ws['B5'] = key_finding
+        ws['B5'].font = Font(size=12, bold=True, color=CHARCOAL)
+        ws['B5'].alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+        ws.merge_cells('B5:X5')
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # ROW 6: SPACER
+        # ═══════════════════════════════════════════════════════════════════════
+        ws.row_dimensions[6].height = 8
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # ROW 7-9: FOUR KEY METRICS (Clean cards)
+        # ═══════════════════════════════════════════════════════════════════════
+        ws.row_dimensions[7].height = 16  # Label
+        ws.row_dimensions[8].height = 36  # Value
+        ws.row_dimensions[9].height = 16  # Subtext
+
+        # Define 4 key metrics with status colors
+        metrics = [
+            ("FINANCIAL EXPOSURE", f"${total_financial:,.0f}",
+             "Total Impact", fill_red if total_financial > 500000 else fill_amber, RED_TEXT if total_financial > 500000 else AMBER_TEXT),
+            ("CRITICAL ISSUES", f"{critical_count}",
+             f"{critical_count/total_tickets*100:.1f}% of total" if total_tickets > 0 else "0%",
+             fill_red if critical_count > 30 else fill_amber, RED_TEXT if critical_count > 30 else AMBER_TEXT),
+            ("RECURRENCE RISK", f"{recurrence_rate:.1f}%",
+             "Probability", fill_amber if recurrence_rate > 15 else fill_green, AMBER_TEXT if recurrence_rate > 15 else GREEN_TEXT),
+            ("AVG RESOLUTION", f"{avg_resolution:.1f} days",
+             "Predicted", fill_green if avg_resolution < 5 else fill_amber, GREEN_TEXT if avg_resolution < 5 else AMBER_TEXT),
+        ]
+
+        # Position metrics: B-E, F-I, L-O, P-S (skip gutter K)
+        metric_cols = [(2, 5), (6, 9), (12, 15), (16, 19)]
+
+        for idx, ((label, value, subtext, bg_fill, text_col), (start, end)) in enumerate(zip(metrics, metric_cols)):
+            # Apply background
+            for row in [7, 8, 9]:
+                for col in range(start, end + 1):
+                    cell = ws.cell(row=row, column=col)
+                    cell.fill = bg_fill
+                    cell.border = border_thin
+
+            # Label row
+            cell = ws.cell(row=7, column=start)
+            cell.value = label
+            cell.font = Font(bold=True, size=8, color=SLATE)
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            ws.merge_cells(start_row=7, start_column=start, end_row=7, end_column=end)
+
+            # Value row
+            cell = ws.cell(row=8, column=start)
+            cell.value = value
+            cell.font = Font(bold=True, size=16, color=text_col)
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            ws.merge_cells(start_row=8, start_column=start, end_row=8, end_column=end)
+
+            # Subtext row
+            cell = ws.cell(row=9, column=start)
+            cell.value = subtext
+            cell.font = Font(size=8, color=SLATE)
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            ws.merge_cells(start_row=9, start_column=start, end_row=9, end_column=end)
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # ROW 10: SPACER
+        # ═══════════════════════════════════════════════════════════════════════
+        ws.row_dimensions[10].height = 10
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # ROW 11+: TWO-COLUMN LAYOUT
+        # LEFT: Issue Breakdown (MECE) | RIGHT: Key Charts
+        # ═══════════════════════════════════════════════════════════════════════
+        current_row = 11
+
+        # LEFT PANEL HEADER
         ws.row_dimensions[current_row].height = 24
-        for col in range(2, 13):
-            ws.cell(row=current_row, column=col).fill = fill_header
-        ws['B' + str(current_row)] = "🎯 ISSUE BREAKDOWN (MECE)"
+        for col in range(2, 11):  # B-J
+            ws.cell(row=current_row, column=col).fill = fill_navy
+        ws['B' + str(current_row)] = "ISSUE BREAKDOWN"
         ws['B' + str(current_row)].font = Font(bold=True, size=11, color="FFFFFF")
         ws['B' + str(current_row)].alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'B{current_row}:L{current_row}')
+        ws.merge_cells(f'B{current_row}:J{current_row}')
 
-        # RIGHT PANEL HEADER: VISUAL ANALYTICS (columns N-Y)
-        for col in range(14, 26):
-            ws.cell(row=current_row, column=col).fill = fill_header
-        ws['N' + str(current_row)] = "📈 VISUAL ANALYTICS"
-        ws['N' + str(current_row)].font = Font(bold=True, size=11, color="FFFFFF")
-        ws['N' + str(current_row)].alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'N{current_row}:Y{current_row}')
+        # RIGHT PANEL HEADER
+        for col in range(12, 25):  # L-X
+            ws.cell(row=current_row, column=col).fill = fill_navy
+        ws['L' + str(current_row)] = "ANALYTICS"
+        ws['L' + str(current_row)].font = Font(bold=True, size=11, color="FFFFFF")
+        ws['L' + str(current_row)].alignment = Alignment(horizontal='left', vertical='center')
+        ws.merge_cells(f'L{current_row}:X{current_row}')
 
         current_row += 1
 
         # MECE Table headers
         ws.row_dimensions[current_row].height = 20
-        mece_headers = [("B", "E", "CATEGORY"), ("F", "G", "COUNT"), ("H", "I", "%"), ("J", "J", "IMPACT"), ("K", "L", "ACTION")]
+        mece_headers = [("B", "D", "CATEGORY"), ("E", "F", "COUNT"), ("G", "G", "%"), ("H", "J", "RECOMMENDATION")]
         for start_col, end_col, header in mece_headers:
             cell = ws[f'{start_col}{current_row}']
             cell.value = header
             cell.font = Font(bold=True, size=9, color="FFFFFF")
-            cell.fill = PatternFill(start_color="607D8B", end_color="607D8B", fill_type="solid")
+            cell.fill = PatternFill(start_color=SLATE, end_color=SLATE, fill_type="solid")
             cell.alignment = Alignment(horizontal='center', vertical='center')
-            cell.border = border_gray
+            cell.border = border_thin
             if start_col != end_col:
                 ws.merge_cells(f'{start_col}{current_row}:{end_col}{current_row}')
 
         current_row += 1
         mece_start_row = current_row
 
-        # MECE data rows
+        # MECE data rows - all categories
         if 'AI_Category' in df.columns:
-            cat_counts = df['AI_Category'].value_counts().head(6)
+            cat_counts = df['AI_Category'].value_counts()
             cat_total = cat_counts.sum()
 
             action_map = {
-                'Scheduling & Planning': 'Automate scheduling',
-                'Documentation & Reporting': 'Standardize templates',
-                'Validation & QA': 'Enhanced QA checks',
-                'Process Compliance': 'Enforce SOPs',
-                'Configuration & Data Mismatch': 'Pre-deploy validation',
-                'Site Readiness': 'Readiness checklists',
-                'Communication & Response': 'Response protocols',
-                'Nesting & Tool Errors': 'Tool training',
+                'Scheduling & Planning': 'Automate scheduling workflows',
+                'Documentation & Reporting': 'Standardize documentation templates',
+                'Validation & QA': 'Implement automated QA checks',
+                'Process Compliance': 'Enforce standard operating procedures',
+                'Configuration & Data Mismatch': 'Add pre-deployment validation',
+                'Site Readiness': 'Create readiness checklists',
+                'Communication & Response': 'Establish response protocols',
+                'Nesting & Tool Errors': 'Provide targeted tool training',
             }
 
             for idx, (cat, count) in enumerate(cat_counts.items()):
                 pct = (count / cat_total) * 100 if cat_total > 0 else 0
-                impact = "HIGH" if pct > 25 else "MED" if pct > 10 else "LOW"
-                action = action_map.get(cat, "Review")
+                action = action_map.get(cat, "Review and optimize process")
 
-                ws.row_dimensions[current_row].height = 24
-                impact_fill = fill_critical if impact == "HIGH" else fill_warning if impact == "MED" else fill_success
+                ws.row_dimensions[current_row].height = 22
+                row_fill = fill_white if idx % 2 == 0 else fill_light
 
-                # Category
+                # Category name
                 cell = ws[f'B{current_row}']
                 cell.value = cat
-                cell.font = Font(size=9, color="333333")
+                cell.font = Font(size=9, color=CHARCOAL)
+                cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='left', vertical='center')
-                cell.border = border_gray
-                ws.merge_cells(f'B{current_row}:E{current_row}')
+                cell.border = border_thin
+                ws.merge_cells(f'B{current_row}:D{current_row}')
 
-                # Count
-                cell = ws[f'F{current_row}']
+                # Count (merged E-F)
+                cell = ws[f'E{current_row}']
                 cell.value = count
-                cell.font = Font(bold=True, size=10, color="333333")
+                cell.font = Font(bold=True, size=10, color=CHARCOAL)
+                cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='center', vertical='center')
-                cell.border = border_gray
-                ws.merge_cells(f'F{current_row}:G{current_row}')
+                cell.border = border_thin
+                ws.merge_cells(f'E{current_row}:F{current_row}')
 
                 # Percentage
+                cell = ws[f'G{current_row}']
+                cell.value = f"{pct:.0f}%"
+                cell.font = Font(size=9, color=SLATE)
+                cell.fill = row_fill
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                cell.border = border_thin
+
+                # Recommendation (merged H-J)
                 cell = ws[f'H{current_row}']
-                cell.value = f"{pct:.1f}%"
-                cell.font = Font(size=9, color="666666")
-                cell.alignment = Alignment(horizontal='center', vertical='center')
-                cell.border = border_gray
-                ws.merge_cells(f'H{current_row}:I{current_row}')
-
-                # Impact
-                cell = ws[f'J{current_row}']
-                cell.value = impact
-                cell.font = Font(bold=True, size=9, color="333333")
-                cell.fill = impact_fill
-                cell.alignment = Alignment(horizontal='center', vertical='center')
-                cell.border = border_gray
-
-                # Action
-                cell = ws[f'K{current_row}']
-                cell.value = f"→ {action}"
-                cell.font = Font(size=8, bold=True, color=AMDOCS_RED)
+                cell.value = action
+                cell.font = Font(size=9, color=ACCENT)
+                cell.fill = row_fill
                 cell.alignment = Alignment(horizontal='left', vertical='center')
-                cell.border = border_gray
-                ws.merge_cells(f'K{current_row}:L{current_row}')
+                cell.border = border_thin
+                ws.merge_cells(f'H{current_row}:J{current_row}')
 
                 current_row += 1
 
         # ─────────────────────────────────────────────────────────────────────
-        # RIGHT PANEL: Embed 2 key charts (Executive Scorecard + Severity Matrix)
+        # RIGHT PANEL: Embed charts (columns L-X)
         # ─────────────────────────────────────────────────────────────────────
         chart_row = mece_start_row
         charts_to_embed = []
 
-        # Find key charts from chart_paths
+        # Find charts from chart_paths
         if chart_paths and isinstance(chart_paths, dict):
-            # Priority: executive_scorecard, severity matrix (risk_by_origin), cost_waterfall
-            for category in ['analysis', 'risk', 'financial']:
+            for category in ['analysis', 'executive', 'financial', 'risk']:
                 if category in chart_paths:
                     for path in chart_paths[category]:
                         if os.path.exists(path):
                             charts_to_embed.append(path)
-                            if len(charts_to_embed) >= 2:
+                            if len(charts_to_embed) >= 4:
                                 break
-                if len(charts_to_embed) >= 2:
+                if len(charts_to_embed) >= 4:
                     break
 
-        # Also check advanced charts
-        advanced_chart_dirs = ['09_executive', '01_risk']
+        # Check advanced chart directories
+        advanced_chart_dirs = ['09_executive', '01_risk', '07_sla', '08_efficiency']
         for dir_name in advanced_chart_dirs:
+            if len(charts_to_embed) >= 4:
+                break
             dir_path = os.path.join(self.output_dir, dir_name) if self.output_dir else dir_name
             if os.path.exists(dir_path):
-                for f in os.listdir(dir_path):
+                for f in sorted(os.listdir(dir_path)):
                     if f.endswith('.png'):
-                        charts_to_embed.append(os.path.join(dir_path, f))
-                        if len(charts_to_embed) >= 2:
-                            break
-            if len(charts_to_embed) >= 2:
-                break
+                        full_path = os.path.join(dir_path, f)
+                        if full_path not in charts_to_embed:
+                            charts_to_embed.append(full_path)
+                            if len(charts_to_embed) >= 4:
+                                break
 
-        # Embed charts in right panel
+        # Embed charts in 2x2 grid
         if charts_to_embed:
-            for i, chart_path in enumerate(charts_to_embed[:2]):
+            chart_width = 260
+            chart_height = 145
+
+            # Grid: 2 columns, 2 rows
+            grid_positions = [
+                ('L', 0),   # Top-left
+                ('Q', 0),   # Top-right
+                ('L', 9),   # Bottom-left
+                ('Q', 9),   # Bottom-right
+            ]
+
+            for i, chart_path in enumerate(charts_to_embed[:4]):
                 try:
                     img = XLImage(chart_path)
-                    img.width = 380   # Fit in N-Y columns
-                    img.height = 200
-
-                    # Position: first chart at row 16, second at row 28
-                    img_row = chart_row + (i * 12)
-                    ws.add_image(img, f'N{img_row}')
+                    img.width = chart_width
+                    img.height = chart_height
+                    col, row_offset = grid_positions[i]
+                    ws.add_image(img, f'{col}{chart_row + row_offset}')
                 except Exception as e:
                     logger.warning(f"Failed to embed chart {chart_path}: {e}")
 
         # ─────────────────────────────────────────────────────────────────────
-        # 80/20 INSIGHT (below MECE table)
-        # ─────────────────────────────────────────────────────────────────────
-        current_row += 1
-        ws.row_dimensions[current_row].height = 22
-        ws['B' + str(current_row)] = "📊 80/20 INSIGHT"
-        ws['B' + str(current_row)].font = Font(bold=True, size=10, color=AMDOCS_RED)
-        ws.merge_cells(f'B{current_row}:L{current_row}')
-
-        current_row += 1
-        ws.row_dimensions[current_row].height = 36
-        pareto_text = "Top 20% of categories drive 80% of escalation volume. Focus on top 3 categories for maximum ROI."
-        cell = ws[f'B{current_row}']
-        cell.value = pareto_text
-        cell.font = Font(size=9, color="333333")
-        cell.fill = fill_warning
-        cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-        cell.border = border_gray
-        ws.merge_cells(f'B{current_row}:L{current_row}')
-
-        # ─────────────────────────────────────────────────────────────────────
-        # QUICK WINS (below 80/20)
+        # RECOMMENDATIONS SECTION (below MECE table)
         # ─────────────────────────────────────────────────────────────────────
         current_row += 2
         ws.row_dimensions[current_row].height = 22
-        for col in range(2, 13):
-            ws.cell(row=current_row, column=col).fill = fill_header
-        ws['B' + str(current_row)] = "⭐ QUICK WINS (High Impact, Low Effort)"
-        ws['B' + str(current_row)].font = Font(bold=True, size=10, color="FFFFFF")
-        ws['B' + str(current_row)].alignment = Alignment(horizontal='left', vertical='center')
-        ws.merge_cells(f'B{current_row}:L{current_row}')
+        ws['B' + str(current_row)] = "RECOMMENDED ACTIONS"
+        ws['B' + str(current_row)].font = Font(bold=True, size=10, color=ACCENT)
+        ws.merge_cells(f'B{current_row}:J{current_row}')
 
         current_row += 1
-        quick_wins = [
-            "1. Standardize escalation criteria and templates",
-            "2. Implement pre-deployment validation checklist",
-            "3. Automate recurring issue detection alerts",
+        recommendations = [
+            f"1. Focus on {top_cats[0] if top_cats else 'top category'} - accounts for largest share of escalations",
+            "2. Implement pre-deployment validation to reduce configuration issues",
+            "3. Establish automated alerts for recurring issue patterns",
         ]
 
-        for win in quick_wins:
-            ws.row_dimensions[current_row].height = 22
+        for rec in recommendations:
+            ws.row_dimensions[current_row].height = 20
             cell = ws[f'B{current_row}']
-            cell.value = win
-            cell.font = Font(size=9, color="333333")
-            cell.fill = fill_success
+            cell.value = rec
+            cell.font = Font(size=9, color=CHARCOAL)
+            cell.fill = fill_green
             cell.alignment = Alignment(horizontal='left', vertical='center')
-            cell.border = border_gray
-            ws.merge_cells(f'B{current_row}:L{current_row}')
+            cell.border = border_thin
+            ws.merge_cells(f'B{current_row}:J{current_row}')
             current_row += 1
 
         # ─────────────────────────────────────────────────────────────────────
@@ -1260,11 +1232,11 @@ class ExcelReportWriter:
         # ─────────────────────────────────────────────────────────────────────
         current_row += 2
         ws.row_dimensions[current_row].height = 18
-        footer_text = f"Generated by Escalation AI v{REPORT_VERSION}  •  Confidential  •  {report_date}"
+        footer_text = f"Escalation AI v{REPORT_VERSION}  |  {report_date}  |  Confidential"
         ws[f'B{current_row}'] = footer_text
-        ws[f'B{current_row}'].font = Font(size=8, italic=True, color="999999")
+        ws[f'B{current_row}'].font = Font(size=9, italic=True, color=SLATE)
         ws[f'B{current_row}'].alignment = Alignment(horizontal='center')
-        ws.merge_cells(f'B{current_row}:Y{current_row}')
+        ws.merge_cells(f'B{current_row}:X{current_row}')
 
         logger.info("Summary page created successfully")
 
