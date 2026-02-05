@@ -7927,18 +7927,33 @@ def main():
             </div>
             """, unsafe_allow_html=True)
 
-            # Load the Strategic Report file
-            strategic_report_path = "Strategic_Report.xlsx"
-            try:
-                with open(strategic_report_path, "rb") as f:
-                    st.download_button(
-                        label="⬇️ Download Strategic Report",
-                        data=f.read(),
-                        file_name=f"Strategic_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key="download_strategic_report"
-                    )
-            except FileNotFoundError:
+            # Load the Strategic Report file - search multiple locations
+            project_root = Path(__file__).parent.parent.parent
+            strategic_paths = [
+                project_root / "Strategic_Report.xlsx",
+                Path.cwd() / "Strategic_Report.xlsx",
+                Path("Strategic_Report.xlsx"),
+            ]
+
+            strategic_report_path = None
+            for path in strategic_paths:
+                if path.exists():
+                    strategic_report_path = path
+                    break
+
+            if strategic_report_path:
+                try:
+                    with open(strategic_report_path, "rb") as f:
+                        st.download_button(
+                            label="⬇️ Download Strategic Report",
+                            data=f.read(),
+                            file_name=f"Strategic_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_strategic_report"
+                        )
+                except Exception as e:
+                    st.warning(f"Could not read Strategic Report: {e}")
+            else:
                 st.warning("Strategic Report not found. Please run the report generation pipeline first.")
 
         elif export_format == "📄 Executive Report (PDF)":
