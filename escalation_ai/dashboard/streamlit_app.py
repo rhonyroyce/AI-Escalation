@@ -6405,7 +6405,27 @@ def render_deep_analysis(df):
         st.markdown("#### 📊 Root Cause Impact Quantification")
         col3, col4 = st.columns(2)
         with col3:
-            render_chart_with_insight('root_cause_impact', chart_root_cause_impact(df), df)
+            # Financial impact by category
+            if 'AI_Category' in df.columns and 'Financial_Impact' in df.columns:
+                impact_data = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=True)
+                fig_impact = go.Figure(data=[go.Bar(
+                    y=impact_data.index,
+                    x=impact_data.values,
+                    orientation='h',
+                    marker_color='#ef4444',
+                    text=[f'${v:,.0f}' for v in impact_data.values],
+                    textposition='outside'
+                )])
+                fig_impact.update_layout(
+                    title="Financial Impact by Root Cause",
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    height=350,
+                    margin=dict(l=10, r=80, t=40, b=10),
+                    xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', tickformat='$,.0f'),
+                    yaxis=dict(showgrid=False)
+                )
+                st.plotly_chart(fig_impact, use_container_width=True)
         with col4:
             render_chart_with_insight('risk_heatmap', chart_risk_heatmap(df), df)
 
