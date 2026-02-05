@@ -5641,7 +5641,7 @@ def render_excel_dashboard(df):
             <h3 style="color: #e2e8f0; margin: 0 0 10px 0; font-size: 1.1rem;">
                 🔄 Escalation Origin Analysis
             </h3>
-            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Deep-dive into Internal vs External patterns</p>
+            <p style="color: #64748b; font-size: 0.8rem; margin: 0;">Select an origin to drill down into details</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -5653,99 +5653,94 @@ def render_excel_dashboard(df):
                 'tickets_data_severity': lambda x: (x == 'Critical').sum()
             }).reset_index()
             origin_analysis.columns = ['Origin', 'Total_Cost', 'Avg_Cost', 'Count', 'Avg_Resolution', 'Critical_Count']
+            origin_analysis = origin_analysis.sort_values('Total_Cost', ascending=True)
 
             total_all = origin_analysis['Total_Cost'].sum()
 
-            # Bar chart first
+            # Full bar chart
+            colors = ['#3b82f6', '#22c55e', '#f97316', '#ef4444', '#8b5cf6', '#06b6d4']
             fig_orig = go.Figure(data=[go.Bar(
                 y=origin_analysis['Origin'],
                 x=origin_analysis['Total_Cost'],
                 orientation='h',
                 marker=dict(
-                    color=['#3b82f6', '#ef4444', '#22c55e', '#f97316'][:len(origin_analysis)],
+                    color=[colors[i % len(colors)] for i in range(len(origin_analysis))],
                     line=dict(color='rgba(255,255,255,0.3)', width=1)
                 ),
                 text=[f'${v:,.0f}' for v in origin_analysis['Total_Cost']],
                 textposition='inside',
-                textfont=dict(size=11, color='white')
+                textfont=dict(size=12, color='white'),
+                hovertemplate='<b>%{y}</b><br>Total Cost: %{x:$,.0f}<extra></extra>'
             )])
             fig_orig.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=10, r=10, t=5, b=5),
-                height=120,
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=max(150, len(origin_analysis) * 35),
                 xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)',
-                          tickfont=dict(size=9, color='#64748b'), tickformat='$,.0f'),
-                yaxis=dict(showgrid=False, tickfont=dict(size=10, color='#94a3b8')),
+                          tickfont=dict(size=10, color='#64748b'), tickformat='$,.0f'),
+                yaxis=dict(showgrid=False, tickfont=dict(size=11, color='#e2e8f0')),
                 showlegend=False
             )
             st.plotly_chart(fig_orig, use_container_width=True, key="orig_bar")
 
-            # Find the most expensive origin per ticket
-            most_expensive = origin_analysis.loc[origin_analysis['Avg_Cost'].idxmax()]
-            highest_volume = origin_analysis.loc[origin_analysis['Count'].idxmax()]
+            # Selector for drill-down
+            origins_list = origin_analysis.sort_values('Total_Cost', ascending=False)['Origin'].tolist()
+            selected_origin = st.selectbox(
+                "🔍 Drill down into:",
+                options=origins_list,
+                index=0,
+                key="origin_drilldown"
+            )
 
-            # Display analysis cards
-            for _, row in origin_analysis.iterrows():
-                pct_of_total = row['Total_Cost'] / total_all * 100
-                critical_rate = row['Critical_Count'] / row['Count'] * 100 if row['Count'] > 0 else 0
+            # Get selected origin data
+            selected_data = origin_analysis[origin_analysis['Origin'] == selected_origin].iloc[0]
+            selected_df = df[df['tickets_data_escalation_origin'] == selected_origin]
 
-                # Determine color based on cost
-                if row['Origin'] == most_expensive['Origin']:
-                    border_color = '#ef4444'
-                    badge = '⚠️ Highest Cost/Ticket'
-                    badge_color = '#ef4444'
-                elif row['Origin'] == highest_volume['Origin']:
-                    border_color = '#f97316'
-                    badge = '📊 Highest Volume'
-                    badge_color = '#f97316'
-                else:
-                    border_color = '#3b82f6'
-                    badge = ''
-                    badge_color = ''
+            critical_rate = selected_data['Critical_Count'] / selected_data['Count'] * 100 if selected_data['Count'] > 0 else 0
+            pct_of_total = selected_data['Total_Cost'] / total_all * 100
 
-                badge_html = f'<span style="background:{badge_color};color:white;padding:2px 8px;border-radius:4px;font-size:0.65rem;margin-left:10px;">{badge}</span>' if badge else ''
-
-                st.markdown(f"""
-                <div style="background: rgba(255,255,255,0.03); border-left: 3px solid {border_color};
-                            border-radius: 0 8px 8px 0; padding: 12px 15px; margin: 8px 0;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="color: #e2e8f0; font-weight: 600; font-size: 0.95rem;">{row['Origin']}{badge_html}</span>
-                        <span style="color: #22c55e; font-weight: 700; font-size: 1.1rem;">${row['Total_Cost']:,.0f}</span>
+            # Drill-down header with total
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+                        border-radius: 12px; padding: 15px; margin-top: 10px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <span style="color: #e2e8f0; font-weight: 700; font-size: 1rem;">📊 {selected_origin}</span>
+                    <span style="color: #22c55e; font-weight: 800; font-size: 1.4rem;">${selected_data['Total_Cost']:,.0f}</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="color: #64748b; font-size: 0.7rem; text-transform: uppercase;">Ticket Volume</div>
+                        <div style="color: #3b82f6; font-size: 1.3rem; font-weight: 700;">{selected_data['Count']:,.0f}</div>
+                        <div style="color: #64748b; font-size: 0.65rem;">{pct_of_total:.1f}% of total cost</div>
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 0.75rem;">
-                        <div>
-                            <div style="color: #64748b;">Volume</div>
-                            <div style="color: #94a3b8; font-weight: 600;">{row['Count']:,} tickets</div>
-                        </div>
-                        <div>
-                            <div style="color: #64748b;">Avg/Ticket</div>
-                            <div style="color: #94a3b8; font-weight: 600;">${row['Avg_Cost']:,.0f}</div>
-                        </div>
-                        <div>
-                            <div style="color: #64748b;">Avg Resolution</div>
-                            <div style="color: #94a3b8; font-weight: 600;">{row['Avg_Resolution']:.1f} days</div>
-                        </div>
-                        <div>
-                            <div style="color: #64748b;">Critical Rate</div>
-                            <div style="color: {'#ef4444' if critical_rate > 20 else '#94a3b8'}; font-weight: 600;">{critical_rate:.1f}%</div>
-                        </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="color: #64748b; font-size: 0.7rem; text-transform: uppercase;">Avg Cost/Ticket</div>
+                        <div style="color: #f97316; font-size: 1.3rem; font-weight: 700;">${selected_data['Avg_Cost']:,.0f}</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="color: #64748b; font-size: 0.7rem; text-transform: uppercase;">Avg Resolution</div>
+                        <div style="color: #8b5cf6; font-size: 1.3rem; font-weight: 700;">{selected_data['Avg_Resolution']:.1f}d</div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; text-align: center;">
+                        <div style="color: #64748b; font-size: 0.7rem; text-transform: uppercase;">Critical Rate</div>
+                        <div style="color: {'#ef4444' if critical_rate > 20 else '#22c55e'}; font-size: 1.3rem; font-weight: 700;">{critical_rate:.1f}%</div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Top categories for this origin
+            if 'AI_Category' in selected_df.columns:
+                top_cats = selected_df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False).head(3)
+                st.markdown(f"""
+                <div style="background: rgba(34, 197, 94, 0.1); border-radius: 8px; padding: 10px; margin-top: 8px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                    <div style="color: #86efac; font-size: 0.75rem; font-weight: 600; margin-bottom: 5px;">🏷️ Top Categories for {selected_origin}:</div>
+                    <div style="color: #94a3b8; font-size: 0.7rem;">
+                        {"  •  ".join([f"<b>{cat}</b> (${val:,.0f})" for cat, val in top_cats.items()])}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-
-            # Key insight
-            insight_text = ""
-            if most_expensive['Avg_Cost'] > origin_analysis['Avg_Cost'].mean() * 1.5:
-                insight_text = f"🔍 **Insight:** {most_expensive['Origin']} issues cost **{most_expensive['Avg_Cost']/origin_analysis['Avg_Cost'].mean():.1f}x** more per ticket than average. Consider prioritizing prevention strategies for this source."
-            else:
-                insight_text = f"✅ **Insight:** Cost per ticket is relatively balanced across origins. Focus on reducing volume from {highest_volume['Origin']} ({highest_volume['Count']:,} tickets)."
-
-            st.markdown(f"""
-            <div style="background: rgba(59, 130, 246, 0.1); border-radius: 8px; padding: 12px; margin-top: 10px; border: 1px solid rgba(59, 130, 246, 0.3);">
-                <div style="color: #93c5fd; font-size: 0.8rem;">{insight_text}</div>
-            </div>
-            """, unsafe_allow_html=True)
 
     st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
 
