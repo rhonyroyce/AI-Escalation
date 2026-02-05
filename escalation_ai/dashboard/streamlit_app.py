@@ -5656,6 +5656,31 @@ def render_excel_dashboard(df):
 
             total_all = origin_analysis['Total_Cost'].sum()
 
+            # Bar chart first
+            fig_orig = go.Figure(data=[go.Bar(
+                y=origin_analysis['Origin'],
+                x=origin_analysis['Total_Cost'],
+                orientation='h',
+                marker=dict(
+                    color=['#3b82f6', '#ef4444', '#22c55e', '#f97316'][:len(origin_analysis)],
+                    line=dict(color='rgba(255,255,255,0.3)', width=1)
+                ),
+                text=[f'${v:,.0f}' for v in origin_analysis['Total_Cost']],
+                textposition='inside',
+                textfont=dict(size=11, color='white')
+            )])
+            fig_orig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=5, b=5),
+                height=120,
+                xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)',
+                          tickfont=dict(size=9, color='#64748b'), tickformat='$,.0f'),
+                yaxis=dict(showgrid=False, tickfont=dict(size=10, color='#94a3b8')),
+                showlegend=False
+            )
+            st.plotly_chart(fig_orig, use_container_width=True, key="orig_bar")
+
             # Find the most expensive origin per ticket
             most_expensive = origin_analysis.loc[origin_analysis['Avg_Cost'].idxmax()]
             highest_volume = origin_analysis.loc[origin_analysis['Count'].idxmax()]
