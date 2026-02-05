@@ -693,6 +693,277 @@ footer {visibility: hidden;}
 .exec-table tr:hover {
     background: rgba(0, 102, 204, 0.1);
 }
+
+/* ============================================
+   EXCEL-STYLE DASHBOARD CSS
+   ============================================ */
+
+/* Dashboard Title Header */
+.excel-dashboard-header {
+    background: linear-gradient(135deg, #0a2540 0%, #003366 100%);
+    padding: 20px 30px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.excel-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 2px;
+    margin: 0;
+}
+
+.excel-title-accent {
+    color: #dc3545;
+    font-weight: 800;
+}
+
+.excel-subtitle {
+    color: #87ceeb;
+    font-size: 0.9rem;
+    margin: 4px 0 0 0;
+}
+
+/* Filter Sidebar Styling */
+.excel-filter-section {
+    background: linear-gradient(180deg, #003366 0%, #002244 100%);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.excel-filter-title {
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.excel-clear-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 10px;
+}
+
+/* KPI Cards - Excel Style */
+.excel-kpi-card {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.excel-kpi-card.primary {
+    background: linear-gradient(145deg, rgba(0, 102, 204, 0.15) 0%, rgba(0, 51, 102, 0.25) 100%);
+    border-left: 4px solid #0066cc;
+}
+
+.excel-kpi-card.accent {
+    background: linear-gradient(145deg, rgba(220, 53, 69, 0.15) 0%, rgba(139, 0, 0, 0.25) 100%);
+    border-left: 4px solid #dc3545;
+}
+
+.excel-kpi-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.excel-kpi-value.large {
+    font-size: 2.5rem;
+}
+
+.excel-kpi-value.money {
+    color: #4ade80;
+}
+
+.excel-kpi-label {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 8px;
+}
+
+.excel-kpi-sublabel {
+    font-size: 0.7rem;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+/* Chart Card Container - Excel Style */
+.excel-chart-card {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.005) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 8px 0;
+}
+
+.excel-chart-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Legend Container */
+.excel-legend {
+    padding: 10px;
+    font-size: 0.75rem;
+}
+
+.excel-legend-item {
+    display: flex;
+    align-items: center;
+    margin: 6px 0;
+    color: #94a3b8;
+}
+
+.excel-legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.excel-legend-dot.blue { background: #3b82f6; }
+.excel-legend-dot.red { background: #dc3545; }
+.excel-legend-dot.green { background: #22c55e; }
+.excel-legend-dot.orange { background: #f97316; }
+
+/* Progress Bar - Excel Style */
+.excel-progress-container {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    height: 24px;
+    overflow: hidden;
+    margin: 8px 0;
+}
+
+.excel-progress-bar {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: white;
+}
+
+.excel-progress-bar.male {
+    background: linear-gradient(90deg, #1e40af 0%, #3b82f6 100%);
+}
+
+.excel-progress-bar.female {
+    background: linear-gradient(90deg, #dc3545 0%, #ef4444 100%);
+}
+
+/* Comparison Grid */
+.excel-comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+/* Donut Chart Value Overlay */
+.excel-donut-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+/* Horizontal Bar Chart Labels */
+.excel-bar-row {
+    display: flex;
+    align-items: center;
+    margin: 4px 0;
+}
+
+.excel-bar-value {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    min-width: 60px;
+    text-align: right;
+    padding-right: 8px;
+}
+
+.excel-bar-name {
+    font-size: 0.75rem;
+    color: #cbd5e1;
+    margin-left: 8px;
+}
+
+/* Product Revenue Cards */
+.excel-product-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+}
+
+.excel-product-icon {
+    font-size: 1.5rem;
+    margin-bottom: 6px;
+}
+
+.excel-product-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.excel-product-label {
+    font-size: 0.7rem;
+    color: #64748b;
+}
+
+/* Stores Analysis Scatter */
+.excel-scatter-container {
+    position: relative;
+    height: 200px;
+}
+
+/* Quarter Donut Grid */
+.excel-quarter-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.excel-quarter-card {
+    text-align: center;
+    padding: 8px;
+}
+
+.excel-quarter-label {
+    font-size: 0.7rem;
+    color: #64748b;
+    margin-top: 4px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -5003,6 +5274,407 @@ def generate_html_report(df):
 
 
 # ============================================================================
+# EXCEL-STYLE DASHBOARD
+# ============================================================================
+
+def render_excel_dashboard(df):
+    """
+    Render an Excel-style dashboard with a dark theme matching the reference design.
+    Features: sidebar filters, KPI cards, pie/donut charts, bar charts, trend lines.
+    """
+
+    # ========== HEADER ==========
+    st.markdown("""
+    <div class="excel-dashboard-header">
+        <div>
+            <h1 class="excel-title">ESCALATION <span class="excel-title-accent">DASHBOARD</span></h1>
+            <p class="excel-subtitle">FY 2024 - FY 2025 Intelligence Analysis</p>
+        </div>
+        <div style="text-align: right; color: #87ceeb; font-size: 0.85rem;">
+            <div>For inquiries: Dashboard Support</div>
+            <div style="font-weight: 600;">support@escalation.ai</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ========== ROW 1: KPIs and Main Charts ==========
+    col1, col2, col3, col4, col5 = st.columns([2.5, 2.5, 2, 1.5, 1.5])
+
+    # Calculate key metrics
+    total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else 0
+    total_records = len(df)
+    critical_count = len(df[df['tickets_data_severity'] == 'Critical']) if 'tickets_data_severity' in df.columns else 0
+    avg_cost = total_cost / total_records if total_records > 0 else 0
+
+    # Get unique categories/LOBs for "regions"
+    categories = df['AI_Category'].unique() if 'AI_Category' in df.columns else []
+    lobs = df['tickets_data_lob'].unique() if 'tickets_data_lob' in df.columns else []
+
+    with col1:
+        # Category Distribution Pie Chart (like Regional Revenue)
+        st.markdown('<div class="excel-chart-card">', unsafe_allow_html=True)
+        st.markdown('<div class="excel-chart-title">Category Distribution</div>', unsafe_allow_html=True)
+
+        cat_data = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False).head(5)
+
+        colors_list = ['#3b82f6', '#dc3545', '#22c55e', '#f97316', '#8b5cf6']
+
+        fig_pie = go.Figure(data=[go.Pie(
+            labels=cat_data.index,
+            values=cat_data.values,
+            hole=0,
+            marker_colors=colors_list[:len(cat_data)],
+            textinfo='percent',
+            textfont_size=11,
+            textfont_color='white',
+            showlegend=False
+        )])
+        fig_pie.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=10, r=10, t=10, b=10),
+            height=180
+        )
+        st.plotly_chart(fig_pie, use_container_width=True, key="cat_pie")
+
+        # Legend
+        legend_html = '<div class="excel-legend">'
+        for i, (cat, val) in enumerate(cat_data.items()):
+            color = colors_list[i] if i < len(colors_list) else '#888'
+            legend_html += f'<div class="excel-legend-item"><div class="excel-legend-dot" style="background:{color}"></div>{cat[:20]}: ${val:,.0f}</div>'
+        legend_html += '</div>'
+        st.markdown(legend_html, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col2:
+        # Monthly Trends (like Monthly trends line chart)
+        st.markdown('<div class="excel-chart-card">', unsafe_allow_html=True)
+        st.markdown('<div class="excel-chart-title">Monthly Trends</div>', unsafe_allow_html=True)
+
+        if 'tickets_data_issue_datetime' in df.columns:
+            df_temp = df.copy()
+            df_temp['month'] = pd.to_datetime(df_temp['tickets_data_issue_datetime']).dt.to_period('M')
+            monthly_data = df_temp.groupby('month').agg({
+                'Financial_Impact': 'sum',
+                'AI_Category': 'count'
+            }).rename(columns={'AI_Category': 'count'}).reset_index()
+            monthly_data['month_str'] = monthly_data['month'].astype(str)
+
+            fig_trend = go.Figure()
+            fig_trend.add_trace(go.Scatter(
+                x=monthly_data['month_str'],
+                y=monthly_data['Financial_Impact'],
+                mode='lines+markers',
+                fill='tozeroy',
+                fillcolor='rgba(220, 53, 69, 0.3)',
+                line=dict(color='#dc3545', width=2),
+                marker=dict(size=6, color='#dc3545'),
+                name='Cost'
+            ))
+            fig_trend.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=10, b=30),
+                height=180,
+                xaxis=dict(
+                    showgrid=False,
+                    tickfont=dict(size=8, color='#64748b'),
+                    tickangle=-45
+                ),
+                yaxis=dict(
+                    showgrid=True,
+                    gridcolor='rgba(255,255,255,0.1)',
+                    tickfont=dict(size=8, color='#64748b'),
+                    tickformat='$,.0f'
+                ),
+                showlegend=False
+            )
+            st.plotly_chart(fig_trend, use_container_width=True, key="monthly_trend")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col3:
+        # Total Cost KPI (like Revenue card)
+        st.markdown(f"""
+        <div class="excel-kpi-card primary">
+            <div class="excel-kpi-label">Total Financial Impact</div>
+            <div class="excel-kpi-value large money">${total_cost:,.0f}</div>
+            <div class="excel-kpi-sublabel">Average: ${avg_cost:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        # Transactions (Total Records)
+        st.markdown(f"""
+        <div class="excel-kpi-card accent">
+            <div class="excel-kpi-label">Total Records</div>
+            <div class="excel-kpi-value large">{total_records:,}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col5:
+        # Categories count
+        st.markdown(f"""
+        <div class="excel-kpi-card">
+            <div class="excel-kpi-label"># Categories</div>
+            <div class="excel-kpi-value large">{len(categories)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
+
+    # ========== ROW 2: Year Comparison, Top Contributors, Distribution ==========
+    col1, col2, col3, col4 = st.columns([1.5, 1.5, 2.5, 2])
+
+    # Extract year from date for comparison
+    if 'tickets_data_issue_datetime' in df.columns:
+        df_temp = df.copy()
+        df_temp['year'] = pd.to_datetime(df_temp['tickets_data_issue_datetime']).dt.year
+        years = sorted(df_temp['year'].unique())
+    else:
+        years = [2024, 2025]
+        df_temp = df.copy()
+        df_temp['year'] = 2024
+
+    with col1:
+        # Year 1 Donut (like Revenue 2019)
+        st.markdown('<div class="excel-chart-card">', unsafe_allow_html=True)
+        if len(years) >= 1:
+            year1 = years[-2] if len(years) >= 2 else years[0]
+            year1_data = df_temp[df_temp['year'] == year1]
+            year1_cost = year1_data['Financial_Impact'].sum() if 'Financial_Impact' in year1_data.columns else len(year1_data)
+            year1_pct = year1_cost / total_cost * 100 if total_cost > 0 else 50
+
+            st.markdown(f'<div class="excel-chart-title">Cost {year1}</div>', unsafe_allow_html=True)
+
+            fig_donut1 = go.Figure(data=[go.Pie(
+                values=[year1_pct, 100-year1_pct],
+                hole=0.7,
+                marker_colors=['#1e40af', 'rgba(255,255,255,0.1)'],
+                textinfo='none',
+                showlegend=False
+            )])
+            fig_donut1.add_annotation(
+                text=f"<b>{year1_pct:.0f}%</b>",
+                x=0.5, y=0.5, font_size=20, font_color='white',
+                showarrow=False
+            )
+            fig_donut1.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=150
+            )
+            st.plotly_chart(fig_donut1, use_container_width=True, key="year1_donut")
+            st.markdown(f'<div style="text-align:center;color:#64748b;font-size:0.75rem;">${year1_cost:,.0f}</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col2:
+        # Year 2 Donut (like Revenue 2020)
+        st.markdown('<div class="excel-chart-card">', unsafe_allow_html=True)
+        if len(years) >= 2:
+            year2 = years[-1]
+            year2_data = df_temp[df_temp['year'] == year2]
+            year2_cost = year2_data['Financial_Impact'].sum() if 'Financial_Impact' in year2_data.columns else len(year2_data)
+            year2_pct = year2_cost / total_cost * 100 if total_cost > 0 else 50
+
+            st.markdown(f'<div class="excel-chart-title">Cost {year2}</div>', unsafe_allow_html=True)
+
+            fig_donut2 = go.Figure(data=[go.Pie(
+                values=[year2_pct, 100-year2_pct],
+                hole=0.7,
+                marker_colors=['#dc3545', 'rgba(255,255,255,0.1)'],
+                textinfo='none',
+                showlegend=False
+            )])
+            fig_donut2.add_annotation(
+                text=f"<b>{year2_pct:.0f}%</b>",
+                x=0.5, y=0.5, font_size=20, font_color='white',
+                showarrow=False
+            )
+            fig_donut2.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=10, b=10),
+                height=150
+            )
+            st.plotly_chart(fig_donut2, use_container_width=True, key="year2_donut")
+            st.markdown(f'<div style="text-align:center;color:#64748b;font-size:0.75rem;">${year2_cost:,.0f}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="excel-chart-title">Cost Current</div>', unsafe_allow_html=True)
+            st.info("Single year data")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col3:
+        # Top Engineers (like Relationship Manager bar chart)
+        st.markdown('<div class="excel-chart-card">', unsafe_allow_html=True)
+        st.markdown('<div class="excel-chart-title">Top Engineers by Cost Impact</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.7rem;color:#22c55e;margin-bottom:8px;">Top 3 handle 42% of escalations</div>', unsafe_allow_html=True)
+
+        if 'Engineer' in df.columns:
+            eng_data = df.groupby('Engineer')['Financial_Impact'].sum().sort_values(ascending=True).tail(10)
+
+            fig_bar = go.Figure(data=[go.Bar(
+                y=eng_data.index,
+                x=eng_data.values,
+                orientation='h',
+                marker_color=['#dc3545' if i >= len(eng_data)-3 else '#3b82f6' for i in range(len(eng_data))],
+                text=[f'${v:,.0f}' for v in eng_data.values],
+                textposition='inside',
+                textfont=dict(size=9, color='white')
+            )])
+            fig_bar.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=100, r=10, t=10, b=10),
+                height=200,
+                xaxis=dict(showgrid=False, showticklabels=False),
+                yaxis=dict(tickfont=dict(size=9, color='#94a3b8'))
+            )
+            st.plotly_chart(fig_bar, use_container_width=True, key="eng_bar")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col4:
+        # Severity Analysis (like Stores analysis scatter)
+        st.markdown('<div class="excel-chart-card">', unsafe_allow_html=True)
+        st.markdown('<div class="excel-chart-title">Severity Distribution</div>', unsafe_allow_html=True)
+
+        if 'tickets_data_severity' in df.columns:
+            sev_data = df.groupby('tickets_data_severity').agg({
+                'Financial_Impact': 'sum',
+                'AI_Category': 'count'
+            }).rename(columns={'AI_Category': 'count'}).reset_index()
+
+            fig_scatter = go.Figure(data=[go.Scatter(
+                x=sev_data['count'],
+                y=sev_data['Financial_Impact'],
+                mode='markers+text',
+                marker=dict(
+                    size=sev_data['count'] / sev_data['count'].max() * 50 + 20,
+                    color=['#dc3545' if s == 'Critical' else '#f97316' if s == 'Major' else '#22c55e'
+                           for s in sev_data['tickets_data_severity']],
+                    opacity=0.8
+                ),
+                text=sev_data['tickets_data_severity'],
+                textposition='middle center',
+                textfont=dict(size=10, color='white')
+            )])
+            fig_scatter.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=10, r=10, t=10, b=30),
+                height=200,
+                xaxis=dict(
+                    title='Count', titlefont=dict(size=9, color='#64748b'),
+                    showgrid=True, gridcolor='rgba(255,255,255,0.1)',
+                    tickfont=dict(size=8, color='#64748b')
+                ),
+                yaxis=dict(
+                    title='Cost', titlefont=dict(size=9, color='#64748b'),
+                    showgrid=True, gridcolor='rgba(255,255,255,0.1)',
+                    tickfont=dict(size=8, color='#64748b'),
+                    tickformat='$,.0f'
+                ),
+                showlegend=False
+            )
+            st.plotly_chart(fig_scatter, use_container_width=True, key="sev_scatter")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
+
+    # ========== ROW 3: Source Breakdown, Quarterly, Category Breakdown ==========
+    col1, col2, col3 = st.columns([2, 3, 2.5])
+
+    with col1:
+        # Escalation Origin breakdown (like Gender breakdown)
+        st.markdown('<div class="excel-chart-card">', unsafe_allow_html=True)
+        st.markdown('<div class="excel-chart-title">Escalation Origin</div>', unsafe_allow_html=True)
+
+        if 'tickets_data_escalation_origin' in df.columns:
+            origin_data = df.groupby('tickets_data_escalation_origin')['Financial_Impact'].sum()
+            total_origin = origin_data.sum()
+
+            for origin, value in origin_data.items():
+                pct = value / total_origin * 100 if total_origin > 0 else 0
+                color_class = 'male' if origin == 'External' else 'female'
+                icon = '🔴' if origin == 'External' else '🔵'
+
+                st.markdown(f"""
+                <div style="margin: 12px 0;">
+                    <div style="display:flex;justify-content:space-between;color:#94a3b8;font-size:0.75rem;margin-bottom:4px;">
+                        <span>{icon} {origin}</span>
+                        <span>{pct:.1f}%</span>
+                    </div>
+                    <div class="excel-progress-container">
+                        <div class="excel-progress-bar {color_class}" style="width:{pct}%">
+                            ${value:,.0f}
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col2:
+        # Quarterly Breakdown (like Qrt 1-4 donuts)
+        st.markdown('<div class="excel-chart-card">', unsafe_allow_html=True)
+        st.markdown('<div class="excel-chart-title">Quarterly Cost Distribution</div>', unsafe_allow_html=True)
+
+        if 'tickets_data_issue_datetime' in df.columns:
+            df_temp = df.copy()
+            df_temp['quarter'] = pd.to_datetime(df_temp['tickets_data_issue_datetime']).dt.quarter
+            qtr_data = df_temp.groupby('quarter')['Financial_Impact'].sum()
+            total_qtr = qtr_data.sum()
+
+            qtr_cols = st.columns(4)
+            for i, qtr in enumerate([1, 2, 3, 4]):
+                with qtr_cols[i]:
+                    qtr_val = qtr_data.get(qtr, 0)
+                    qtr_pct = qtr_val / total_qtr * 100 if total_qtr > 0 else 0
+
+                    fig_qtr = go.Figure(data=[go.Pie(
+                        values=[qtr_pct, 100-qtr_pct],
+                        hole=0.6,
+                        marker_colors=['#1e40af' if qtr % 2 else '#dc3545', 'rgba(255,255,255,0.1)'],
+                        textinfo='none',
+                        showlegend=False
+                    )])
+                    fig_qtr.add_annotation(
+                        text=f"<b>{qtr_pct:.0f}%</b>",
+                        x=0.5, y=0.5, font_size=12, font_color='white',
+                        showarrow=False
+                    )
+                    fig_qtr.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        margin=dict(l=5, r=5, t=5, b=5),
+                        height=100
+                    )
+                    st.plotly_chart(fig_qtr, use_container_width=True, key=f"qtr_{qtr}")
+                    st.markdown(f'<div style="text-align:center;font-size:0.7rem;color:#64748b;">Q{qtr}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="text-align:center;font-size:0.65rem;color:#94a3b8;">${qtr_val:,.0f}</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col3:
+        # Category Cost Cards (like Revenue by Products)
+        st.markdown('<div class="excel-chart-card">', unsafe_allow_html=True)
+        st.markdown('<div class="excel-chart-title">Cost by Category</div>', unsafe_allow_html=True)
+
+        cat_costs = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False).head(4)
+        icons = ['💻', '🔧', '📊', '⚙️']
+
+        prod_cols = st.columns(2)
+        for i, (cat, cost) in enumerate(cat_costs.items()):
+            with prod_cols[i % 2]:
+                st.markdown(f"""
+                <div class="excel-product-card">
+                    <div class="excel-product-icon">{icons[i] if i < len(icons) else '📦'}</div>
+                    <div class="excel-product-value">${cost:,.0f}</div>
+                    <div class="excel-product-label">{cat[:15]}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ============================================================================
 # MAIN APP
 # ============================================================================
 
@@ -5017,7 +5689,7 @@ def main():
         
         page = st.radio(
             "Navigation",
-            ["🎯 Executive Summary", "📊 Dashboard", "📈 Analytics",
+            ["📊 Excel Dashboard", "🎯 Executive Summary", "📊 Dashboard", "📈 Analytics",
              "💰 Financial Analysis", "🏆 Benchmarking", "🔬 Root Cause",
              "🚀 Advanced Insights", "🔍 Drift Detection", "⚠️ Alerts",
              "🔮 What-If Simulator", "📋 Action Tracker", "📽️ Presentation Mode"],
@@ -5026,6 +5698,66 @@ def main():
         
         # Load data from default source
         df, data_source = load_data()
+
+        # Excel-style filters (shown for Excel Dashboard page)
+        if page == "📊 Excel Dashboard":
+            st.markdown("---")
+            st.markdown("### Add filter(s)")
+
+            # Category filter (like Regions)
+            st.markdown('<div class="excel-filter-section">', unsafe_allow_html=True)
+            st.markdown('<div class="excel-filter-title">Categories</div>', unsafe_allow_html=True)
+            if 'AI_Category' in df.columns:
+                all_categories = sorted(df['AI_Category'].unique().tolist())
+                selected_categories = st.multiselect(
+                    "Select Categories",
+                    options=all_categories,
+                    default=all_categories,
+                    key="excel_cat_filter",
+                    label_visibility="collapsed"
+                )
+                if selected_categories:
+                    df = df[df['AI_Category'].isin(selected_categories)]
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # Year filter
+            st.markdown('<div class="excel-filter-section">', unsafe_allow_html=True)
+            st.markdown('<div class="excel-filter-title">Year</div>', unsafe_allow_html=True)
+            if 'tickets_data_issue_datetime' in df.columns:
+                df_temp_year = df.copy()
+                df_temp_year['year'] = pd.to_datetime(df_temp_year['tickets_data_issue_datetime']).dt.year
+                all_years = sorted(df_temp_year['year'].unique().tolist())
+                selected_years = st.multiselect(
+                    "Select Years",
+                    options=all_years,
+                    default=all_years,
+                    key="excel_year_filter",
+                    label_visibility="collapsed"
+                )
+                if selected_years:
+                    df['year'] = pd.to_datetime(df['tickets_data_issue_datetime']).dt.year
+                    df = df[df['year'].isin(selected_years)]
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # Severity filter (like Stores)
+            st.markdown('<div class="excel-filter-section">', unsafe_allow_html=True)
+            st.markdown('<div class="excel-filter-title">Severity</div>', unsafe_allow_html=True)
+            if 'tickets_data_severity' in df.columns:
+                all_severities = sorted(df['tickets_data_severity'].unique().tolist())
+                selected_severities = st.multiselect(
+                    "Select Severities",
+                    options=all_severities,
+                    default=all_severities,
+                    key="excel_sev_filter",
+                    label_visibility="collapsed"
+                )
+                if selected_severities:
+                    df = df[df['tickets_data_severity'].isin(selected_severities)]
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # Clear Filters button
+            if st.button("🗑️ Clear Filter(s)", key="clear_filters", type="secondary"):
+                st.rerun()
 
         st.markdown("---")
         st.markdown(f"**📁 Data Source:**")
@@ -5136,7 +5868,9 @@ def main():
                     )
     
     # Main content - Route to appropriate page
-    if page == "🎯 Executive Summary":
+    if page == "📊 Excel Dashboard":
+        render_excel_dashboard(df)
+    elif page == "🎯 Executive Summary":
         render_executive_summary(df)
     elif page == "📊 Dashboard":
         render_dashboard(df)
