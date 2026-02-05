@@ -5445,10 +5445,9 @@ def render_excel_dashboard(df):
             font=dict(color='white', size=11),
             coloraxis_showscale=True,
             coloraxis_colorbar=dict(
-                title="Cost",
+                title=dict(text="Cost", font=dict(color='#94a3b8')),
                 tickformat="$,.0f",
-                tickfont=dict(color='#94a3b8'),
-                titlefont=dict(color='#94a3b8')
+                tickfont=dict(color='#94a3b8')
             )
         )
         fig_sunburst.update_traces(
@@ -5535,10 +5534,9 @@ def render_excel_dashboard(df):
                 height=350,
                 font=dict(color='white'),
                 coloraxis_colorbar=dict(
-                    title="Cost",
+                    title=dict(text="Cost", font=dict(color='#94a3b8')),
                     tickformat="$,.0f",
-                    tickfont=dict(color='#94a3b8'),
-                    titlefont=dict(color='#94a3b8')
+                    tickfont=dict(color='#94a3b8')
                 )
             )
             fig_tree.update_traces(
