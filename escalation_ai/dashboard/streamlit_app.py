@@ -5693,18 +5693,24 @@ def render_excel_dashboard(df):
         # Derive Resolution Speed from Predicted_Resolution_Days
         df_sankey = df.copy()
         if 'Predicted_Resolution_Days' in df_sankey.columns:
-            df_sankey['Resolution_Speed'] = pd.cut(
-                df_sankey['Predicted_Resolution_Days'],
-                bins=[0, 2, 5, float('inf')],
-                labels=['⚡ Quick (<2d)', '📋 Standard (2-5d)', '🐢 Extended (>5d)']
-            )
+            # Create resolution speed categories
+            def get_resolution_speed(days):
+                if pd.isna(days):
+                    return 'Standard (2-5d)'
+                elif days < 2:
+                    return 'Quick (<2d)'
+                elif days <= 5:
+                    return 'Standard (2-5d)'
+                else:
+                    return 'Extended (>5d)'
+            df_sankey['Resolution_Speed'] = df_sankey['Predicted_Resolution_Days'].apply(get_resolution_speed)
         else:
-            df_sankey['Resolution_Speed'] = '📋 Standard'
+            df_sankey['Resolution_Speed'] = 'Standard (2-5d)'
 
-        # Get unique values for each level
-        categories = df_sankey['AI_Category'].unique().tolist()
-        severities = df_sankey['tickets_data_severity'].unique().tolist()
-        resolutions = df_sankey['Resolution_Speed'].dropna().unique().tolist()
+        # Get unique values for each level (convert to strings)
+        categories = [str(c) for c in df_sankey['AI_Category'].unique().tolist()]
+        severities = [str(s) for s in df_sankey['tickets_data_severity'].unique().tolist()]
+        resolutions = [str(r) for r in df_sankey['Resolution_Speed'].dropna().unique().tolist()]
 
         # Create node labels
         all_labels = categories + severities + resolutions
@@ -5712,7 +5718,7 @@ def render_excel_dashboard(df):
         # Create color map
         cat_colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1']
         sev_colors = {'Critical': '#ef4444', 'Major': '#f97316', 'Minor': '#22c55e'}
-        res_colors = {'⚡ Quick (<2d)': '#22c55e', '📋 Standard (2-5d)': '#3b82f6', '🐢 Extended (>5d)': '#ef4444'}
+        res_colors = {'Quick (<2d)': '#22c55e', 'Standard (2-5d)': '#3b82f6', 'Extended (>5d)': '#ef4444'}
 
         node_colors = []
         for label in all_labels:
@@ -5739,31 +5745,36 @@ def render_excel_dashboard(df):
 
         # Category -> Severity links
         for _, row in links_cat_sev.iterrows():
-            src_idx = all_labels.index(row['AI_Category'])
-            tgt_idx = all_labels.index(row['tickets_data_severity'])
-            sources.append(src_idx)
-            targets.append(tgt_idx)
-            values.append(row['count'])
-            # Color based on severity
-            if row['tickets_data_severity'] == 'Critical':
-                link_colors.append('rgba(239, 68, 68, 0.4)')
-            elif row['tickets_data_severity'] == 'Major':
-                link_colors.append('rgba(249, 115, 22, 0.4)')
-            else:
-                link_colors.append('rgba(34, 197, 94, 0.4)')
+            cat_str = str(row['AI_Category'])
+            sev_str = str(row['tickets_data_severity'])
+            if cat_str in all_labels and sev_str in all_labels:
+                src_idx = all_labels.index(cat_str)
+                tgt_idx = all_labels.index(sev_str)
+                sources.append(src_idx)
+                targets.append(tgt_idx)
+                values.append(row['count'])
+                # Color based on severity
+                if sev_str == 'Critical':
+                    link_colors.append('rgba(239, 68, 68, 0.4)')
+                elif sev_str == 'Major':
+                    link_colors.append('rgba(249, 115, 22, 0.4)')
+                else:
+                    link_colors.append('rgba(34, 197, 94, 0.4)')
 
         # Severity -> Resolution links
         for _, row in links_sev_res.iterrows():
-            if pd.notna(row['Resolution_Speed']):
-                src_idx = all_labels.index(row['tickets_data_severity'])
-                tgt_idx = all_labels.index(row['Resolution_Speed'])
+            sev_str = str(row['tickets_data_severity'])
+            res_str = str(row['Resolution_Speed'])
+            if pd.notna(row['Resolution_Speed']) and sev_str in all_labels and res_str in all_labels:
+                src_idx = all_labels.index(sev_str)
+                tgt_idx = all_labels.index(res_str)
                 sources.append(src_idx)
                 targets.append(tgt_idx)
                 values.append(row['count'])
                 # Color based on resolution speed
-                if 'Quick' in str(row['Resolution_Speed']):
+                if 'Quick' in res_str:
                     link_colors.append('rgba(34, 197, 94, 0.5)')
-                elif 'Extended' in str(row['Resolution_Speed']):
+                elif 'Extended' in res_str:
                     link_colors.append('rgba(239, 68, 68, 0.5)')
                 else:
                     link_colors.append('rgba(59, 130, 246, 0.5)')
