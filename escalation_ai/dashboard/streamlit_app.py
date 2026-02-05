@@ -6332,7 +6332,36 @@ def render_deep_analysis(df):
         with col1:
             st.plotly_chart(chart_category_sunburst(df), use_container_width=True)
         with col2:
-            st.plotly_chart(chart_friction_by_category(df), use_container_width=True)
+            # Severity Distribution by Category - Stacked Bar (unique to Deep Analysis)
+            if 'AI_Category' in df.columns and 'tickets_data_severity' in df.columns:
+                sev_by_cat = df.groupby(['AI_Category', 'tickets_data_severity']).size().reset_index(name='Count')
+
+                fig_sev_cat = go.Figure()
+                severity_colors = {'Critical': '#ef4444', 'Major': '#f97316', 'Minor': '#22c55e'}
+
+                for severity in ['Critical', 'Major', 'Minor']:
+                    sev_data = sev_by_cat[sev_by_cat['tickets_data_severity'] == severity]
+                    if len(sev_data) > 0:
+                        fig_sev_cat.add_trace(go.Bar(
+                            name=severity,
+                            x=sev_data['AI_Category'],
+                            y=sev_data['Count'],
+                            marker_color=severity_colors.get(severity, '#3b82f6'),
+                            hovertemplate=f'<b>%{{x}}</b><br>{severity}: %{{y}}<extra></extra>'
+                        ))
+
+                fig_sev_cat.update_layout(
+                    title=dict(text='Severity Breakdown by Category', font=dict(size=14, color='#e2e8f0')),
+                    barmode='stack',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    height=400,
+                    margin=dict(t=40, b=80, l=50, r=20),
+                    xaxis=dict(tickangle=-45, tickfont=dict(size=9, color='#94a3b8'), showgrid=False),
+                    yaxis=dict(tickfont=dict(size=10, color='#94a3b8'), gridcolor='rgba(255,255,255,0.1)', title='Count'),
+                    legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5, font=dict(color='#94a3b8'))
+                )
+                st.plotly_chart(fig_sev_cat, use_container_width=True, key="sev_by_cat_deep")
 
         # Category drill-down with inline selector
         st.markdown("#### 🔍 Category Drill-Down")
