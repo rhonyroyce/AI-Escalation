@@ -1138,9 +1138,9 @@ def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                 df['AI_Origin'] = df[col]
                 break
 
-    # Calculate Financial_Impact using PriceCatalog if not present or all zeros
-    if 'Financial_Impact' not in df.columns or df['Financial_Impact'].sum() == 0:
-        df = _calculate_financial_impact_from_catalog(df)
+    # ALWAYS recalculate Financial_Impact using PriceCatalog
+    # This ensures the dashboard reflects the current price_catalog.xlsx configuration
+    df = _calculate_financial_impact_from_catalog(df)
 
     return df
 
