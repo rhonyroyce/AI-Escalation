@@ -1183,60 +1183,65 @@ def _calculate_financial_impact_from_catalog(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_data
-def load_excel_file(file_path: str) -> tuple:
-    """Load an Excel file and return processed dataframe."""
+def _load_excel_raw(file_path: str) -> pd.DataFrame:
+    """Load raw Excel data (cached). Financial_Impact calculated separately."""
     try:
-        df = pd.read_excel(file_path, sheet_name="Scored Data")
-        df = process_dataframe(df)
-        return df, file_path
+        return pd.read_excel(file_path, sheet_name="Scored Data")
     except:
-        try:
-            df = pd.read_excel(file_path, sheet_name=0)
-            df = process_dataframe(df)
-            return df, file_path
-        except Exception as e:
-            return None, str(e)
+        return pd.read_excel(file_path, sheet_name=0)
+
+
+def load_excel_file(file_path: str) -> tuple:
+    """Load an Excel file and return processed dataframe with fresh Financial_Impact."""
+    try:
+        df = _load_excel_raw(file_path)
+        df = process_dataframe(df)  # This recalculates Financial_Impact from price_catalog
+        return df, file_path
+    except Exception as e:
+        return None, str(e)
 
 
 @st.cache_data
-def load_data():
-    """Load the most recent analysis data."""
-    # Get project root directory (2 levels up from dashboard)
+def _find_data_file():
+    """Find the data file path (cached). Returns path only, not data."""
     project_root = Path(__file__).parent.parent.parent
 
-    # Try multiple locations for Strategic_Report.xlsx
     search_paths = [
-        Path("Strategic_Report.xlsx"),  # Current directory
-        project_root / "Strategic_Report.xlsx",  # Project root
-        Path.cwd() / "Strategic_Report.xlsx",  # Working directory
+        Path("Strategic_Report.xlsx"),
+        project_root / "Strategic_Report.xlsx",
+        Path.cwd() / "Strategic_Report.xlsx",
     ]
 
-    for strategic_report in search_paths:
-        if strategic_report.exists():
-            try:
-                df = pd.read_excel(strategic_report, sheet_name="Scored Data")
-                df = process_dataframe(df)
-                print(f"✅ Loaded {len(df)} records from {strategic_report}")
-                return df, str(strategic_report)
-            except Exception as e:
-                st.warning(f"Could not load {strategic_report}: {e}")
-                continue
+    for path in search_paths:
+        if path.exists():
+            return str(path), "Scored Data"
 
-    # Look for other processed Excel files in project root
+    # Look for other processed Excel files
     data_files = list(project_root.glob("Escalation_Analysis_*.xlsx"))
-
     if data_files:
         latest = max(data_files, key=lambda x: x.stat().st_mtime)
-        try:
-            df = pd.read_excel(latest, sheet_name="Detailed Analysis")
-            print(f"✅ Loaded {len(df)} records from {latest}")
-            return df, str(latest)
-        except Exception as e:
-            st.warning(f"Could not load {latest}: {e}")
+        return str(latest), "Detailed Analysis"
 
-    # Generate sample data as fallback
-    st.warning("⚠️ No data file found. Showing sample data. Please ensure Strategic_Report.xlsx is in the project root.")
-    return generate_sample_data(), "Sample Data"
+    return None, None
+
+
+def load_data():
+    """Load the most recent analysis data with fresh Financial_Impact from price_catalog."""
+    file_path, sheet_name = _find_data_file()
+
+    if file_path is None:
+        return None, "No data file found"
+
+    try:
+        df = pd.read_excel(file_path, sheet_name=sheet_name)
+        df = process_dataframe(df)  # Recalculates Financial_Impact from price_catalog
+        print(f"✅ Loaded {len(df)} records from {file_path}")
+        return df, file_path
+    except Exception as e:
+        st.warning(f"Could not load {file_path}: {e}")
+        # Generate sample data as fallback
+        st.warning("⚠️ No data file found. Showing sample data. Please ensure Strategic_Report.xlsx is in the project root.")
+        return generate_sample_data(), "Sample Data"
 
 
 def generate_sample_data():
