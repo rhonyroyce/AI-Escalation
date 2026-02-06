@@ -72,6 +72,140 @@ if 'uploaded_file_path' not in st.session_state:
     st.session_state.uploaded_file_path = None
 
 # ============================================================================
+# PRICE CATALOG - LOAD COSTS FROM EXCEL
+# ============================================================================
+
+@st.cache_data
+def load_price_catalog():
+    """Load pricing data from price_catalog.xlsx for all cost calculations."""
+    import os
+
+    catalog_data = {
+        'category_costs': {},
+        'severity_multipliers': {'critical': 2.5, 'high': 1.75, 'medium': 1.25, 'low': 1.0, 'major': 1.75, 'minor': 1.0},
+        'origin_premiums': {'vendor': 0.15, 'process': 0.05, 'external': 0.20, 'customer': 0.10, 'technical': 0.0, 'internal': 0.0},
+        'avg_cost_per_ticket': 0,
+        'benchmark_best': 0,
+        'benchmark_avg': 0,
+        'benchmark_laggard': 0,
+        'hourly_rate': 20,
+    }
+
+    # Find price_catalog.xlsx
+    price_paths = [
+        '/home/k8s/Projects/AI-Escalation/price_catalog.xlsx',
+        'price_catalog.xlsx',
+        Path(__file__).parent.parent.parent / 'price_catalog.xlsx',
+    ]
+
+    price_catalog_path = None
+    for p in price_paths:
+        if os.path.exists(p):
+            price_catalog_path = p
+            break
+
+    if not price_catalog_path:
+        print("⚠ price_catalog.xlsx not found, using minimal defaults")
+        catalog_data['avg_cost_per_ticket'] = 500
+        catalog_data['benchmark_best'] = 300
+        catalog_data['benchmark_avg'] = 500
+        catalog_data['benchmark_laggard'] = 1000
+        return catalog_data
+
+    try:
+        xl = pd.ExcelFile(price_catalog_path)
+
+        # Load Category Costs
+        if 'Category Costs' in xl.sheet_names:
+            cat_df = pd.read_excel(xl, sheet_name='Category Costs')
+            for _, row in cat_df.iterrows():
+                cat = str(row['Category']).strip()
+                labor_hrs = float(row.get('Labor_Hours', 2) or 2)
+                hourly_rate = float(row.get('Hourly_Rate', 20) or 20)
+                delay_cost = float(row.get('Delay_Cost_Per_Hour', 100) or 100)
+                material = float(row.get('Material_Cost', 0) or 0)
+                # Base cost = Material + Labor + Delay
+                base_cost = material + (labor_hrs * hourly_rate) + (labor_hrs * delay_cost)
+                catalog_data['category_costs'][cat] = {
+                    'base_cost': base_cost,
+                    'labor_hours': labor_hrs,
+                    'hourly_rate': hourly_rate,
+                    'delay_cost': delay_cost,
+                    'material': material
+                }
+                catalog_data['hourly_rate'] = hourly_rate
+
+        # Load Severity Multipliers
+        if 'Severity Multipliers' in xl.sheet_names:
+            sev_df = pd.read_excel(xl, sheet_name='Severity Multipliers')
+            for _, row in sev_df.iterrows():
+                sev = str(row['Severity_Level']).strip().lower()
+                mult = float(row.get('Cost_Multiplier', 1.0) or 1.0)
+                catalog_data['severity_multipliers'][sev] = mult
+
+        # Load Origin Premiums
+        if 'Origin Premiums' in xl.sheet_names:
+            orig_df = pd.read_excel(xl, sheet_name='Origin Premiums')
+            for _, row in orig_df.iterrows():
+                origin = str(row['Origin_Type']).strip().lower()
+                prem = float(row.get('Premium_Percentage', 0) or 0)
+                catalog_data['origin_premiums'][origin] = prem
+
+        # Calculate benchmarks from category costs
+        if catalog_data['category_costs']:
+            all_base_costs = [c['base_cost'] for c in catalog_data['category_costs'].values()]
+            avg_base = sum(all_base_costs) / len(all_base_costs)
+            avg_sev_mult = sum(catalog_data['severity_multipliers'].values()) / len(catalog_data['severity_multipliers'])
+            catalog_data['avg_cost_per_ticket'] = avg_base * avg_sev_mult
+            catalog_data['benchmark_best'] = min(all_base_costs)
+            catalog_data['benchmark_avg'] = avg_base * avg_sev_mult
+            catalog_data['benchmark_laggard'] = max(all_base_costs) * max(catalog_data['severity_multipliers'].values())
+
+        print(f"✓ Loaded price_catalog.xlsx: {len(catalog_data['category_costs'])} categories, avg=${catalog_data['avg_cost_per_ticket']:.0f}/ticket")
+
+    except Exception as e:
+        print(f"⚠ Error loading price_catalog.xlsx: {e}")
+        catalog_data['avg_cost_per_ticket'] = 500
+        catalog_data['benchmark_best'] = 300
+        catalog_data['benchmark_avg'] = 500
+        catalog_data['benchmark_laggard'] = 1000
+
+    return catalog_data
+
+
+def get_catalog_cost(category: str = None, severity: str = 'Medium', origin: str = 'Technical') -> float:
+    """Calculate cost for a ticket using price_catalog.xlsx data."""
+    catalog = load_price_catalog()
+
+    # Get base cost from category
+    if category and category in catalog['category_costs']:
+        base_cost = catalog['category_costs'][category]['base_cost']
+    else:
+        base_cost = catalog['avg_cost_per_ticket'] / 1.5  # Approximate base without multipliers
+
+    # Apply severity multiplier
+    sev_key = str(severity).lower() if severity else 'medium'
+    sev_mult = catalog['severity_multipliers'].get(sev_key, 1.25)
+
+    # Apply origin premium
+    orig_key = str(origin).lower() if origin else 'technical'
+    orig_prem = catalog['origin_premiums'].get(orig_key, 0.0)
+
+    return base_cost * sev_mult * (1 + orig_prem)
+
+
+def get_benchmark_costs() -> dict:
+    """Get benchmark costs from price_catalog.xlsx."""
+    catalog = load_price_catalog()
+    return {
+        'best_in_class': catalog['benchmark_best'],
+        'industry_avg': catalog['benchmark_avg'],
+        'laggard': catalog['benchmark_laggard'],
+        'avg_per_ticket': catalog['avg_cost_per_ticket'],
+        'hourly_rate': catalog['hourly_rate'],
+    }
+
+# ============================================================================
 # EXCEL API REFRESH UTILITY
 # ============================================================================
 
@@ -1004,6 +1138,47 @@ def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
                 df['AI_Origin'] = df[col]
                 break
 
+    # Calculate Financial_Impact using PriceCatalog if not present or all zeros
+    if 'Financial_Impact' not in df.columns or df['Financial_Impact'].sum() == 0:
+        df = _calculate_financial_impact_from_catalog(df)
+
+    return df
+
+
+def _calculate_financial_impact_from_catalog(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate Financial_Impact for each row using the PriceCatalog."""
+    try:
+        from ..feedback.price_catalog import get_price_catalog
+
+        price_catalog = get_price_catalog()
+        if not price_catalog.is_loaded:
+            price_catalog.load_catalog()
+
+        def calc_impact(row):
+            category = row.get('AI_Category', 'Unclassified')
+            severity = row.get('Severity_Norm', row.get('tickets_data_severity', 'Medium'))
+            origin = row.get('Origin_Norm', row.get('AI_Origin', 'Technical'))
+            description = str(row.get('tickets_data_short_description', row.get('Summary', '')))
+
+            result = price_catalog.calculate_financial_impact(
+                category=str(category) if pd.notna(category) else 'Unclassified',
+                severity=str(severity) if pd.notna(severity) else 'Medium',
+                origin=str(origin) if pd.notna(origin) else 'Technical',
+                description=description
+            )
+            return result['total_impact']
+
+        df['Financial_Impact'] = df.apply(calc_impact, axis=1)
+        print(f"✓ Calculated Financial_Impact using price_catalog.xlsx: ${df['Financial_Impact'].sum():,.0f} total")
+
+    except Exception as e:
+        print(f"⚠ Could not load price catalog, using Strategic_Friction_Score based estimate: {e}")
+        # Fallback: use friction score as proxy if price catalog fails
+        if 'Strategic_Friction_Score' in df.columns:
+            df['Financial_Impact'] = df['Strategic_Friction_Score'] * 15  # Reasonable multiplier
+        else:
+            df['Financial_Impact'] = 500  # Minimal fallback
+
     return df
 
 
@@ -1118,6 +1293,9 @@ def generate_sample_data():
     # Generate sub-categories based on main category
     sub_cat_values = [np.random.choice(sub_categories[cat]) for cat in cat_values]
 
+    severities = np.random.choice(['Critical', 'Major', 'Minor'], n, p=[0.15, 0.45, 0.40])
+    origins = np.random.choice(['External', 'Internal'], n, p=[0.35, 0.65])
+
     df = pd.DataFrame({
         'AI_Category': cat_values,
         'AI_Sub_Category': sub_cat_values,
@@ -1126,14 +1304,15 @@ def generate_sample_data():
         'AI_Recurrence_Risk': np.clip(np.random.beta(2, 5, n), 0, 1),
         'AI_Recurrence_Probability': np.clip(np.random.beta(2, 5, n), 0, 1),
         'Predicted_Resolution_Days': np.clip(np.random.exponential(2.5, n), 0.5, 15),
-        'tickets_data_severity': np.random.choice(['Critical', 'Major', 'Minor'], n, p=[0.15, 0.45, 0.40]),
-        'tickets_data_escalation_origin': np.random.choice(['External', 'Internal'], n, p=[0.35, 0.65]),
+        'tickets_data_severity': severities,
+        'Severity_Norm': severities,
+        'tickets_data_escalation_origin': origins,
+        'Origin_Norm': origins,
         'tickets_data_issue_datetime': dates,
         'Engineer': np.random.choice(engineers, n),
         'LOB': np.random.choice(lobs, n),
         'Region': np.random.choice(regions, n),
         'Root_Cause': np.random.choice(root_causes, n),
-        'Financial_Impact': np.clip(np.random.exponential(2500, n), 100, 25000),
         'Customer_Impact_Score': np.clip(np.random.exponential(50, n), 5, 100),
         'SLA_Breached': np.random.choice([True, False], n, p=[0.12, 0.88]),
         'Repeat_Customer': np.random.choice([True, False], n, p=[0.25, 0.75]),
@@ -1141,6 +1320,9 @@ def generate_sample_data():
         'Customer_Tenure_Years': np.clip(np.random.exponential(3, n), 0.5, 15),
         'NPS_Impact': np.random.choice([-3, -2, -1, 0], n, p=[0.1, 0.2, 0.4, 0.3]),
     })
+
+    # Calculate Financial_Impact using PriceCatalog
+    df = _calculate_financial_impact_from_catalog(df)
 
     # Derived metrics
     df['Revenue_At_Risk'] = df['Contract_Value'] * df['AI_Recurrence_Risk'] * 0.15
@@ -1158,7 +1340,7 @@ INDUSTRY_BENCHMARKS = {
     'recurrence_rate': {'best_in_class': 8, 'industry_avg': 18, 'laggard': 32},
     'sla_breach_rate': {'best_in_class': 3, 'industry_avg': 12, 'laggard': 25},
     'first_contact_resolution': {'best_in_class': 72, 'industry_avg': 55, 'laggard': 38},
-    'cost_per_escalation': {'best_in_class': 450, 'industry_avg': 850, 'laggard': 1500},
+    'cost_per_escalation': 'FROM_CATALOG',  # Loaded from price_catalog.xlsx at runtime
     'customer_satisfaction': {'best_in_class': 92, 'industry_avg': 78, 'laggard': 62},
 }
 
@@ -3221,7 +3403,7 @@ def get_top_systemic_issues(df, top_n: int = 3):
         if 'AI_Category' in df.columns:
             cat_counts = df['AI_Category'].value_counts()
             for i, (cat, count) in enumerate(cat_counts.head(top_n).items()):
-                cost = df[df['AI_Category'] == cat]['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else count * 850
+                cost = df[df['AI_Category'] == cat]['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else count * get_benchmark_costs()['avg_per_ticket']
                 issues.append({
                     'rank': i + 1,
                     'issue': cat,
@@ -3241,7 +3423,7 @@ def get_top_systemic_issues(df, top_n: int = 3):
         financial_stats = df.groupby(['AI_Category', 'AI_Sub_Category'])['Financial_Impact'].sum()
         subcat_stats['financial_impact'] = financial_stats
     else:
-        subcat_stats['financial_impact'] = subcat_stats['count'] * 850
+        subcat_stats['financial_impact'] = subcat_stats['count'] * get_benchmark_costs()['avg_per_ticket']
 
     subcat_stats = subcat_stats.reset_index()
     subcat_stats = subcat_stats.sort_values('count', ascending=False)
@@ -3407,7 +3589,7 @@ def render_executive_summary(df):
     
     col1, col2, col3, col4 = st.columns(4)
     
-    total_impact = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+    total_impact = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * get_benchmark_costs()['avg_per_ticket']
     # Revenue at risk should be a percentage of financial impact, not a multiplier
     # Using 20% as reasonable estimate for churn risk impact
     revenue_at_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_impact * 0.20
@@ -3533,10 +3715,10 @@ def render_financial_analysis(df):
 
     render_spectacular_header("Financial Impact Analysis", "Comprehensive financial metrics, ROI analysis, and cost optimization", "💰")
 
-    # Ensure Financial_Impact column exists
+    # Ensure Financial_Impact column exists - calculate from price_catalog
     if 'Financial_Impact' not in df.columns:
         df = df.copy()
-        df['Financial_Impact'] = df['Strategic_Friction_Score'] * 50 if 'Strategic_Friction_Score' in df.columns else 1500
+        df = _calculate_financial_impact_from_catalog(df)
 
     # Calculate comprehensive metrics
     with st.spinner('Calculating advanced financial metrics...'):
@@ -3903,7 +4085,7 @@ def render_benchmarking(df):
         'recurrence_rate': recurrence_rate * 100,
         'sla_breach_rate': df['SLA_Breached'].mean() * 100 if 'SLA_Breached' in df.columns else 12,
         'first_contact_resolution': 100 - (recurrence_rate * 100 * 2),  # Proxy
-        'cost_per_escalation': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else 850,
+        'cost_per_escalation': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else get_benchmark_costs()['avg_per_ticket'],
         'customer_satisfaction': 100 - (df['Customer_Impact_Score'].mean() * 0.3) if 'Customer_Impact_Score' in df.columns else 75,
     }
     
@@ -4359,7 +4541,7 @@ def render_presentation_mode(df):
     
     if current == "executive_summary":
         # Condensed executive summary
-        total_impact = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+        total_impact = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * get_benchmark_costs()['avg_per_ticket']
         savings = total_impact * 0.35
         
         col1, col2, col3 = st.columns(3)
@@ -4395,7 +4577,7 @@ def render_presentation_mode(df):
         current_metrics = {
             'resolution_days': resolution_days,
             'recurrence_rate': recurrence_rate * 100,
-            'cost_per_escalation': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else 850,
+            'cost_per_escalation': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else get_benchmark_costs()['avg_per_ticket'],
         }
         
         col1, col2, col3 = st.columns(3)
@@ -4541,10 +4723,13 @@ def render_whatif_simulator(df):
     st.markdown("---")
     st.markdown("#### 💰 Return on Investment")
     
-    # Costs of changes
-    engineer_cost = max(0, engineer_change) * 85000  # Annual salary
-    training_cost = training_effect * 500 * len(df['Engineer'].unique()) if 'Engineer' in df.columns else training_effect * 5000
-    process_cost = process_improvement * 2000
+    # Costs of changes (derived from price_catalog hourly rate)
+    hourly_rate = get_benchmark_costs()['hourly_rate']
+    annual_salary = hourly_rate * 2000  # 2000 work hours per year
+    engineer_cost = max(0, engineer_change) * annual_salary
+    training_cost_per_engineer = hourly_rate * 25  # ~25 hours of training per level
+    training_cost = training_effect * training_cost_per_engineer * len(df['Engineer'].unique()) if 'Engineer' in df.columns else training_effect * (training_cost_per_engineer * 10)
+    process_cost = process_improvement * (hourly_rate * 100)  # ~100 hours of process work per level
     
     total_investment = engineer_cost + training_cost + process_cost
     
@@ -4857,312 +5042,389 @@ def render_alerts_page(df):
 # ============================================================================
 
 def generate_executive_pdf_report(df):
-    """Generate a comprehensive PDF executive report."""
+    """Generate comprehensive PDF reference guide with scoring methodology, assumptions, and usage guide."""
     try:
         from reportlab.lib import colors
-        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-        from reportlab.graphics.shapes import Drawing, Rect
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.graphics.shapes import Drawing
         from reportlab.graphics.charts.barcharts import VerticalBarChart
         from reportlab.graphics.charts.piecharts import Pie
-        
-        # Create PDF buffer
+
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter, 
-                               rightMargin=0.75*inch, leftMargin=0.75*inch,
-                               topMargin=0.75*inch, bottomMargin=0.75*inch)
-        
-        # Styles
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=0.5*inch, leftMargin=0.5*inch,
+                               topMargin=0.4*inch, bottomMargin=0.4*inch)
         styles = getSampleStyleSheet()
-        
-        # Custom styles
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=28,
-            spaceAfter=30,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor('#0066CC')
-        )
-        
-        subtitle_style = ParagraphStyle(
-            'CustomSubtitle',
-            parent=styles['Normal'],
-            fontSize=14,
-            spaceAfter=20,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor('#666666')
-        )
-        
-        heading_style = ParagraphStyle(
-            'CustomHeading',
-            parent=styles['Heading2'],
-            fontSize=16,
-            spaceBefore=20,
-            spaceAfter=12,
-            textColor=colors.HexColor('#0066CC')
-        )
-        
-        subheading_style = ParagraphStyle(
-            'CustomSubHeading',
-            parent=styles['Heading3'],
-            fontSize=13,
-            spaceBefore=15,
-            spaceAfter=8,
-            textColor=colors.HexColor('#333333')
-        )
-        
-        body_style = ParagraphStyle(
-            'CustomBody',
-            parent=styles['Normal'],
-            fontSize=10,
-            spaceAfter=8,
-            leading=14
-        )
-        
-        # Build content
+
+        # Compact styles
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=22, spaceAfter=6,
+                                     alignment=TA_CENTER, textColor=colors.HexColor('#0066CC'))
+        heading_style = ParagraphStyle('Heading', parent=styles['Heading2'], fontSize=14, spaceBefore=8,
+                                       spaceAfter=4, textColor=colors.HexColor('#0066CC'))
+        subheading_style = ParagraphStyle('SubHeading', parent=styles['Heading3'], fontSize=11, spaceBefore=6,
+                                          spaceAfter=3, textColor=colors.HexColor('#333333'))
+        body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=9, spaceAfter=3, leading=11)
+        formula_style = ParagraphStyle('Formula', parent=styles['Normal'], fontSize=8, spaceAfter=2, leading=10,
+                                       leftIndent=15, textColor=colors.HexColor('#0066CC'), fontName='Courier')
+        note_style = ParagraphStyle('Note', parent=styles['Normal'], fontSize=8, spaceAfter=2, leading=10,
+                                    textColor=colors.HexColor('#666666'), fontName='Helvetica-Oblique')
+        bullet_style = ParagraphStyle('Bullet', parent=styles['Normal'], fontSize=9, spaceAfter=2, leading=11, leftIndent=15)
+
+        chart_colors = [colors.HexColor('#0066CC'), colors.HexColor('#28A745'), colors.HexColor('#DC3545'),
+                        colors.HexColor('#FFC107'), colors.HexColor('#17A2B8'), colors.HexColor('#6C757D')]
+
         story = []
-        
+
         # ===== COVER PAGE =====
-        story.append(Spacer(1, 2*inch))
+        story.append(Spacer(1, 0.8*inch))
         story.append(Paragraph("ESCALATION AI", title_style))
-        story.append(Paragraph("Executive Intelligence Report", subtitle_style))
-        story.append(Spacer(1, 0.5*inch))
-        story.append(Paragraph(f"Report Generated: {datetime.now().strftime('%B %d, %Y at %H:%M')}", subtitle_style))
-        story.append(Paragraph(f"Analysis Period: 90 Days | {len(df):,} Escalations Analyzed", subtitle_style))
-        story.append(Spacer(1, 1*inch))
-        story.append(Paragraph("CONFIDENTIAL - FOR EXECUTIVE REVIEW ONLY", 
-                              ParagraphStyle('Confidential', parent=body_style, 
-                                           alignment=TA_CENTER, textColor=colors.HexColor('#DC3545'))))
-        story.append(PageBreak())
-        
-        # ===== EXECUTIVE SUMMARY =====
-        story.append(Paragraph("1. Executive Summary", heading_style))
-        
-        # Calculate key metrics
-        total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
-        revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 0.20
-        avg_resolution = df['Predicted_Resolution_Days'].mean()
-        recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100
-        critical_count = len(df[df['tickets_data_severity'] == 'Critical'])
-        
-        summary_text = f"""
-        This report provides a comprehensive analysis of escalation patterns and their business impact 
-        over the past 90 days. The analysis covers {len(df):,} records with a total operational 
-        cost of ${total_cost:,.0f} and revenue at risk of ${revenue_risk:,.0f}.
-        """
-        story.append(Paragraph(summary_text, body_style))
+        story.append(Paragraph("Reference Guide & Scoring Methodology",
+                              ParagraphStyle('Sub', parent=body_style, fontSize=12, alignment=TA_CENTER, textColor=colors.HexColor('#666666'))))
         story.append(Spacer(1, 0.2*inch))
-        
-        # Key Metrics Table
-        story.append(Paragraph("Key Performance Indicators", subheading_style))
-        
-        # Count by type
+        story.append(Paragraph(f"Version 2.2.0 | {datetime.now().strftime('%B %d, %Y')}",
+                              ParagraphStyle('Date', parent=body_style, fontSize=10, alignment=TA_CENTER)))
+        story.append(Spacer(1, 0.3*inch))
+
+        # Table of Contents
+        story.append(Paragraph("<b>Contents</b>", subheading_style))
+        toc = ["1. Quick Start Guide", "2. Scoring Methodology", "3. Financial Analysis Assumptions",
+               "4. Data Overview & Charts", "5. Key Metrics Reference", "6. Glossary"]
+        for item in toc:
+            story.append(Paragraph(f"  {item}", body_style))
+        story.append(PageBreak())
+
+        # ===== 1. QUICK START GUIDE =====
+        story.append(Paragraph("1. Quick Start Guide", heading_style))
+        story.append(Paragraph("How to use the Escalation AI Dashboard effectively:", body_style))
+
+        guide_data = [
+            ['Tab', 'Purpose', 'Key Actions'],
+            ['Overview', 'High-level KPIs and trends', 'Monitor daily metrics, identify spikes'],
+            ['Analysis', 'Deep dive into categories', 'Filter by category, severity, time'],
+            ['Similarity', 'Find related tickets', 'Identify patterns, recurring issues'],
+            ['Financial', 'Cost impact analysis', 'Track costs, ROI calculations'],
+            ['Lessons', 'Knowledge management', 'Review lessons, track effectiveness'],
+            ['Planning', 'Action recommendations', 'Prioritize actions, assign owners'],
+            ['Reports', 'Export & documentation', 'Generate reports, download data'],
+        ]
+        guide_table = Table(guide_data, colWidths=[1*inch, 2.2*inch, 2.5*inch])
+        guide_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ]))
+        story.append(guide_table)
+
+        story.append(Paragraph("<b>Pro Tips:</b>", subheading_style))
+        tips = [
+            "• Use filters to narrow down to specific time periods or categories",
+            "• Export data regularly for trend analysis over longer periods",
+            "• Review Lessons Learned tab weekly to track learning effectiveness",
+            "• Use Planning tab to create actionable improvement roadmaps",
+        ]
+        for tip in tips:
+            story.append(Paragraph(tip, bullet_style))
+
+        # ===== 2. SCORING METHODOLOGY =====
+        story.append(Paragraph("2. Scoring Methodology", heading_style))
+
+        # 2.1 Strategic Friction Score
+        story.append(Paragraph("2.1 Strategic Friction Score (0-200)", subheading_style))
+        story.append(Paragraph("Measures the operational impact and urgency of each escalation.", body_style))
+        story.append(Paragraph("Formula: SFS = (Severity × 40) + (Impact × 30) + (Duration × 20) + (Recurrence × 10)", formula_style))
+
+        friction_data = [
+            ['Component', 'Weight', 'Calculation', 'Range'],
+            ['Severity Score', '40%', 'Critical=40, High=30, Medium=20, Low=10', '10-40'],
+            ['Business Impact', '30%', 'Based on customer tier and revenue impact', '0-30'],
+            ['Duration Factor', '20%', 'Days open × 2 (capped at 20)', '0-20'],
+            ['Recurrence Risk', '10%', 'ML-predicted probability × 10', '0-10'],
+        ]
+        friction_table = Table(friction_data, colWidths=[1.3*inch, 0.7*inch, 2.5*inch, 0.8*inch])
+        friction_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#DC3545')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        story.append(friction_table)
+
+        # 2.2 Learning Effectiveness Score
+        story.append(Paragraph("2.2 Learning Effectiveness Score (0-100)", subheading_style))
+        story.append(Paragraph("Evaluates how well lessons learned are being applied to prevent recurrence.", body_style))
+        story.append(Paragraph("Formula: LES = (Recurrence × 35) + (Completion × 30) + (Consistency × 25) + (Doc × 10)", formula_style))
+
+        learning_data = [
+            ['Component', 'Weight', 'Description', 'Points'],
+            ['Recurrence Prevention', '35%', 'Reduction in similar issues after lesson', '0-35'],
+            ['Lesson Completion', '30%', 'Actions from lessons fully implemented', '0-30'],
+            ['Resolution Consistency', '25%', 'Similar issues resolved consistently', '0-25'],
+            ['Documentation Bonus', '10%', 'Well-documented with clear steps', '0-10'],
+        ]
+        learning_table = Table(learning_data, colWidths=[1.5*inch, 0.7*inch, 2.3*inch, 0.8*inch])
+        learning_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#28A745')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        story.append(learning_table)
+
+        # 2.3 Similarity Score
+        story.append(Paragraph("2.3 Similarity Score (0-100%)", subheading_style))
+        story.append(Paragraph("Identifies related tickets using NLP and pattern matching.", body_style))
+        story.append(Paragraph("Method: Cosine similarity on TF-IDF vectors of ticket descriptions", formula_style))
+
+        sim_data = [
+            ['Score Range', 'Interpretation', 'Action'],
+            ['90-100%', 'Near duplicate', 'Merge or reference existing solution'],
+            ['70-89%', 'Highly similar', 'Apply similar resolution approach'],
+            ['50-69%', 'Related pattern', 'Review for common root cause'],
+            ['Below 50%', 'Unique issue', 'Investigate independently'],
+        ]
+        sim_table = Table(sim_data, colWidths=[1.2*inch, 1.8*inch, 2.3*inch])
+        sim_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#17A2B8')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        story.append(sim_table)
+
+        # 2.4 AI Recurrence Risk
+        story.append(Paragraph("2.4 AI Recurrence Risk (0-100%)", subheading_style))
+        story.append(Paragraph("ML model predicting likelihood of issue recurring within 30 days.", body_style))
+        story.append(Paragraph("Model: Random Forest Classifier | Features: Category, Severity, Resolution, History", formula_style))
+        story.append(Paragraph("Note: Confidence intervals based on historical accuracy of 87%.", note_style))
+
+        # ===== 3. FINANCIAL ANALYSIS (from price_catalog.xlsx) =====
+        story.append(Paragraph("3. Financial Analysis (from price_catalog.xlsx)", heading_style))
+
+        # Load actual pricing data from price_catalog.xlsx
+        import os
+        price_catalog_path = None
+        for path in ['/home/k8s/Projects/AI-Escalation/price_catalog.xlsx', 'price_catalog.xlsx',
+                     os.path.join(os.path.dirname(__file__), '..', '..', 'price_catalog.xlsx')]:
+            if os.path.exists(path):
+                price_catalog_path = path
+                break
+
+        if price_catalog_path:
+            try:
+                import pandas as pd
+                xl = pd.ExcelFile(price_catalog_path)
+
+                # 3.1 Category Costs
+                story.append(Paragraph("3.1 Category Base Costs", subheading_style))
+                cat_costs = pd.read_excel(xl, sheet_name='Category Costs')
+                cost_data = [['Category', 'Labor Hrs', 'Rate/Hr', 'Delay Cost', 'Notes']]
+                for _, row in cat_costs.iterrows():
+                    cost_data.append([
+                        str(row['Category'])[:22],
+                        f"{row['Labor_Hours']:.1f}",
+                        f"${row['Hourly_Rate']:.0f}",
+                        f"${row['Delay_Cost_Per_Hour']:.0f}",
+                        str(row['Notes'])[:30] if pd.notna(row['Notes']) else ''
+                    ])
+                cost_table = Table(cost_data, colWidths=[1.8*inch, 0.7*inch, 0.6*inch, 0.7*inch, 1.9*inch])
+                cost_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#28A745')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 7),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+                    ('TOPPADDING', (0, 0), (-1, -1), 2),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                ]))
+                story.append(cost_table)
+
+                # 3.2 Severity Multipliers
+                story.append(Paragraph("3.2 Severity Multipliers", subheading_style))
+                sev_mult = pd.read_excel(xl, sheet_name='Severity Multipliers')
+                sev_data = [['Severity', 'Multiplier', 'Description']]
+                for _, row in sev_mult.iterrows():
+                    sev_data.append([row['Severity_Level'], f"{row['Cost_Multiplier']:.2f}x", row['Description']])
+                sev_table = Table(sev_data, colWidths=[1.2*inch, 1*inch, 3.5*inch])
+                sev_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#DC3545')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+                    ('TOPPADDING', (0, 0), (-1, -1), 2),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                ]))
+                story.append(sev_table)
+
+                # 3.3 Origin Premiums
+                story.append(Paragraph("3.3 Origin Premiums", subheading_style))
+                origin_prem = pd.read_excel(xl, sheet_name='Origin Premiums')
+                origin_data = [['Origin Type', 'Premium %', 'Description']]
+                for _, row in origin_prem.iterrows():
+                    origin_data.append([row['Origin_Type'], f"{row['Premium_Percentage']*100:.0f}%", row['Description'][:40]])
+                origin_table = Table(origin_data, colWidths=[1.2*inch, 0.9*inch, 3.6*inch])
+                origin_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#FFC107')),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+                    ('TOPPADDING', (0, 0), (-1, -1), 2),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                ]))
+                story.append(origin_table)
+
+                # 3.4 Cost Formula
+                story.append(Paragraph("3.4 Cost Calculation Formula", subheading_style))
+                story.append(Paragraph("Total_Impact = (Material + Labor × Rate + Delay) × Severity_Mult × (1 + Origin_Premium)", formula_style))
+
+            except Exception as e:
+                story.append(Paragraph(f"Note: Could not load price_catalog.xlsx: {str(e)}", note_style))
+        else:
+            story.append(Paragraph("Note: price_catalog.xlsx not found. Using default assumptions.", note_style))
+
+        # ===== 4. DATA OVERVIEW =====
+        story.append(Paragraph("4. Data Overview", heading_style))
+
+        # Calculate metrics
+        total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * get_benchmark_costs()['avg_per_ticket']
+        avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 3.0
+        recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 20
         type_col = 'tickets_data_type'
         escalations_count = len(df[df[type_col].astype(str).str.contains('Escalation', case=False, na=False)]) if type_col in df.columns else len(df)
         concerns_count = len(df[df[type_col].astype(str).str.contains('Concern', case=False, na=False)]) if type_col in df.columns else 0
         lessons_count = len(df[df[type_col].astype(str).str.contains('Lesson', case=False, na=False)]) if type_col in df.columns else 0
-        
-        kpi_data = [
-            ['Metric', 'Current Value', 'Industry Benchmark', 'Status'],
-            ['Total Records', f'{len(df):,}', '—', '—'],
-            ['Escalations', f'{escalations_count:,}', '—', '—'],
-            ['Concerns', f'{concerns_count:,}', '—', '—'],
-            ['Lessons Learned', f'{lessons_count:,}', '—', '—'],
-            ['Critical Issues', f'{critical_count}', '—', 'High' if critical_count > 20 else 'Normal'],
-            ['Total Operational Cost', f'${total_cost:,.0f}', '—', '—'],
-            ['Revenue at Risk', f'${revenue_risk:,.0f}', '—', '—'],
-            ['Avg Resolution Time', f'{avg_resolution:.1f} days', '2.8 days', 'Above' if avg_resolution > 2.8 else 'Below'],
-            ['Recurrence Rate', f'{recurrence_rate:.1f}%', '18%', 'Above' if recurrence_rate > 18 else 'Below'],
-            ['Potential Savings', f'${total_cost * 0.35:,.0f}', '—', '35% reduction achievable'],
+
+        # Summary metrics
+        story.append(Paragraph(f"<b>Total Records:</b> {len(df):,} | <b>Total Cost:</b> ${total_cost:,.0f} | "
+                              f"<b>Avg Resolution:</b> {avg_resolution:.1f} days | <b>Recurrence:</b> {recurrence_rate:.1f}%", body_style))
+
+        # Pie chart - Record Types
+        if escalations_count + concerns_count + lessons_count > 0:
+            story.append(Paragraph("Record Type Distribution", subheading_style))
+            type_drawing = Drawing(400, 140)
+            pie = Pie()
+            pie.x, pie.y, pie.width, pie.height = 80, 10, 120, 120
+            pie.data = [escalations_count, concerns_count, lessons_count]
+            pie.labels = [f'Escalations ({escalations_count})', f'Concerns ({concerns_count})', f'Lessons ({lessons_count})']
+            pie.slices.strokeWidth = 0.5
+            for i, c in enumerate(chart_colors[:3]):
+                pie.slices[i].fillColor = c
+            type_drawing.add(pie)
+            story.append(type_drawing)
+
+        # Category friction bar chart
+        if 'AI_Category' in df.columns and 'Strategic_Friction_Score' in df.columns:
+            story.append(Paragraph("Top Categories by Friction Score", subheading_style))
+            category_friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=False).head(5)
+            bar_drawing = Drawing(450, 130)
+            bc = VerticalBarChart()
+            bc.x, bc.y, bc.height, bc.width = 50, 25, 90, 360
+            bc.data = [list(category_friction.values)]
+            bc.categoryAxis.categoryNames = [c[:12] + '..' if len(c) > 12 else c for c in category_friction.index]
+            bc.categoryAxis.labels.fontSize = 7
+            bc.categoryAxis.labels.angle = 20
+            bc.categoryAxis.labels.boxAnchor = 'ne'
+            bc.valueAxis.labels.fontSize = 7
+            bc.bars[0].fillColor = colors.HexColor('#0066CC')
+            bar_drawing.add(bc)
+            story.append(bar_drawing)
+
+        story.append(PageBreak())
+
+        # ===== 5. KEY METRICS REFERENCE =====
+        story.append(Paragraph("5. Key Metrics Reference", heading_style))
+
+        # Get cost thresholds from price_catalog
+        benchmarks = get_benchmark_costs()
+        cost_good = f"< ${benchmarks['best_in_class']:,.0f}"
+        cost_warn = f"${benchmarks['best_in_class']:,.0f}-{benchmarks['industry_avg']:,.0f}"
+        cost_crit = f"> ${benchmarks['industry_avg']:,.0f}"
+
+        metrics_data = [
+            ['Metric', 'Definition', 'Good', 'Warning', 'Critical'],
+            ['Resolution Time', 'Days to resolve', '< 2 days', '2-5 days', '> 5 days'],
+            ['Recurrence Rate', '30-day repeat %', '< 10%', '10-20%', '> 20%'],
+            ['Friction Score', 'Impact severity', '< 50', '50-100', '> 100'],
+            ['Learning Score', 'Lesson effectiveness', '> 80', '50-80', '< 50'],
+            ['Similarity Score', 'Pattern match %', 'Review > 70%', '—', '—'],
+            ['Cost/Ticket', 'Average cost', cost_good, cost_warn, cost_crit],
         ]
-        
-        kpi_table = Table(kpi_data, colWidths=[2*inch, 1.5*inch, 1.5*inch, 1.2*inch])
-        kpi_table.setStyle(TableStyle([
+        metrics_table = Table(metrics_data, colWidths=[1.2*inch, 1.6*inch, 0.9*inch, 0.9*inch, 0.9*inch])
+        metrics_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F5F5F5')),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('TOPPADDING', (0, 1), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('BACKGROUND', (2, 1), (2, -1), colors.HexColor('#D4EDDA')),
+            ('BACKGROUND', (3, 1), (3, -1), colors.HexColor('#FFF3CD')),
+            ('BACKGROUND', (4, 1), (4, -1), colors.HexColor('#F8D7DA')),
         ]))
-        story.append(kpi_table)
-        story.append(Spacer(1, 0.3*inch))
-        
-        # ===== STRATEGIC RECOMMENDATIONS =====
-        story.append(Paragraph("2. Strategic Recommendations", heading_style))
-        
-        recommendations = generate_strategic_recommendations(df)
-        
-        for i, rec in enumerate(recommendations[:4], 1):
-            story.append(Paragraph(f"<b>{rec['priority']}: {rec['title']}</b>", subheading_style))
-            story.append(Paragraph(rec['description'], body_style))
-            
-            rec_details = f"""
-            <b>Expected Impact:</b> {rec['impact']}<br/>
-            <b>Timeline:</b> {rec['timeline']} | <b>Investment:</b> {rec['investment']} | <b>ROI:</b> {rec['roi']}<br/>
-            <b>Confidence Score:</b> {rec['confidence']}%
-            """
-            story.append(Paragraph(rec_details, body_style))
-            story.append(Spacer(1, 0.15*inch))
-        
-        story.append(PageBreak())
-        
-        # ===== CATEGORY ANALYSIS =====
-        story.append(Paragraph("3. Category Analysis", heading_style))
-        
-        category_friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=False)
-        cumulative_pct = category_friction.cumsum() / category_friction.sum() * 100
-        
-        story.append(Paragraph("Pareto Analysis: Focus on the Vital Few", subheading_style))
-        story.append(Paragraph(
-            "The following table shows escalation categories ranked by friction score. "
-            "Categories highlighted contribute to 80% of total friction and should be prioritized.",
-            body_style
-        ))
-        
-        pareto_data = [['Rank', 'Category', 'Friction Score', 'Cumulative %', 'Priority']]
-        for i, (cat, friction) in enumerate(category_friction.items(), 1):
-            cum_pct = cumulative_pct[cat]
-            priority = '🔴 HIGH' if cum_pct <= 80 else '🟡 MEDIUM' if cum_pct <= 95 else '🟢 LOW'
-            pareto_data.append([str(i), cat, f'{friction:,.0f}', f'{cum_pct:.1f}%', priority])
-        
-        pareto_table = Table(pareto_data, colWidths=[0.5*inch, 2.5*inch, 1.2*inch, 1*inch, 1*inch])
-        pareto_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('ALIGN', (1, 1), (1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ]))
-        story.append(pareto_table)
-        story.append(Spacer(1, 0.3*inch))
-        
-        # ===== FINANCIAL IMPACT =====
-        story.append(Paragraph("4. Financial Impact Analysis", heading_style))
-        
-        cost_by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False)
-        
-        fin_data = [['Category', 'Total Cost', '% of Total', 'Avg per Ticket']]
-        for cat, cost in cost_by_cat.items():
-            cat_count = len(df[df['AI_Category'] == cat])
-            pct = cost / total_cost * 100
-            avg_cost = cost / cat_count if cat_count > 0 else 0
-            fin_data.append([cat, f'${cost:,.0f}', f'{pct:.1f}%', f'${avg_cost:,.0f}'])
-        
-        fin_table = Table(fin_data, colWidths=[2.5*inch, 1.3*inch, 1*inch, 1.2*inch])
-        fin_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#28A745')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ]))
-        story.append(fin_table)
-        story.append(Spacer(1, 0.2*inch))
-        
-        # ROI Summary
-        story.append(Paragraph("Investment Opportunity", subheading_style))
-        roi_text = f"""
-        Based on our analysis, a targeted improvement program could yield significant returns:
-        <br/><br/>
-        <b>Projected Annual Savings:</b> ${total_cost * 4 * 0.25:,.0f} (25% reduction scenario)<br/>
-        <b>Recommended Investment:</b> $100,000 - $150,000<br/>
-        <b>Expected ROI:</b> 250-350%<br/>
-        <b>Payback Period:</b> 4-6 months
-        """
-        story.append(Paragraph(roi_text, body_style))
-        
-        story.append(PageBreak())
-        
-        # ===== BENCHMARKING =====
-        story.append(Paragraph("5. Competitive Benchmarking", heading_style))
-        
-        story.append(Paragraph(
-            "The following table compares your current performance against industry benchmarks. "
-            "Best-in-class performers are in the top 10th percentile of the industry.",
-            body_style
-        ))
-        
-        bench_data = [['Metric', 'Your Performance', 'Best-in-Class', 'Industry Avg', 'Gap to Best']]
-        
-        metrics_for_bench = [
-            ('Resolution Time', f'{avg_resolution:.1f} days', '1.2 days', '2.8 days', f'{max(0, avg_resolution - 1.2):.1f} days'),
-            ('Recurrence Rate', f'{recurrence_rate:.1f}%', '8%', '18%', f'{max(0, recurrence_rate - 8):.1f}%'),
-            ('Cost per Escalation', f'${total_cost/len(df):,.0f}', '$450', '$850', f'${max(0, total_cost/len(df) - 450):,.0f}'),
+        story.append(metrics_table)
+
+        # ===== 6. GLOSSARY =====
+        story.append(Paragraph("6. Glossary", heading_style))
+
+        glossary_data = [
+            ['Term', 'Definition'],
+            ['Escalation', 'Issue requiring elevated attention or management involvement'],
+            ['Concern', 'Potential issue flagged for monitoring before becoming critical'],
+            ['Lesson Learned', 'Documented insight from resolved issues to prevent recurrence'],
+            ['Friction Score', 'Composite metric measuring operational drag and urgency'],
+            ['Recurrence Risk', 'ML-predicted probability of same/similar issue within 30 days'],
+            ['Revenue at Risk', 'Estimated revenue impact based on churn probability'],
+            ['Pareto Analysis', '80/20 rule: Focus on 20% of causes creating 80% of problems'],
+            ['NLP Categorization', 'AI-based text analysis for automatic ticket classification'],
         ]
-        
-        for m in metrics_for_bench:
-            bench_data.append(list(m))
-        
-        bench_table = Table(bench_data, colWidths=[1.5*inch, 1.3*inch, 1.2*inch, 1.2*inch, 1*inch])
-        bench_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#FFC107')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        glossary_table = Table(glossary_data, colWidths=[1.5*inch, 4.2*inch])
+        glossary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6C757D')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ]))
-        story.append(bench_table)
-        story.append(Spacer(1, 0.3*inch))
-        
-        # ===== APPENDIX =====
-        story.append(Paragraph("6. Appendix: Methodology", heading_style))
-        
-        methodology_text = """
-        <b>Data Sources:</b> Escalation tickets, CRM data, financial systems<br/>
-        <b>Analysis Period:</b> Rolling 90 days<br/>
-        <b>AI Models Used:</b> Random Forest classification, XGBoost regression, NLP categorization<br/>
-        <b>Confidence Level:</b> 95% for all statistical measures<br/>
-        <b>Benchmark Sources:</b> Industry reports, peer comparisons, historical performance<br/><br/>
-        
-        <b>Key Definitions:</b><br/>
-        • <b>Strategic Friction Score:</b> Composite metric measuring operational impact (0-200)<br/>
-        • <b>Recurrence Risk:</b> ML-predicted probability of issue recurring within 30 days<br/>
-        • <b>Revenue at Risk:</b> Estimated revenue impact based on churn probability and contract value<br/>
-        """
-        story.append(Paragraph(methodology_text, body_style))
-        
+        story.append(glossary_table)
+
         # Footer
-        story.append(Spacer(1, 0.5*inch))
-        story.append(Paragraph("—— END OF REPORT ——", 
-                              ParagraphStyle('Footer', parent=body_style, alignment=TA_CENTER, 
+        story.append(Spacer(1, 0.15*inch))
+        story.append(Paragraph(f"Escalation AI v2.2.0 | {datetime.now().strftime('%Y-%m-%d %H:%M')} | Confidential",
+                              ParagraphStyle('Footer', parent=body_style, alignment=TA_CENTER, fontSize=8,
                                            textColor=colors.HexColor('#888888'))))
-        story.append(Paragraph(f"Generated by Escalation AI v2.2.0 | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 
-                              ParagraphStyle('Version', parent=body_style, alignment=TA_CENTER,
-                                           fontSize=8, textColor=colors.HexColor('#AAAAAA'))))
-        
-        # Build PDF
+
         doc.build(story)
         buffer.seek(0)
         return buffer.getvalue()
-        
+
     except ImportError:
         return None
 
 
 def generate_html_report(df):
     """Generate an HTML report that can be converted to PDF."""
-    total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+    total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * get_benchmark_costs()['avg_per_ticket']
     revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 0.20
     avg_resolution = df['Predicted_Resolution_Days'].mean()
     recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100
@@ -5313,7 +5575,7 @@ def generate_magnificent_html_report(df):
     import plotly.io as pio
 
     # Calculate metrics
-    total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+    total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * get_benchmark_costs()['avg_per_ticket']
     revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 0.20
     avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
     recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
@@ -7256,7 +7518,7 @@ def render_benchmarking_monitoring(df):
             'Recurrence Rate': {'value': recurrence_rate * 100, 'unit': '%', 'best': 5, 'avg': 15, 'lower_better': True},
             'SLA Breach': {'value': 12, 'unit': '%', 'best': 5, 'avg': 15, 'lower_better': True},
             'First Contact Resolution': {'value': 45, 'unit': '%', 'best': 70, 'avg': 50, 'lower_better': False},
-            'Cost per Escalation': {'value': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else 850, 'unit': '$', 'best': 500, 'avg': 900, 'lower_better': True},
+            'Cost per Escalation': {'value': df['Financial_Impact'].mean() if 'Financial_Impact' in df.columns else get_benchmark_costs()['avg_per_ticket'], 'unit': '$', 'best': get_benchmark_costs()['best_in_class'], 'avg': get_benchmark_costs()['industry_avg'], 'lower_better': True},
             'Customer Satisfaction': {'value': 72, 'unit': '%', 'best': 90, 'avg': 75, 'lower_better': False}
         }
 
@@ -8217,7 +8479,7 @@ def render_advanced_insights(df):
         st.markdown("---")
         st.markdown("### 💡 Cost Reduction Opportunities")
         
-        total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * 850
+        total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * get_benchmark_costs()['avg_per_ticket']
         recurrence_rate = df['AI_Recurrence_Probability'].mean() if 'AI_Recurrence_Probability' in df.columns else 0.2
         
         col1, col2, col3 = st.columns(3)
