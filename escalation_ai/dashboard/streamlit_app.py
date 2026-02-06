@@ -1151,8 +1151,7 @@ def _calculate_financial_impact_from_catalog(df: pd.DataFrame) -> pd.DataFrame:
         from ..feedback.price_catalog import get_price_catalog
 
         price_catalog = get_price_catalog()
-        if not price_catalog.is_loaded:
-            price_catalog.load_catalog()
+        price_catalog.load_catalog()  # Always reload to ensure latest values
 
         def calc_impact(row):
             category = row.get('AI_Category', 'Unclassified')

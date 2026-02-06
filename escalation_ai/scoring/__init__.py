@@ -40,10 +40,9 @@ def calculate_strategic_friction(df: pd.DataFrame) -> pd.DataFrame:
     df['Origin_Norm'] = df[COL_ORIGIN].astype(str).str.title().str.strip() if COL_ORIGIN in df.columns else ''
     df['Impact_Norm'] = df[COL_IMPACT].fillna('None').astype(str).str.title().str.strip() if COL_IMPACT in df.columns else 'None'
 
-    # Load price catalog for financial impact
+    # Load price catalog for financial impact (always reload to pick up changes)
     price_catalog = get_price_catalog()
-    if not price_catalog.is_loaded:
-        price_catalog.load_catalog()
+    price_catalog.load_catalog()  # Always reload to ensure latest values from price_catalog.xlsx
 
     def get_score(row):
         """Calculate strategic friction score for a row."""
