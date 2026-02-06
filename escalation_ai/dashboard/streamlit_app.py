@@ -75,9 +75,25 @@ if 'uploaded_file_path' not in st.session_state:
 # PRICE CATALOG - LOAD COSTS FROM EXCEL
 # ============================================================================
 
-@st.cache_data
-def load_price_catalog():
-    """Load pricing data from price_catalog.xlsx for all cost calculations."""
+def _get_price_catalog_mtime():
+    """Get modification time of price_catalog.xlsx for cache invalidation."""
+    import os
+    paths = [
+        '/home/k8s/Projects/AI-Escalation/price_catalog.xlsx',
+        'price_catalog.xlsx',
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            return os.path.getmtime(p)
+    return 0
+
+@st.cache_data(ttl=60)  # Refresh every 60 seconds, or when file changes
+def load_price_catalog(_mtime=None):
+    """Load pricing data from price_catalog.xlsx for all cost calculations.
+
+    Args:
+        _mtime: File modification time (used for cache invalidation)
+    """
     import os
 
     catalog_data = {
@@ -175,7 +191,7 @@ def load_price_catalog():
 
 def get_catalog_cost(category: str = None, severity: str = 'Medium', origin: str = 'Technical') -> float:
     """Calculate cost for a ticket using price_catalog.xlsx data."""
-    catalog = load_price_catalog()
+    catalog = load_price_catalog(_mtime=_get_price_catalog_mtime())
 
     # Get base cost from category
     if category and category in catalog['category_costs']:
@@ -196,7 +212,7 @@ def get_catalog_cost(category: str = None, severity: str = 'Medium', origin: str
 
 def get_benchmark_costs() -> dict:
     """Get benchmark costs from price_catalog.xlsx."""
-    catalog = load_price_catalog()
+    catalog = load_price_catalog(_mtime=_get_price_catalog_mtime())
     return {
         'best_in_class': catalog['benchmark_best'],
         'industry_avg': catalog['benchmark_avg'],
@@ -1156,8 +1172,9 @@ def _calculate_financial_impact_from_catalog(df: pd.DataFrame) -> pd.DataFrame:
         def calc_impact(row):
             category = row.get('AI_Category', 'Unclassified')
             severity = row.get('Severity_Norm', row.get('tickets_data_severity', 'Medium'))
-            origin = row.get('Origin_Norm', row.get('AI_Origin', 'Technical'))
-            description = str(row.get('tickets_data_short_description', row.get('Summary', '')))
+            origin = row.get('Origin_Norm', row.get('tickets_data_origin', 'Internal'))
+            # Use tickets_data_issue_summary (the actual column name) for keyword pattern matching
+            description = str(row.get('tickets_data_issue_summary', row.get('Summary', '')))
 
             result = price_catalog.calculate_financial_impact(
                 category=str(category) if pd.notna(category) else 'Unclassified',
