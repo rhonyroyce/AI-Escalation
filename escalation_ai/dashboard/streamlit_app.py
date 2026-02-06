@@ -1164,10 +1164,26 @@ def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 def _calculate_financial_impact_from_catalog(df: pd.DataFrame) -> pd.DataFrame:
     """Calculate Financial_Impact for each row using the PriceCatalog."""
     try:
+        import os
+        from pathlib import Path
         from ..feedback.price_catalog import get_price_catalog
 
-        price_catalog = get_price_catalog()
-        price_catalog.load_catalog()  # Always reload to ensure latest values
+        # Ensure we're in the right directory for price_catalog.xlsx
+        project_root = Path(__file__).parent.parent.parent
+        price_catalog_path = project_root / 'price_catalog.xlsx'
+
+        if not price_catalog_path.exists():
+            raise FileNotFoundError(f"price_catalog.xlsx not found at {price_catalog_path}")
+
+        # Change to project root temporarily if needed
+        original_cwd = os.getcwd()
+        os.chdir(project_root)
+
+        try:
+            price_catalog = get_price_catalog()
+            price_catalog.load_catalog()  # Always reload to ensure latest values
+        finally:
+            os.chdir(original_cwd)
 
         def calc_impact(row):
             category = row.get('AI_Category', 'Unclassified')
@@ -1188,7 +1204,10 @@ def _calculate_financial_impact_from_catalog(df: pd.DataFrame) -> pd.DataFrame:
         print(f"✓ Calculated Financial_Impact using price_catalog.xlsx: ${df['Financial_Impact'].sum():,.0f} total")
 
     except Exception as e:
-        print(f"⚠ Could not load price catalog, using Strategic_Friction_Score based estimate: {e}")
+        import traceback
+        print(f"⚠ ERROR calculating Financial_Impact from price_catalog: {e}")
+        print(f"⚠ Full traceback:\n{traceback.format_exc()}")
+        print("⚠ Using Strategic_Friction_Score × 15 as fallback")
         # Fallback: use friction score as proxy if price catalog fails
         if 'Strategic_Friction_Score' in df.columns:
             df['Financial_Impact'] = df['Strategic_Friction_Score'] * 15  # Reasonable multiplier
