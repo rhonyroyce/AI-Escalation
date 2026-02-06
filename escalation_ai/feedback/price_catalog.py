@@ -253,7 +253,6 @@ class PriceCatalog:
                             'material_cost': float(row[1] or 0),
                             'labor_hours': float(row[2] or 0),
                             'hourly_rate': float(row[3] or DEFAULT_HOURLY_RATE),
-                            'delay_cost_per_hour': float(row[4] or 0),
                         }
                 logger.info(f"  → Loaded {len(self.category_costs)} category cost entries")
             
@@ -319,12 +318,12 @@ class PriceCatalog:
         severity: str = "Medium",
         origin: str = "Technical",
         description: str = "",
-        delay_hours: float = None
+        **kwargs
     ) -> Dict[str, float]:
-        """Calculate total financial impact for an escalation.
+        """Calculate total financial impact (rework cost) for an escalation.
 
-        Note: delay_hours is deprecated and ignored. Delay cost is now calculated
-        as labor_hours × delay_cost_per_hour for consistency.
+        Formula: (Material + Labor_Hours × Hourly_Rate) × Severity_Mult × (1 + Origin_Premium)
+        Based entirely on price_catalog.xlsx values. No delay cost - no data to support it.
         """
         if not self.is_loaded:
             self.load_catalog()
@@ -335,29 +334,24 @@ class PriceCatalog:
             material_cost = keyword_match['material_cost']
             labor_hours = keyword_match['labor_hours']
             hourly_rate = DEFAULT_HOURLY_RATE
-            delay_cost_per_hour = self.category_costs.get(
-                keyword_match.get('category_override', category), {}
-            ).get('delay_cost_per_hour', 300)
         else:
             cat_costs = self.category_costs.get(category, self.category_costs.get('Unclassified', {}))
-            material_cost = cat_costs.get('material_cost', 1000)
-            labor_hours = cat_costs.get('labor_hours', 6)
+            material_cost = cat_costs.get('material_cost', 0)
+            labor_hours = cat_costs.get('labor_hours', 2)
             hourly_rate = cat_costs.get('hourly_rate', DEFAULT_HOURLY_RATE)
-            delay_cost_per_hour = cat_costs.get('delay_cost_per_hour', 300)
 
+        # Rework cost only: material + labor (no delay - no data to support it)
         labor_cost = labor_hours * hourly_rate
-        delay_cost = labor_hours * delay_cost_per_hour  # Use labor_hours, not delay_hours
-        base_cost = material_cost + labor_cost + delay_cost
-        
+        base_cost = material_cost + labor_cost
+
         severity_mult = self.severity_multipliers.get(severity.lower(), 1.0)
         origin_premium = self.origin_premiums.get(origin.lower(), 0.0)
-        
+
         total_impact = base_cost * severity_mult * (1 + origin_premium)
-        
+
         return {
             'material_cost': round(material_cost, 2),
             'labor_cost': round(labor_cost, 2),
-            'delay_cost': round(delay_cost, 2),
             'base_cost': round(base_cost, 2),
             'severity_multiplier': severity_mult,
             'origin_premium': origin_premium,

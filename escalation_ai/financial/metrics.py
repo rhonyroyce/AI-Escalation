@@ -176,12 +176,13 @@ def _calculate_preventable_cost(df: pd.DataFrame) -> float:
     if 'AI_Category' not in df.columns or 'Financial_Impact' not in df.columns:
         return 0.0
 
-    # Categories that are typically preventable
+    # Categories that are typically preventable (matches 8-category AI classification)
     preventable_categories = [
-        'Process & Documentation',
-        'Communication & Coordination',
-        'Configuration & Integration',
-        'Contractor & Vendor Issues'
+        'Process Compliance',
+        'Communication & Response',
+        'Configuration & Data Mismatch',
+        'Scheduling & Planning',
+        'Documentation & Reporting',
     ]
 
     preventable_mask = df['AI_Category'].isin(preventable_categories)

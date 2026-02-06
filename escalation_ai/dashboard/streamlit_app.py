@@ -138,15 +138,13 @@ def load_price_catalog(_mtime=None):
                 cat = str(row['Category']).strip()
                 labor_hrs = float(row.get('Labor_Hours', 2) or 2)
                 hourly_rate = float(row.get('Hourly_Rate', 20) or 20)
-                delay_cost = float(row.get('Delay_Cost_Per_Hour', 100) or 100)
                 material = float(row.get('Material_Cost', 0) or 0)
-                # Base cost = Material + Labor + Delay
-                base_cost = material + (labor_hrs * hourly_rate) + (labor_hrs * delay_cost)
+                # Rework cost only: Material + Labor (no delay - no data to support it)
+                base_cost = material + (labor_hrs * hourly_rate)
                 catalog_data['category_costs'][cat] = {
                     'base_cost': base_cost,
                     'labor_hours': labor_hrs,
                     'hourly_rate': hourly_rate,
-                    'delay_cost': delay_cost,
                     'material': material
                 }
                 catalog_data['hourly_rate'] = hourly_rate
@@ -1205,14 +1203,16 @@ def _calculate_financial_impact_from_catalog(df: pd.DataFrame) -> pd.DataFrame:
 
     except Exception as e:
         import traceback
-        print(f"⚠ ERROR calculating Financial_Impact from price_catalog: {e}")
+        error_msg = f"Could not load price_catalog.xlsx: {e}"
+        print(f"⚠ ERROR: {error_msg}")
         print(f"⚠ Full traceback:\n{traceback.format_exc()}")
-        print("⚠ Using Strategic_Friction_Score × 15 as fallback")
-        # Fallback: use friction score as proxy if price catalog fails
-        if 'Strategic_Friction_Score' in df.columns:
-            df['Financial_Impact'] = df['Strategic_Friction_Score'] * 15  # Reasonable multiplier
+        st.error(f"Financial Impact values may be inaccurate. {error_msg}")
+        # Fallback: use the Financial_Impact values already in the dataframe if they exist
+        if 'Financial_Impact' in df.columns and df['Financial_Impact'].sum() > 0:
+            print("Using existing Financial_Impact values from Excel file")
         else:
-            df['Financial_Impact'] = 500  # Minimal fallback
+            # Last resort - mark as zero so it's obviously wrong, not silently fake
+            df['Financial_Impact'] = 0
 
     return df
 
