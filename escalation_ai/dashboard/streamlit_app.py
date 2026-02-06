@@ -5428,8 +5428,14 @@ def generate_html_report(df):
     revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 0.20
     avg_resolution = df['Predicted_Resolution_Days'].mean()
     recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100
-    critical_count = len(df[df['tickets_data_severity'] == 'Critical'])
-    
+    # Check for critical/high severity using multiple column names and values
+    critical_count = 0
+    for sev_col in ['tickets_data_severity', 'Severity_Norm', 'Severity', 'severity']:
+        if sev_col in df.columns:
+            # Count Critical, High, or Major as critical issues
+            critical_count = len(df[df[sev_col].astype(str).str.lower().isin(['critical', 'high', 'major'])])
+            break
+
     category_friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=False)
     
     recommendations = generate_strategic_recommendations(df)
@@ -5579,7 +5585,12 @@ def generate_magnificent_html_report(df):
     revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 0.20
     avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
     recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
-    critical_count = len(df[df['tickets_data_severity'] == 'Critical']) if 'tickets_data_severity' in df.columns else 0
+    # Check for critical/high severity using multiple column names and values
+    critical_count = 0
+    for sev_col in ['tickets_data_severity', 'Severity_Norm', 'Severity', 'severity']:
+        if sev_col in df.columns:
+            critical_count = len(df[df[sev_col].astype(str).str.lower().isin(['critical', 'high', 'major'])])
+            break
     total_records = len(df)
 
     # Generate charts as HTML
@@ -5926,7 +5937,12 @@ def render_excel_dashboard(df):
     total_records = len(df)
     avg_cost = total_cost / total_records if total_records > 0 else 0
     categories = df['AI_Category'].unique() if 'AI_Category' in df.columns else []
-    critical_count = len(df[df['tickets_data_severity'] == 'Critical']) if 'tickets_data_severity' in df.columns else 0
+    # Check for critical/high severity using multiple column names and values
+    critical_count = 0
+    for sev_col in ['tickets_data_severity', 'Severity_Norm', 'Severity', 'severity']:
+        if sev_col in df.columns:
+            critical_count = len(df[df[sev_col].astype(str).str.lower().isin(['critical', 'high', 'major'])])
+            break
 
     # Extract years
     if 'tickets_data_issue_datetime' in df.columns:
@@ -6156,40 +6172,52 @@ def render_excel_dashboard(df):
         </div>
         """, unsafe_allow_html=True)
 
-        if 'Engineer' in df.columns:
-            eng_data = df.groupby(['Engineer', 'AI_Category']).agg({
+        # Try multiple possible engineer column names
+        eng_col = None
+        for col in ['Engineer', 'tickets_data_engineer_name', 'Engineer_Assigned', 'Assigned_To']:
+            if col in df.columns:
+                eng_col = col
+                break
+
+        if eng_col and 'AI_Category' in df.columns:
+            eng_data = df.groupby([eng_col, 'AI_Category']).agg({
                 'Financial_Impact': 'sum',
                 'AI_Category': 'count'
             }).rename(columns={'AI_Category': 'Records'})
             eng_data = eng_data.reset_index()
             eng_data.columns = ['Engineer', 'Category', 'Cost', 'Records']
 
-            fig_tree = px.treemap(
-                eng_data,
-                path=['Engineer', 'Category'],
-                values='Cost',
-                color='Cost',
-                color_continuous_scale='RdYlGn_r',
-                hover_data={'Records': True, 'Cost': ':$,.0f'}
-            )
-            fig_tree.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=10, r=10, t=10, b=10),
-                height=350,
-                font=dict(color='white'),
-                coloraxis_colorbar=dict(
-                    title=dict(text="Cost", font=dict(color='#94a3b8')),
-                    tickformat="$,.0f",
-                    tickfont=dict(color='#94a3b8')
+            if len(eng_data) > 0:
+                fig_tree = px.treemap(
+                    eng_data,
+                    path=['Engineer', 'Category'],
+                    values='Cost',
+                    color='Cost',
+                    color_continuous_scale='RdYlGn_r',
+                    hover_data={'Records': True, 'Cost': ':$,.0f'}
                 )
-            )
-            fig_tree.update_traces(
-                textinfo='label+value',
-                texttemplate='%{label}<br>$%{value:,.0f}',
-                hovertemplate='<b>%{label}</b><br>Cost: $%{value:,.0f}<br>Records: %{customdata[0]}<extra></extra>'
-            )
-            st.plotly_chart(fig_tree, use_container_width=True, key="eng_treemap")
+                fig_tree.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=350,
+                    font=dict(color='white'),
+                    coloraxis_colorbar=dict(
+                        title=dict(text="Cost", font=dict(color='#94a3b8')),
+                        tickformat="$,.0f",
+                        tickfont=dict(color='#94a3b8')
+                    )
+                )
+                fig_tree.update_traces(
+                    textinfo='label+value',
+                    texttemplate='%{label}<br>$%{value:,.0f}',
+                    hovertemplate='<b>%{label}</b><br>Cost: $%{value:,.0f}<br>Records: %{customdata[0]}<extra></extra>'
+                )
+                st.plotly_chart(fig_tree, use_container_width=True, key="eng_treemap")
+            else:
+                st.info("No engineer data available for treemap")
+        else:
+            st.info("Engineer column not found in data")
 
     with col2:
         st.markdown("""
@@ -6202,36 +6230,53 @@ def render_excel_dashboard(df):
         </div>
         """, unsafe_allow_html=True)
 
-        if 'tickets_data_severity' in df.columns:
-            sev_data = df.groupby('tickets_data_severity').agg({
+        # Try multiple severity column names
+        sev_col = None
+        for col in ['tickets_data_severity', 'Severity_Norm', 'Severity', 'severity']:
+            if col in df.columns:
+                sev_col = col
+                break
+
+        if sev_col:
+            sev_data = df.groupby(sev_col).agg({
                 'Financial_Impact': 'sum',
                 'AI_Category': 'count'
             }).rename(columns={'AI_Category': 'Count'}).reset_index()
 
-            fig_sev = go.Figure(data=[go.Pie(
-                labels=sev_data['tickets_data_severity'],
-                values=sev_data['Financial_Impact'],
-                hole=0.5,
-                marker=dict(
-                    colors=['#ef4444', '#f97316', '#22c55e'],
-                    line=dict(color='rgba(0,0,0,0.3)', width=2)
-                ),
-                textinfo='label+percent',
-                textfont=dict(size=12, color='white'),
-                hovertemplate='<b>%{label}</b><br>Cost: $%{value:,.0f}<br>%{percent}<extra></extra>'
-            )])
-            fig_sev.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=20, r=20, t=40, b=20),
-                height=350,
-                showlegend=False,
-                annotations=[dict(
-                    text=f'<b>${total_cost/1000:.0f}K</b><br>Total',
-                    x=0.5, y=0.5, font_size=16, font_color='white', showarrow=False
-                )]
-            )
-            st.plotly_chart(fig_sev, use_container_width=True, key="sev_donut")
+            if len(sev_data) > 0:
+                # Color map based on severity
+                color_map = {'Critical': '#ef4444', 'High': '#f97316', 'Major': '#f97316',
+                            'Medium': '#eab308', 'Minor': '#22c55e', 'Low': '#22c55e'}
+                colors = [color_map.get(str(s), '#3b82f6') for s in sev_data[sev_col]]
+
+                fig_sev = go.Figure(data=[go.Pie(
+                    labels=sev_data[sev_col],
+                    values=sev_data['Financial_Impact'],
+                    hole=0.5,
+                    marker=dict(
+                        colors=colors,
+                        line=dict(color='rgba(0,0,0,0.3)', width=2)
+                    ),
+                    textinfo='label+percent',
+                    textfont=dict(size=12, color='white'),
+                    hovertemplate='<b>%{label}</b><br>Cost: $%{value:,.0f}<br>%{percent}<extra></extra>'
+                )])
+                fig_sev.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    height=350,
+                    showlegend=False,
+                    annotations=[dict(
+                        text=f'<b>${total_cost/1000:.0f}K</b><br>Total',
+                        x=0.5, y=0.5, font_size=16, font_color='white', showarrow=False
+                    )]
+                )
+                st.plotly_chart(fig_sev, use_container_width=True, key="sev_donut")
+            else:
+                st.info("No severity data available")
+        else:
+            st.info("Severity column not found in data")
 
     st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
 
@@ -6249,35 +6294,50 @@ def render_excel_dashboard(df):
         </div>
         """, unsafe_allow_html=True)
 
-        if 'tickets_data_issue_datetime' in df.columns:
-            df_q = df.copy()
-            df_q['qtr'] = 'Q' + pd.to_datetime(df_q['tickets_data_issue_datetime']).dt.quarter.astype(str)
-            qtr_data = df_q.groupby('qtr')['Financial_Impact'].sum().reset_index()
-            qtr_data.columns = ['Quarter', 'Cost']
+        # Try multiple date column names
+        date_col = None
+        for col in ['tickets_data_issue_datetime', 'Issue_Date', 'Created_Date', 'Date', 'created_at']:
+            if col in df.columns:
+                date_col = col
+                break
 
-            fig_qtr = go.Figure(data=[go.Bar(
-                x=qtr_data['Quarter'],
-                y=qtr_data['Cost'],
-                marker=dict(
-                    color=qtr_data['Cost'],
-                    colorscale='Blues',
-                    line=dict(color='rgba(59, 130, 246, 0.8)', width=2)
-                ),
-                text=[f'${v:,.0f}' for v in qtr_data['Cost']],
-                textposition='outside',
-                textfont=dict(size=12, color='white')
-            )])
-            fig_qtr.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=10, r=10, t=30, b=10),
-                height=300,
-                xaxis=dict(showgrid=False, tickfont=dict(size=12, color='#94a3b8')),
-                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)',
-                          tickfont=dict(size=10, color='#64748b'), tickformat='$,.0f'),
-                showlegend=False
-            )
-            st.plotly_chart(fig_qtr, use_container_width=True, key="qtr_bar")
+        if date_col:
+            try:
+                df_q = df.copy()
+                df_q['qtr'] = 'Q' + pd.to_datetime(df_q[date_col], errors='coerce').dt.quarter.astype(str)
+                qtr_data = df_q.groupby('qtr')['Financial_Impact'].sum().reset_index()
+                qtr_data.columns = ['Quarter', 'Cost']
+
+                if len(qtr_data) > 0 and qtr_data['Cost'].sum() > 0:
+                    fig_qtr = go.Figure(data=[go.Bar(
+                        x=qtr_data['Quarter'],
+                        y=qtr_data['Cost'],
+                        marker=dict(
+                            color=qtr_data['Cost'],
+                            colorscale='Blues',
+                            line=dict(color='rgba(59, 130, 246, 0.8)', width=2)
+                        ),
+                        text=[f'${v:,.0f}' for v in qtr_data['Cost']],
+                        textposition='outside',
+                        textfont=dict(size=12, color='white')
+                    )])
+                    fig_qtr.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        margin=dict(l=10, r=10, t=30, b=10),
+                        height=300,
+                        xaxis=dict(showgrid=False, tickfont=dict(size=12, color='#94a3b8')),
+                        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)',
+                                  tickfont=dict(size=10, color='#64748b'), tickformat='$,.0f'),
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_qtr, use_container_width=True, key="qtr_bar")
+                else:
+                    st.info("No quarterly cost data available")
+            except Exception as e:
+                st.info(f"Could not parse date column: {e}")
+        else:
+            st.info("Date column not found in data")
 
     with col2:
         st.markdown("""
@@ -6290,14 +6350,38 @@ def render_excel_dashboard(df):
         </div>
         """, unsafe_allow_html=True)
 
-        if 'tickets_data_escalation_origin' in df.columns:
+        # Try multiple origin column names
+        origin_col = None
+        for col in ['tickets_data_escalation_origin', 'Origin_Norm', 'Origin', 'origin', 'Escalation_Origin']:
+            if col in df.columns:
+                origin_col = col
+                break
+
+        if origin_col:
+            # Find severity column for critical count
+            sev_col_for_origin = None
+            for col in ['tickets_data_severity', 'Severity_Norm', 'Severity', 'severity']:
+                if col in df.columns:
+                    sev_col_for_origin = col
+                    break
+
             # Calculate comprehensive metrics by origin
-            origin_analysis = df.groupby('tickets_data_escalation_origin').agg({
+            agg_dict = {
                 'Financial_Impact': ['sum', 'mean', 'count'],
-                'Predicted_Resolution_Days': 'mean',
-                'tickets_data_severity': lambda x: (x == 'Critical').sum()
-            }).reset_index()
-            origin_analysis.columns = ['Origin', 'Total_Cost', 'Avg_Cost', 'Count', 'Avg_Resolution', 'Critical_Count']
+                'Predicted_Resolution_Days': 'mean' if 'Predicted_Resolution_Days' in df.columns else 'count'
+            }
+            if sev_col_for_origin:
+                agg_dict[sev_col_for_origin] = lambda x: (x.astype(str).str.lower().isin(['critical', 'high', 'major'])).sum()
+
+            origin_analysis = df.groupby(origin_col).agg(agg_dict).reset_index()
+
+            # Flatten column names
+            if sev_col_for_origin:
+                origin_analysis.columns = ['Origin', 'Total_Cost', 'Avg_Cost', 'Count', 'Avg_Resolution', 'Critical_Count']
+            else:
+                origin_analysis.columns = ['Origin', 'Total_Cost', 'Avg_Cost', 'Count', 'Avg_Resolution']
+                origin_analysis['Critical_Count'] = 0
+
             origin_analysis = origin_analysis.sort_values('Total_Cost', ascending=True)
 
             total_all = origin_analysis['Total_Cost'].sum()
@@ -6346,7 +6430,7 @@ def render_excel_dashboard(df):
             if selected_option != "📊 Chart view (click to select)":
                 selected_origin = selected_option
                 selected_data = origin_analysis[origin_analysis['Origin'] == selected_origin].iloc[0]
-                selected_df = df[df['tickets_data_escalation_origin'] == selected_origin]
+                selected_df = df[df[origin_col] == selected_origin]
 
                 critical_rate = selected_data['Critical_Count'] / selected_data['Count'] * 100 if selected_data['Count'] > 0 else 0
                 pct_of_total = selected_data['Total_Cost'] / total_all * 100
@@ -6392,6 +6476,8 @@ def render_excel_dashboard(df):
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+        else:
+            st.info("Origin column not found in data")
 
     st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
 
@@ -6408,8 +6494,14 @@ def render_excel_dashboard(df):
     </div>
     """, unsafe_allow_html=True)
 
-    # Create Sankey data
-    if 'AI_Category' in df.columns and 'tickets_data_severity' in df.columns:
+    # Create Sankey data - check for multiple severity column names
+    sev_col_sankey = None
+    for col in ['tickets_data_severity', 'Severity_Norm', 'Severity', 'severity']:
+        if col in df.columns:
+            sev_col_sankey = col
+            break
+
+    if 'AI_Category' in df.columns and sev_col_sankey:
         # Derive Resolution Speed from Predicted_Resolution_Days
         df_sankey = df.copy()
         if 'Predicted_Resolution_Days' in df_sankey.columns:
@@ -6429,7 +6521,7 @@ def render_excel_dashboard(df):
 
         # Get unique values for each level (convert to strings)
         categories = [str(c) for c in df_sankey['AI_Category'].unique().tolist()]
-        severities = [str(s) for s in df_sankey['tickets_data_severity'].unique().tolist()]
+        severities = [str(s) for s in df_sankey[sev_col_sankey].unique().tolist()]
         resolutions = [str(r) for r in df_sankey['Resolution_Speed'].dropna().unique().tolist()]
 
         # Create node labels
@@ -6437,7 +6529,7 @@ def render_excel_dashboard(df):
 
         # Create color map
         cat_colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1']
-        sev_colors = {'Critical': '#ef4444', 'Major': '#f97316', 'Minor': '#22c55e'}
+        sev_colors = {'Critical': '#ef4444', 'High': '#ef4444', 'Major': '#f97316', 'Medium': '#f97316', 'Minor': '#22c55e', 'Low': '#22c55e'}
         res_colors = {'Quick (<2d)': '#22c55e', 'Standard (2-5d)': '#3b82f6', 'Extended (>5d)': '#ef4444'}
 
         node_colors = []
@@ -6452,10 +6544,10 @@ def render_excel_dashboard(df):
                 node_colors.append('#6b7280')
 
         # Create links: Category -> Severity
-        links_cat_sev = df_sankey.groupby(['AI_Category', 'tickets_data_severity']).size().reset_index(name='count')
+        links_cat_sev = df_sankey.groupby(['AI_Category', sev_col_sankey]).size().reset_index(name='count')
 
         # Create links: Severity -> Resolution
-        links_sev_res = df_sankey.groupby(['tickets_data_severity', 'Resolution_Speed']).size().reset_index(name='count')
+        links_sev_res = df_sankey.groupby([sev_col_sankey, 'Resolution_Speed']).size().reset_index(name='count')
 
         # Build source, target, value lists
         sources = []
@@ -6466,24 +6558,25 @@ def render_excel_dashboard(df):
         # Category -> Severity links
         for _, row in links_cat_sev.iterrows():
             cat_str = str(row['AI_Category'])
-            sev_str = str(row['tickets_data_severity'])
+            sev_str = str(row[sev_col_sankey])
             if cat_str in all_labels and sev_str in all_labels:
                 src_idx = all_labels.index(cat_str)
                 tgt_idx = all_labels.index(sev_str)
                 sources.append(src_idx)
                 targets.append(tgt_idx)
                 values.append(row['count'])
-                # Color based on severity
-                if sev_str == 'Critical':
+                # Color based on severity (handle different naming conventions)
+                sev_lower = sev_str.lower()
+                if sev_lower in ['critical', 'high']:
                     link_colors.append('rgba(239, 68, 68, 0.4)')
-                elif sev_str == 'Major':
+                elif sev_lower in ['major', 'medium']:
                     link_colors.append('rgba(249, 115, 22, 0.4)')
                 else:
                     link_colors.append('rgba(34, 197, 94, 0.4)')
 
         # Severity -> Resolution links
         for _, row in links_sev_res.iterrows():
-            sev_str = str(row['tickets_data_severity'])
+            sev_str = str(row[sev_col_sankey])
             res_str = str(row['Resolution_Speed'])
             if pd.notna(row['Resolution_Speed']) and sev_str in all_labels and res_str in all_labels:
                 src_idx = all_labels.index(sev_str)
@@ -6546,6 +6639,8 @@ def render_excel_dashboard(df):
             </div>
         </div>
         """, unsafe_allow_html=True)
+    else:
+        st.info("Category or Severity column not found in data for Issue Flow Analysis")
 
     st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
 
