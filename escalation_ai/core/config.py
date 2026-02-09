@@ -129,8 +129,7 @@ PLOT_DIR = Path("plots")  # Directory for generated charts
 # PRICE CATALOG SETTINGS
 # ==========================================
 PRICE_CATALOG_FILE = "price_catalog.xlsx"
-DEFAULT_HOURLY_RATE = 20.0  # $/hour for labor if not specified
-DEFAULT_DELAY_COST = 500.0  # $/hour of delay (SLA penalty, revenue loss)
+DEFAULT_HOURLY_RATE = 20.0  # $/hour for labor if not specified in price_catalog.xlsx
 
 # ==========================================
 # REPORT METADATA

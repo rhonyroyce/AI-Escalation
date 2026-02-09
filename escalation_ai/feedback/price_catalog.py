@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
-from ..core.config import PRICE_CATALOG_FILE, DEFAULT_HOURLY_RATE, DEFAULT_DELAY_COST, SUB_CATEGORIES
+from ..core.config import PRICE_CATALOG_FILE, DEFAULT_HOURLY_RATE, SUB_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +18,19 @@ logger = logging.getLogger(__name__)
 class PriceCatalog:
     """
     Excel-based pricing catalog for calculating financial impact of escalations.
-    Supports keyword patterns, category-based pricing, and severity multipliers.
+    Single source of truth for all financial calculations.
+    Supports keyword patterns, category/sub-category pricing, severity multipliers,
+    and business multipliers - all loaded from price_catalog.xlsx.
     """
-    
+
     def __init__(self, catalog_path: str = PRICE_CATALOG_FILE):
         self.catalog_path = catalog_path
         self.category_costs: Dict[str, Dict] = {}
+        self.sub_category_costs: Dict[str, Dict[str, Dict]] = {}  # {category: {sub_cat: {...}}}
         self.keyword_costs: List[Dict] = []
         self.severity_multipliers: Dict[str, float] = {}
         self.origin_premiums: Dict[str, float] = {}
+        self.business_multipliers: Dict[str, float] = {}
         self.is_loaded = False
     
     def create_template(self) -> str:
@@ -45,12 +49,14 @@ class PriceCatalog:
                 [""],
                 ["SHEETS:"],
                 ["1. Category Costs - Base costs per escalation category"],
-                ["2. Keyword Patterns - Regex patterns for specific cost overrides"],
-                ["3. Severity Multipliers - Cost multipliers based on severity level"],
-                ["4. Origin Premiums - Additional percentage costs based on origin type"],
+                ["2. Sub-Category Costs - Granular costs per sub-category"],
+                ["3. Keyword Patterns - Regex patterns for specific cost overrides"],
+                ["4. Severity Multipliers - Cost multipliers based on severity level"],
+                ["5. Origin Premiums - Additional percentage costs based on origin type"],
+                ["6. Business Multipliers - Configurable multipliers for business metrics"],
                 [""],
                 ["FORMULA:"],
-                ["Total_Impact = (Material + Labor × Rate + Delay) × Severity_Mult × (1 + Origin_Premium)"],
+                ["Total_Impact = (Material + Labor_Hours × Hourly_Rate) × Severity_Mult × (1 + Origin_Premium)"],
             ]
             
             for row in instructions:
@@ -61,20 +67,21 @@ class PriceCatalog:
             
             # Sheet 2: Category Costs
             ws_category = wb.create_sheet("Category Costs")
-            category_headers = ["Category", "Material_Cost", "Labor_Hours", "Hourly_Rate", "Delay_Cost_Per_Hour", "Notes"]
+            category_headers = ["Category", "Material_Cost", "Labor_Hours", "Hourly_Rate", "Notes"]
             ws_category.append(category_headers)
-            
-            # 8-category system optimized for telecom escalation analysis
+
+            # 8-category system - values match actual price_catalog.xlsx
+            # $20/hr rate, $0 material (rework labor cost only)
             category_data = [
-                ["Scheduling & Planning", 300, 2, 100, 150, "TI scheduling, FE coordination"],
-                ["Documentation & Reporting", 200, 3, 100, 100, "Snapshots, E911, CBN reports"],
-                ["Validation & QA", 500, 4, 125, 250, "Precheck, postcheck, VSWR validation"],
-                ["Process Compliance", 400, 3, 125, 200, "SOP adherence, escalation process"],
-                ["Configuration & Data Mismatch", 800, 6, 150, 400, "Port matrix, RET, TAC mismatch"],
-                ["Site Readiness", 1500, 8, 150, 500, "BH actualization, MW readiness"],
-                ["Communication & Response", 200, 2, 100, 150, "Delayed replies, follow-ups"],
-                ["Nesting & Tool Errors", 600, 5, 125, 300, "NSA/NSI nesting, RIOT, FCI tools"],
-                ["Unclassified", 500, 4, 125, 200, "Default for unknown"],
+                ["Scheduling & Planning", 0, 2.0, 20, "TI scheduling, FE coordination"],
+                ["Documentation & Reporting", 0, 1.5, 20, "Snapshots, E911, CBN reports"],
+                ["Validation & QA", 0, 3.0, 20, "Precheck, postcheck, VSWR validation"],
+                ["Process Compliance", 0, 2.5, 20, "SOP adherence, escalation process"],
+                ["Configuration & Data Mismatch", 0, 4.0, 20, "Port matrix, RET, TAC mismatch"],
+                ["Site Readiness", 0, 8.0, 20, "BH actualization, MW readiness"],
+                ["Communication & Response", 0, 0.5, 20, "Delayed replies, follow-ups"],
+                ["Nesting & Tool Errors", 0, 3.0, 20, "NSA/NSI nesting, RIOT, FCI tools"],
+                ["Unclassified", 0, 0.2, 20, "Default for unknown"],
             ]
             
             for row in category_data:
@@ -89,68 +96,69 @@ class PriceCatalog:
             subcat_headers = ["Category", "Sub_Category", "Material_Cost", "Labor_Hours", "Hourly_Rate", "Notes"]
             ws_subcat.append(subcat_headers)
 
-            # Sub-category costs based on detailed Embedding.md sub-types
+            # Sub-category costs - granular pricing per sub-type
+            # Values use $20/hr base rate; labor hours vary by complexity
             subcat_data = [
-                # Scheduling & Planning (5 sub-types)
-                ["Scheduling & Planning", "No TI Entry", 350, 3, 100, "Site not scheduled in TI"],
-                ["Scheduling & Planning", "Schedule Not Followed", 300, 2, 100, "FE logged on wrong day"],
-                ["Scheduling & Planning", "Weekend Schedule Issue", 400, 3, 100, "Weekend scheduling error"],
-                ["Scheduling & Planning", "Ticket Status Issue", 250, 2, 100, "Ticket in wrong bucket/closeout"],
-                ["Scheduling & Planning", "Premature Scheduling", 500, 4, 100, "Scheduled without BH/MW ready"],
-                # Documentation & Reporting (8 sub-types)
-                ["Documentation & Reporting", "Missing Snapshot", 150, 2, 100, "CBN/validation snapshot missing"],
-                ["Documentation & Reporting", "Missing Attachment", 100, 1, 100, "Pre-check logs not attached"],
-                ["Documentation & Reporting", "Incorrect Reporting", 200, 2, 100, "RTT/data incorrectly reported"],
-                ["Documentation & Reporting", "Wrong Site ID", 250, 2, 100, "Different site ID in mail"],
-                ["Documentation & Reporting", "Incomplete Snapshot", 150, 2, 100, "Lemming snap missing sectors"],
-                ["Documentation & Reporting", "Missing Information", 200, 2, 100, "PSAP/Live CT details missing"],
-                ["Documentation & Reporting", "Wrong Attachment", 150, 1, 100, "Wrong file attached"],
-                ["Documentation & Reporting", "Incorrect Status", 300, 3, 100, "Pass/Fail status wrong"],
-                # Validation & QA (7 sub-types)
-                ["Validation & QA", "Incomplete Validation", 500, 4, 125, "BH fields not checked"],
-                ["Validation & QA", "Missed Issue", 600, 5, 125, "SFP/fiber issue not identified"],
-                ["Validation & QA", "Missed Check", 450, 4, 125, "Cell status not verified"],
-                ["Validation & QA", "No Escalation", 400, 3, 125, "Issue captured but not escalated"],
-                ["Validation & QA", "Missed Degradation", 700, 6, 125, "KPI degradation not detected"],
-                ["Validation & QA", "Wrong Tool Usage", 350, 3, 125, "AEHC swap report misused"],
-                ["Validation & QA", "Incomplete Testing", 500, 4, 125, "E911/VoNR testing incomplete"],
-                # Process Compliance (6 sub-types)
-                ["Process Compliance", "Process Violation", 600, 5, 125, "IX without BH actualized"],
-                ["Process Compliance", "Wrong Escalation", 500, 4, 125, "Escalated to wrong vendor/NTAC"],
-                ["Process Compliance", "Wrong Bucket", 400, 3, 125, "Ticket in preliminary design"],
-                ["Process Compliance", "Missed Step", 450, 4, 125, "Forgot to unlock/share precheck"],
-                ["Process Compliance", "Missing Ticket", 350, 3, 125, "PAG ticket not created"],
-                ["Process Compliance", "Process Non-Compliance", 550, 4, 125, "Guidelines not followed"],
-                # Configuration & Data Mismatch (8 sub-types)
-                ["Configuration & Data Mismatch", "Port Matrix Mismatch", 900, 6, 150, "RET count mismatch with PMX"],
-                ["Configuration & Data Mismatch", "RET Naming", 750, 5, 150, "Extra/missing letter in naming"],
-                ["Configuration & Data Mismatch", "RET Swap", 800, 6, 150, "Alpha/Beta RET swapped"],
-                ["Configuration & Data Mismatch", "TAC Mismatch", 700, 5, 150, "TAC causing RIOT red"],
-                ["Configuration & Data Mismatch", "CIQ/SCF Mismatch", 850, 6, 150, "CIQ and SCF not matching"],
-                ["Configuration & Data Mismatch", "RFDS Mismatch", 800, 6, 150, "RFDS and SCF mismatch"],
-                ["Configuration & Data Mismatch", "Missing Documents", 500, 4, 150, "RFDS/Port Matrix missing in TI"],
-                ["Configuration & Data Mismatch", "Config Error", 600, 5, 150, "NRPLMNSET/BWP not defined"],
-                # Site Readiness (6 sub-types)
-                ["Site Readiness", "BH Not Ready", 1800, 10, 150, "Backhaul not actualized in MB"],
-                ["Site Readiness", "MW Not Ready", 1600, 8, 150, "Microwave link not ready"],
-                ["Site Readiness", "Material Missing", 1200, 6, 150, "SFP/AMID not available"],
-                ["Site Readiness", "Site Down", 1400, 8, 150, "Site shut down during IX"],
-                ["Site Readiness", "BH Status Issue", 1000, 6, 150, "BH status incorrectly filled"],
-                ["Site Readiness", "Site Complexity", 1500, 8, 150, "MW chain/generator issues"],
-                # Communication & Response (5 sub-types)
-                ["Communication & Response", "Delayed Response", 200, 2, 100, "Late reply to GC/FE query"],
-                ["Communication & Response", "Delayed Deliverable", 300, 3, 100, "FE waited 3-4hrs for EOD"],
-                ["Communication & Response", "No Proactive Update", 250, 2, 100, "Not answering delay queries"],
-                ["Communication & Response", "No Communication", 200, 2, 100, "Schedule not communicated to FE"],
-                ["Communication & Response", "Training Issue", 350, 3, 100, "FE competency/knowledge gap"],
-                # Nesting & Tool Errors (7 sub-types)
-                ["Nesting & Tool Errors", "Wrong Nest Type", 600, 5, 125, "Nested as NSA when SA required"],
-                ["Nesting & Tool Errors", "Improper Extension", 550, 4, 125, "Nest extended during follow-up"],
-                ["Nesting & Tool Errors", "Missing Nesting", 500, 4, 125, "Site not nested before activity"],
-                ["Nesting & Tool Errors", "HW Issue", 800, 6, 125, "GPS SFP/RET antenna failure"],
-                ["Nesting & Tool Errors", "Rework", 700, 6, 125, "SCF prep and IX rework needed"],
-                ["Nesting & Tool Errors", "Post-OA Degradation", 900, 7, 125, "Congestion/DCR after on-air"],
-                ["Nesting & Tool Errors", "Delayed Audit", 400, 3, 125, "Audit done 5 days late"],
+                # Scheduling & Planning
+                ["Scheduling & Planning", "No TI Entry", 0, 3.0, 20, "Site not scheduled in TI"],
+                ["Scheduling & Planning", "Schedule Not Followed", 0, 2.0, 20, "FE logged on wrong day"],
+                ["Scheduling & Planning", "Weekend Schedule Issue", 0, 3.0, 20, "Weekend scheduling error"],
+                ["Scheduling & Planning", "Ticket Status Issue", 0, 1.5, 20, "Ticket in wrong bucket/closeout"],
+                ["Scheduling & Planning", "Premature Scheduling", 0, 4.0, 20, "Scheduled without BH/MW ready"],
+                # Documentation & Reporting
+                ["Documentation & Reporting", "Missing Snapshot", 0, 1.5, 20, "CBN/validation snapshot missing"],
+                ["Documentation & Reporting", "Missing Attachment", 0, 1.0, 20, "Pre-check logs not attached"],
+                ["Documentation & Reporting", "Incorrect Reporting", 0, 2.0, 20, "RTT/data incorrectly reported"],
+                ["Documentation & Reporting", "Wrong Site ID", 0, 2.0, 20, "Different site ID in mail"],
+                ["Documentation & Reporting", "Incomplete Snapshot", 0, 1.5, 20, "Lemming snap missing sectors"],
+                ["Documentation & Reporting", "Missing Information", 0, 1.5, 20, "PSAP/Live CT details missing"],
+                ["Documentation & Reporting", "Wrong Attachment", 0, 1.0, 20, "Wrong file attached"],
+                ["Documentation & Reporting", "Incorrect Status", 0, 2.5, 20, "Pass/Fail status wrong"],
+                # Validation & QA
+                ["Validation & QA", "Incomplete Validation", 0, 3.5, 20, "BH fields not checked"],
+                ["Validation & QA", "Missed Issue", 0, 4.0, 20, "SFP/fiber issue not identified"],
+                ["Validation & QA", "Missed Check", 0, 3.0, 20, "Cell status not verified"],
+                ["Validation & QA", "No Escalation", 0, 2.5, 20, "Issue captured but not escalated"],
+                ["Validation & QA", "Missed Degradation", 0, 5.0, 20, "KPI degradation not detected"],
+                ["Validation & QA", "Wrong Tool Usage", 0, 2.5, 20, "AEHC swap report misused"],
+                ["Validation & QA", "Incomplete Testing", 0, 3.5, 20, "E911/VoNR testing incomplete"],
+                # Process Compliance
+                ["Process Compliance", "Process Violation", 0, 4.0, 20, "IX without BH actualized"],
+                ["Process Compliance", "Wrong Escalation", 0, 3.0, 20, "Escalated to wrong vendor/NTAC"],
+                ["Process Compliance", "Wrong Bucket", 0, 2.5, 20, "Ticket in preliminary design"],
+                ["Process Compliance", "Missed Step", 0, 3.0, 20, "Forgot to unlock/share precheck"],
+                ["Process Compliance", "Missing Ticket", 0, 2.5, 20, "PAG ticket not created"],
+                ["Process Compliance", "Process Non-Compliance", 0, 3.5, 20, "Guidelines not followed"],
+                # Configuration & Data Mismatch
+                ["Configuration & Data Mismatch", "Port Matrix Mismatch", 0, 5.0, 20, "RET count mismatch with PMX"],
+                ["Configuration & Data Mismatch", "RET Naming", 0, 4.0, 20, "Extra/missing letter in naming"],
+                ["Configuration & Data Mismatch", "RET Swap", 0, 5.0, 20, "Alpha/Beta RET swapped"],
+                ["Configuration & Data Mismatch", "TAC Mismatch", 0, 4.0, 20, "TAC causing RIOT red"],
+                ["Configuration & Data Mismatch", "CIQ/SCF Mismatch", 0, 5.0, 20, "CIQ and SCF not matching"],
+                ["Configuration & Data Mismatch", "RFDS Mismatch", 0, 5.0, 20, "RFDS and SCF mismatch"],
+                ["Configuration & Data Mismatch", "Missing Documents", 0, 3.0, 20, "RFDS/Port Matrix missing in TI"],
+                ["Configuration & Data Mismatch", "Config Error", 0, 4.0, 20, "NRPLMNSET/BWP not defined"],
+                # Site Readiness
+                ["Site Readiness", "BH Not Ready", 0, 10.0, 20, "Backhaul not actualized in MB"],
+                ["Site Readiness", "MW Not Ready", 0, 8.0, 20, "Microwave link not ready"],
+                ["Site Readiness", "Material Missing", 0, 6.0, 20, "SFP/AMID not available"],
+                ["Site Readiness", "Site Down", 0, 8.0, 20, "Site shut down during IX"],
+                ["Site Readiness", "BH Status Issue", 0, 5.0, 20, "BH status incorrectly filled"],
+                ["Site Readiness", "Site Complexity", 0, 8.0, 20, "MW chain/generator issues"],
+                # Communication & Response
+                ["Communication & Response", "Delayed Response", 0, 0.5, 20, "Late reply to GC/FE query"],
+                ["Communication & Response", "Delayed Deliverable", 0, 1.0, 20, "FE waited 3-4hrs for EOD"],
+                ["Communication & Response", "No Proactive Update", 0, 0.5, 20, "Not answering delay queries"],
+                ["Communication & Response", "No Communication", 0, 0.5, 20, "Schedule not communicated to FE"],
+                ["Communication & Response", "Training Issue", 0, 2.0, 20, "FE competency/knowledge gap"],
+                # Nesting & Tool Errors
+                ["Nesting & Tool Errors", "Wrong Nest Type", 0, 4.0, 20, "Nested as NSA when SA required"],
+                ["Nesting & Tool Errors", "Improper Extension", 0, 3.0, 20, "Nest extended during follow-up"],
+                ["Nesting & Tool Errors", "Missing Nesting", 0, 3.0, 20, "Site not nested before activity"],
+                ["Nesting & Tool Errors", "HW Issue", 0, 5.0, 20, "GPS SFP/RET antenna failure"],
+                ["Nesting & Tool Errors", "Rework", 0, 5.0, 20, "SCF prep and IX rework needed"],
+                ["Nesting & Tool Errors", "Post-OA Degradation", 0, 6.0, 20, "Congestion/DCR after on-air"],
+                ["Nesting & Tool Errors", "Delayed Audit", 0, 2.0, 20, "Audit done 5 days late"],
             ]
 
             for row in subcat_data:
@@ -165,15 +173,15 @@ class PriceCatalog:
             ws_keywords = wb.create_sheet("Keyword Patterns")
             keyword_headers = ["Keyword_Pattern", "Category_Override", "Material_Cost", "Labor_Hours", "Priority", "Notes"]
             ws_keywords.append(keyword_headers)
-            
-            # Keyword patterns for cost overrides based on 8-category system
+
+            # Keyword patterns for cost overrides - $20/hr, $0 material
             keyword_data = [
-                [".*BH.*not.*actual.*", "Site Readiness", 2000, 12, 1, "Backhaul not actualized"],
-                [".*port.*matrix.*mismatch.*", "Configuration & Data Mismatch", 1500, 8, 1, "Port matrix issues"],
-                [".*RET.*naming.*", "Configuration & Data Mismatch", 1200, 6, 2, "RET naming errors"],
-                [".*not.*schedul.*", "Scheduling & Planning", 500, 4, 2, "Scheduling issues"],
-                [".*snapshot.*missing.*", "Documentation & Reporting", 300, 2, 3, "Missing documentation"],
-                [".*RIOT.*red.*", "Nesting & Tool Errors", 800, 5, 2, "RIOT validation failure"],
+                [".*BH.*not.*actual.*", "Site Readiness", 0, 10, 1, "Backhaul not actualized"],
+                [".*port.*matrix.*mismatch.*", "Configuration & Data Mismatch", 0, 6, 1, "Port matrix issues"],
+                [".*RET.*naming.*", "Configuration & Data Mismatch", 0, 4, 2, "RET naming errors"],
+                [".*not.*schedul.*", "Scheduling & Planning", 0, 3, 2, "Scheduling issues"],
+                [".*snapshot.*missing.*", "Documentation & Reporting", 0, 1.5, 3, "Missing documentation"],
+                [".*RIOT.*red.*", "Nesting & Tool Errors", 0, 4, 2, "RIOT validation failure"],
             ]
             
             for row in keyword_data:
@@ -215,7 +223,28 @@ class PriceCatalog:
                 ws_origin.append(row)
             
             self._style_header(ws_origin, len(origin_headers))
-            
+
+            # Sheet 7: Business Multipliers
+            ws_biz = wb.create_sheet("Business Multipliers")
+            biz_headers = ["Multiplier_Name", "Value", "Description"]
+            ws_biz.append(biz_headers)
+
+            biz_data = [
+                ["revenue_at_risk", 2.5, "Multiplier for downstream revenue impact (total_cost × this)"],
+                ["opportunity_cost", 0.35, "Opportunity cost as fraction of total cost"],
+                ["customer_impact", 1.5, "Multiplier for customer-facing issue costs"],
+                ["sla_penalty", 0.2, "SLA penalty rate for critical issues"],
+                ["prevention_rate", 0.8, "Expected prevention rate for ROI calculation (0-1)"],
+                ["cost_avoidance_rate", 0.7, "Expected cost avoidance rate for repeat issues (0-1)"],
+            ]
+
+            for row in biz_data:
+                ws_biz.append(row)
+
+            self._style_header(ws_biz, len(biz_headers))
+            ws_biz.column_dimensions['A'].width = 25
+            ws_biz.column_dimensions['C'].width = 55
+
             wb.save(self.catalog_path)
             logger.info(f"✓ Price catalog template created: {self.catalog_path}")
             return self.catalog_path
@@ -280,6 +309,23 @@ class PriceCatalog:
                         self.severity_multipliers[severity] = float(row[1] or 1.0)
                 logger.info(f"  → Loaded {len(self.severity_multipliers)} severity multipliers")
             
+            # Load Sub-Category Costs
+            if "Sub-Category Costs" in wb.sheetnames:
+                ws = wb["Sub-Category Costs"]
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    if row[0] and row[1]:
+                        category = str(row[0]).strip()
+                        sub_cat = str(row[1]).strip()
+                        if category not in self.sub_category_costs:
+                            self.sub_category_costs[category] = {}
+                        self.sub_category_costs[category][sub_cat] = {
+                            'material_cost': float(row[2] or 0),
+                            'labor_hours': float(row[3] or 0),
+                            'hourly_rate': float(row[4] or DEFAULT_HOURLY_RATE),
+                        }
+                total_sub = sum(len(v) for v in self.sub_category_costs.values())
+                logger.info(f"  → Loaded {total_sub} sub-category cost entries across {len(self.sub_category_costs)} categories")
+
             # Load Origin Premiums
             if "Origin Premiums" in wb.sheetnames:
                 ws = wb["Origin Premiums"]
@@ -288,7 +334,16 @@ class PriceCatalog:
                         origin = str(row[0]).strip().lower()
                         self.origin_premiums[origin] = float(row[1] or 0)
                 logger.info(f"  → Loaded {len(self.origin_premiums)} origin premium rules")
-            
+
+            # Load Business Multipliers (if sheet exists)
+            if "Business Multipliers" in wb.sheetnames:
+                ws = wb["Business Multipliers"]
+                for row in ws.iter_rows(min_row=2, values_only=True):
+                    if row[0]:
+                        name = str(row[0]).strip().lower()
+                        self.business_multipliers[name] = float(row[1] or 1.0)
+                logger.info(f"  → Loaded {len(self.business_multipliers)} business multipliers")
+
             wb.close()
             self.is_loaded = True
             logger.info(f"✓ Price catalog loaded successfully")
@@ -318,60 +373,146 @@ class PriceCatalog:
         severity: str = "Medium",
         origin: str = "Technical",
         description: str = "",
+        sub_category: str = "",
         **kwargs
-    ) -> Dict[str, float]:
+    ) -> Dict[str, Any]:
         """Calculate total financial impact (rework cost) for an escalation.
 
         Formula: (Material + Labor_Hours × Hourly_Rate) × Severity_Mult × (1 + Origin_Premium)
         Based entirely on price_catalog.xlsx values. No delay cost - no data to support it.
+
+        Lookup priority:
+        1. Keyword pattern match (highest priority)
+        2. Sub-category cost (if sub_category provided and found)
+        3. Category cost (fallback)
+        4. 'Unclassified' category (last resort)
+
+        Returns dict with cost breakdown and audit trail (source field).
         """
         if not self.is_loaded:
             self.load_catalog()
 
+        source = 'unknown'
         keyword_match = self._match_keyword_pattern(description)
 
         if keyword_match:
             material_cost = keyword_match['material_cost']
             labor_hours = keyword_match['labor_hours']
             hourly_rate = DEFAULT_HOURLY_RATE
-        else:
-            cat_costs = self.category_costs.get(category, self.category_costs.get('Unclassified', {}))
+            source = f"keyword:{keyword_match['pattern']}"
+        elif (sub_category and category in self.sub_category_costs
+              and sub_category in self.sub_category_costs[category]):
+            sub_costs = self.sub_category_costs[category][sub_category]
+            material_cost = sub_costs.get('material_cost', 0)
+            labor_hours = sub_costs.get('labor_hours', 2)
+            hourly_rate = sub_costs.get('hourly_rate', DEFAULT_HOURLY_RATE)
+            source = f"sub_category:{category}/{sub_category}"
+        elif category in self.category_costs:
+            cat_costs = self.category_costs[category]
             material_cost = cat_costs.get('material_cost', 0)
             labor_hours = cat_costs.get('labor_hours', 2)
             hourly_rate = cat_costs.get('hourly_rate', DEFAULT_HOURLY_RATE)
+            source = f"category:{category}"
+        elif 'Unclassified' in self.category_costs:
+            cat_costs = self.category_costs['Unclassified']
+            material_cost = cat_costs.get('material_cost', 0)
+            labor_hours = cat_costs.get('labor_hours', 2)
+            hourly_rate = cat_costs.get('hourly_rate', DEFAULT_HOURLY_RATE)
+            source = f"fallback:Unclassified (requested:{category})"
+        else:
+            # Catalog loaded but category not found and no Unclassified - fail loud
+            logger.warning(f"No pricing data for category '{category}' and no Unclassified fallback")
+            material_cost = 0
+            labor_hours = 0
+            hourly_rate = DEFAULT_HOURLY_RATE
+            source = f"no_match:{category}"
 
         # Rework cost only: material + labor (no delay - no data to support it)
         labor_cost = labor_hours * hourly_rate
         base_cost = material_cost + labor_cost
 
-        severity_mult = self.severity_multipliers.get(severity.lower(), 1.0)
-        origin_premium = self.origin_premiums.get(origin.lower(), 0.0)
+        severity_key = severity.lower() if severity else 'medium'
+        severity_mult = self.severity_multipliers.get(severity_key, 1.0)
+        if severity_key not in self.severity_multipliers:
+            logger.warning(f"Unknown severity '{severity}', using multiplier 1.0")
+
+        origin_key = origin.lower() if origin else 'technical'
+        origin_premium = self.origin_premiums.get(origin_key, 0.0)
 
         total_impact = base_cost * severity_mult * (1 + origin_premium)
+
+        # Validation: sanity check the output
+        if total_impact < 0:
+            logger.error(f"Negative financial impact calculated: {total_impact} for {category}/{sub_category}")
+            total_impact = 0
 
         return {
             'material_cost': round(material_cost, 2),
             'labor_cost': round(labor_cost, 2),
+            'labor_hours': labor_hours,
+            'hourly_rate': hourly_rate,
             'base_cost': round(base_cost, 2),
             'severity_multiplier': severity_mult,
             'origin_premium': origin_premium,
             'total_impact': round(total_impact, 2),
+            'source': source,
             'keyword_match': keyword_match['pattern'] if keyword_match else None,
         }
     
+    def get_business_multiplier(self, name: str, default: float = 1.0) -> float:
+        """Get a business multiplier from price_catalog.xlsx.
+
+        Falls back to default if the multiplier isn't configured.
+        """
+        if not self.is_loaded:
+            self.load_catalog()
+        return self.business_multipliers.get(name.lower(), default)
+
+    def get_benchmark_costs(self) -> Dict[str, float]:
+        """Calculate benchmark cost statistics from the loaded catalog.
+
+        Returns dict with avg_per_ticket, best_in_class, industry_avg, laggard.
+        All derived from price_catalog.xlsx data, not hardcoded.
+        """
+        if not self.is_loaded:
+            self.load_catalog()
+
+        if not self.category_costs:
+            return {'avg_per_ticket': 0, 'best_in_class': 0, 'industry_avg': 0, 'laggard': 0, 'hourly_rate': DEFAULT_HOURLY_RATE}
+
+        base_costs = []
+        for cat_data in self.category_costs.values():
+            material = cat_data.get('material_cost', 0)
+            labor = cat_data.get('labor_hours', 0) * cat_data.get('hourly_rate', DEFAULT_HOURLY_RATE)
+            base_costs.append(material + labor)
+
+        avg_base = sum(base_costs) / len(base_costs) if base_costs else 0
+        avg_sev = sum(self.severity_multipliers.values()) / len(self.severity_multipliers) if self.severity_multipliers else 1.0
+
+        return {
+            'avg_per_ticket': round(avg_base * avg_sev, 2),
+            'best_in_class': round(min(base_costs), 2),
+            'industry_avg': round(avg_base * avg_sev, 2),
+            'laggard': round(max(base_costs) * max(self.severity_multipliers.values(), default=1.0), 2),
+            'hourly_rate': next(iter(self.category_costs.values()), {}).get('hourly_rate', DEFAULT_HOURLY_RATE),
+        }
+
     def get_catalog_summary(self) -> str:
         """Get summary of loaded pricing data for AI context."""
         if not self.is_loaded:
             return "Price catalog not loaded."
-        
+
+        total_sub = sum(len(v) for v in self.sub_category_costs.values())
         summary_lines = [
             f"PRICE CATALOG SUMMARY:",
             f"- {len(self.category_costs)} category cost entries",
+            f"- {total_sub} sub-category cost entries",
             f"- {len(self.keyword_costs)} keyword pattern rules",
             f"- {len(self.severity_multipliers)} severity multipliers",
             f"- {len(self.origin_premiums)} origin premium rules",
+            f"- {len(self.business_multipliers)} business multipliers",
         ]
-        
+
         return "\n".join(summary_lines)
 
 

@@ -16,7 +16,20 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
 
+from ..feedback.price_catalog import get_price_catalog
+
 logger = logging.getLogger(__name__)
+
+
+def _get_biz_multiplier(name: str, default: float) -> float:
+    """Get a business multiplier from price_catalog.xlsx, falling back to default."""
+    try:
+        catalog = get_price_catalog()
+        if not catalog.is_loaded:
+            catalog.load_catalog()
+        return catalog.get_business_multiplier(name, default)
+    except Exception:
+        return default
 
 
 @dataclass
@@ -121,10 +134,11 @@ def calculate_financial_metrics(df: pd.DataFrame) -> FinancialMetrics:
     top_20_cost = sorted_costs.head(top_20_percent_count).sum()
     metrics.cost_concentration_ratio = (top_20_cost / metrics.total_cost) if metrics.total_cost > 0 else 0
 
-    # ROI metrics
+    # ROI metrics (prevention rate from price_catalog.xlsx)
+    prevention_rate = _get_biz_multiplier('prevention_rate', 0.8)
     metrics.recurring_issue_cost = _calculate_recurring_cost(df)
     metrics.preventable_cost = _calculate_preventable_cost(df)
-    metrics.roi_opportunity = metrics.preventable_cost * 0.8  # 80% of preventable cost
+    metrics.roi_opportunity = metrics.preventable_cost * prevention_rate
     metrics.cost_avoidance_potential = _calculate_cost_avoidance(df)
 
     # Trend metrics
@@ -146,11 +160,11 @@ def calculate_financial_metrics(df: pd.DataFrame) -> FinancialMetrics:
     metrics.cost_efficiency_score = _calculate_efficiency_score(df, metrics)
     metrics.cost_vs_benchmark = metrics.avg_cost_per_ticket - metrics.target_cost_per_ticket
 
-    # Business impact
-    metrics.revenue_at_risk = metrics.total_cost * 2.5  # 2.5x multiplier for downstream impact
+    # Business impact (multipliers from price_catalog.xlsx Business Multipliers sheet)
+    metrics.revenue_at_risk = metrics.total_cost * _get_biz_multiplier('revenue_at_risk', 2.5)
     metrics.customer_impact_cost = _calculate_customer_impact(df)
     metrics.sla_penalty_exposure = _calculate_sla_penalty(df)
-    metrics.opportunity_cost = metrics.total_cost * 0.35  # 35% opportunity cost
+    metrics.opportunity_cost = metrics.total_cost * _get_biz_multiplier('opportunity_cost', 0.35)
 
     logger.info(f"✓ Calculated comprehensive financial metrics: ${metrics.total_cost:,.2f} total")
 
@@ -195,12 +209,11 @@ def _calculate_cost_avoidance(df: pd.DataFrame) -> float:
         return 0.0
 
     try:
-        # Tickets with similar historical issues
         similar_count = pd.to_numeric(df['Similar_Tickets_Found'], errors='coerce').fillna(0)
         repeat_mask = similar_count > 2
 
-        # Cost avoidance = cost of repeat issues if root cause was fixed
-        return df[repeat_mask]['Financial_Impact'].sum() * 0.7  # 70% avoidable
+        avoidance_rate = _get_biz_multiplier('cost_avoidance_rate', 0.7)
+        return df[repeat_mask]['Financial_Impact'].sum() * avoidance_rate
     except Exception:
         return 0.0
 
@@ -310,12 +323,11 @@ def _calculate_customer_impact(df: pd.DataFrame) -> float:
     if 'Origin_Norm' not in df.columns or 'Financial_Impact' not in df.columns:
         return 0.0
 
-    # Customer-facing issues have higher business impact
     customer_facing = ['External', 'Customer']
     mask = df['Origin_Norm'].isin(customer_facing)
 
-    # 1.5x multiplier for customer impact
-    return df[mask]['Financial_Impact'].sum() * 1.5
+    multiplier = _get_biz_multiplier('customer_impact', 1.5)
+    return df[mask]['Financial_Impact'].sum() * multiplier
 
 
 def _calculate_sla_penalty(df: pd.DataFrame) -> float:
@@ -323,12 +335,11 @@ def _calculate_sla_penalty(df: pd.DataFrame) -> float:
     if 'Severity_Norm' not in df.columns or 'Financial_Impact' not in df.columns:
         return 0.0
 
-    # Critical issues often have SLA penalties
     critical_mask = df['Severity_Norm'] == 'Critical'
     critical_cost = df[critical_mask]['Financial_Impact'].sum()
 
-    # Assume 20% SLA penalty rate for critical issues
-    return critical_cost * 0.2
+    penalty_rate = _get_biz_multiplier('sla_penalty', 0.2)
+    return critical_cost * penalty_rate
 
 
 def _calculate_efficiency_score(df: pd.DataFrame, metrics: FinancialMetrics) -> float:
@@ -363,6 +374,9 @@ def calculate_roi_metrics(df: pd.DataFrame) -> Dict[str, Any]:
     """
     Calculate ROI opportunities from fixing root causes.
 
+    Uses actual date range from data to annualize costs (not arbitrary multiplier).
+    Prevention rate and cost avoidance rate loaded from price_catalog.xlsx.
+
     Returns:
         Dictionary with ROI analysis including:
         - Investment required
@@ -376,11 +390,30 @@ def calculate_roi_metrics(df: pd.DataFrame) -> Dict[str, Any]:
         'expected_annual_savings': 0.0,
         'roi_percentage': 0.0,
         'payback_months': 0.0,
+        'data_span_days': 0,
+        'annualization_factor': 1.0,
         'top_opportunities': []
     }
 
     if 'Financial_Impact' not in df.columns or 'AI_Category' not in df.columns:
         return roi_analysis
+
+    # Calculate annualization factor from actual data date range
+    annualization_factor = 1.0
+    if 'Issue_Date' in df.columns:
+        dates = pd.to_datetime(df['Issue_Date'], errors='coerce').dropna()
+        if len(dates) >= 2:
+            data_span_days = (dates.max() - dates.min()).days
+            if data_span_days > 0:
+                annualization_factor = 365.0 / data_span_days
+                roi_analysis['data_span_days'] = data_span_days
+            else:
+                annualization_factor = 1.0  # All same day - can't extrapolate
+        else:
+            annualization_factor = 1.0  # Not enough data points
+    roi_analysis['annualization_factor'] = round(annualization_factor, 2)
+
+    prevention_rate = _get_biz_multiplier('prevention_rate', 0.8)
 
     # Calculate by category
     category_costs = df.groupby('AI_Category')['Financial_Impact'].agg(['sum', 'count', 'mean'])
@@ -396,8 +429,8 @@ def calculate_roi_metrics(df: pd.DataFrame) -> Dict[str, Any]:
             # Investment = 10x average ticket cost for root cause fix
             investment = avg_cost * 10
 
-            # Savings = 80% of recurring issues prevented
-            annual_savings = total_cost * 4 * 0.8  # Extrapolate to year, 80% prevention
+            # Annualize using actual date range, then apply prevention rate
+            annual_savings = total_cost * annualization_factor * prevention_rate
 
             # ROI
             roi_pct = ((annual_savings - investment) / investment * 100) if investment > 0 else 0

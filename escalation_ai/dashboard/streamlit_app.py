@@ -72,152 +72,41 @@ if 'uploaded_file_path' not in st.session_state:
     st.session_state.uploaded_file_path = None
 
 # ============================================================================
-# PRICE CATALOG - LOAD COSTS FROM EXCEL
+# PRICE CATALOG - SINGLE SOURCE OF TRUTH (delegates to PriceCatalog class)
 # ============================================================================
 
-def _get_price_catalog_mtime():
-    """Get modification time of price_catalog.xlsx for cache invalidation."""
+def _get_price_catalog_instance():
+    """Get the PriceCatalog singleton, ensuring it's loaded from the correct path."""
     import os
-    paths = [
-        '/home/k8s/Projects/AI-Escalation/price_catalog.xlsx',
-        'price_catalog.xlsx',
-    ]
-    for p in paths:
-        if os.path.exists(p):
-            return os.path.getmtime(p)
-    return 0
+    from pathlib import Path as _Path
+    from ..feedback.price_catalog import PriceCatalog, get_price_catalog
 
-@st.cache_data(ttl=60)  # Refresh every 60 seconds, or when file changes
-def load_price_catalog(_mtime=None):
-    """Load pricing data from price_catalog.xlsx for all cost calculations.
+    # Ensure we find price_catalog.xlsx regardless of working directory
+    project_root = _Path(__file__).parent.parent.parent
+    price_catalog_path = project_root / 'price_catalog.xlsx'
 
-    Args:
-        _mtime: File modification time (used for cache invalidation)
-    """
-    import os
-
-    catalog_data = {
-        'category_costs': {},
-        'severity_multipliers': {'critical': 2.5, 'high': 1.75, 'medium': 1.25, 'low': 1.0, 'major': 1.75, 'minor': 1.0},
-        'origin_premiums': {'vendor': 0.15, 'process': 0.05, 'external': 0.20, 'customer': 0.10, 'technical': 0.0, 'internal': 0.0},
-        'avg_cost_per_ticket': 0,
-        'benchmark_best': 0,
-        'benchmark_avg': 0,
-        'benchmark_laggard': 0,
-        'hourly_rate': 20,
-    }
-
-    # Find price_catalog.xlsx
-    price_paths = [
-        '/home/k8s/Projects/AI-Escalation/price_catalog.xlsx',
-        'price_catalog.xlsx',
-        Path(__file__).parent.parent.parent / 'price_catalog.xlsx',
-    ]
-
-    price_catalog_path = None
-    for p in price_paths:
-        if os.path.exists(p):
-            price_catalog_path = p
-            break
-
-    if not price_catalog_path:
-        print("⚠ price_catalog.xlsx not found, using minimal defaults")
-        catalog_data['avg_cost_per_ticket'] = 500
-        catalog_data['benchmark_best'] = 300
-        catalog_data['benchmark_avg'] = 500
-        catalog_data['benchmark_laggard'] = 1000
-        return catalog_data
-
-    try:
-        xl = pd.ExcelFile(price_catalog_path)
-
-        # Load Category Costs
-        if 'Category Costs' in xl.sheet_names:
-            cat_df = pd.read_excel(xl, sheet_name='Category Costs')
-            for _, row in cat_df.iterrows():
-                cat = str(row['Category']).strip()
-                labor_hrs = float(row.get('Labor_Hours', 2) or 2)
-                hourly_rate = float(row.get('Hourly_Rate', 20) or 20)
-                material = float(row.get('Material_Cost', 0) or 0)
-                # Rework cost only: Material + Labor (no delay - no data to support it)
-                base_cost = material + (labor_hrs * hourly_rate)
-                catalog_data['category_costs'][cat] = {
-                    'base_cost': base_cost,
-                    'labor_hours': labor_hrs,
-                    'hourly_rate': hourly_rate,
-                    'material': material
-                }
-                catalog_data['hourly_rate'] = hourly_rate
-
-        # Load Severity Multipliers
-        if 'Severity Multipliers' in xl.sheet_names:
-            sev_df = pd.read_excel(xl, sheet_name='Severity Multipliers')
-            for _, row in sev_df.iterrows():
-                sev = str(row['Severity_Level']).strip().lower()
-                mult = float(row.get('Cost_Multiplier', 1.0) or 1.0)
-                catalog_data['severity_multipliers'][sev] = mult
-
-        # Load Origin Premiums
-        if 'Origin Premiums' in xl.sheet_names:
-            orig_df = pd.read_excel(xl, sheet_name='Origin Premiums')
-            for _, row in orig_df.iterrows():
-                origin = str(row['Origin_Type']).strip().lower()
-                prem = float(row.get('Premium_Percentage', 0) or 0)
-                catalog_data['origin_premiums'][origin] = prem
-
-        # Calculate benchmarks from category costs
-        if catalog_data['category_costs']:
-            all_base_costs = [c['base_cost'] for c in catalog_data['category_costs'].values()]
-            avg_base = sum(all_base_costs) / len(all_base_costs)
-            avg_sev_mult = sum(catalog_data['severity_multipliers'].values()) / len(catalog_data['severity_multipliers'])
-            catalog_data['avg_cost_per_ticket'] = avg_base * avg_sev_mult
-            catalog_data['benchmark_best'] = min(all_base_costs)
-            catalog_data['benchmark_avg'] = avg_base * avg_sev_mult
-            catalog_data['benchmark_laggard'] = max(all_base_costs) * max(catalog_data['severity_multipliers'].values())
-
-        print(f"✓ Loaded price_catalog.xlsx: {len(catalog_data['category_costs'])} categories, avg=${catalog_data['avg_cost_per_ticket']:.0f}/ticket")
-
-    except Exception as e:
-        print(f"⚠ Error loading price_catalog.xlsx: {e}")
-        catalog_data['avg_cost_per_ticket'] = 500
-        catalog_data['benchmark_best'] = 300
-        catalog_data['benchmark_avg'] = 500
-        catalog_data['benchmark_laggard'] = 1000
-
-    return catalog_data
+    catalog = get_price_catalog()
+    if price_catalog_path.exists():
+        catalog.catalog_path = str(price_catalog_path)
+    catalog.load_catalog()
+    return catalog
 
 
 def get_catalog_cost(category: str = None, severity: str = 'Medium', origin: str = 'Technical') -> float:
-    """Calculate cost for a ticket using price_catalog.xlsx data."""
-    catalog = load_price_catalog(_mtime=_get_price_catalog_mtime())
-
-    # Get base cost from category
-    if category and category in catalog['category_costs']:
-        base_cost = catalog['category_costs'][category]['base_cost']
-    else:
-        base_cost = catalog['avg_cost_per_ticket'] / 1.5  # Approximate base without multipliers
-
-    # Apply severity multiplier
-    sev_key = str(severity).lower() if severity else 'medium'
-    sev_mult = catalog['severity_multipliers'].get(sev_key, 1.25)
-
-    # Apply origin premium
-    orig_key = str(origin).lower() if origin else 'technical'
-    orig_prem = catalog['origin_premiums'].get(orig_key, 0.0)
-
-    return base_cost * sev_mult * (1 + orig_prem)
+    """Calculate cost for a ticket using PriceCatalog (single source of truth)."""
+    catalog = _get_price_catalog_instance()
+    result = catalog.calculate_financial_impact(
+        category=category or 'Unclassified',
+        severity=severity or 'Medium',
+        origin=origin or 'Technical',
+    )
+    return result['total_impact']
 
 
 def get_benchmark_costs() -> dict:
-    """Get benchmark costs from price_catalog.xlsx."""
-    catalog = load_price_catalog(_mtime=_get_price_catalog_mtime())
-    return {
-        'best_in_class': catalog['benchmark_best'],
-        'industry_avg': catalog['benchmark_avg'],
-        'laggard': catalog['benchmark_laggard'],
-        'avg_per_ticket': catalog['avg_cost_per_ticket'],
-        'hourly_rate': catalog['hourly_rate'],
-    }
+    """Get benchmark costs from PriceCatalog (single source of truth)."""
+    catalog = _get_price_catalog_instance()
+    return catalog.get_benchmark_costs()
 
 # ============================================================================
 # EXCEL API REFRESH UTILITY
@@ -1160,45 +1049,32 @@ def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _calculate_financial_impact_from_catalog(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate Financial_Impact for each row using the PriceCatalog."""
+    """Calculate Financial_Impact for each row using PriceCatalog (single source of truth).
+
+    Also populates Financial_Impact_Source audit trail column.
+    """
     try:
-        import os
-        from pathlib import Path
-        from ..feedback.price_catalog import get_price_catalog
-
-        # Ensure we're in the right directory for price_catalog.xlsx
-        project_root = Path(__file__).parent.parent.parent
-        price_catalog_path = project_root / 'price_catalog.xlsx'
-
-        if not price_catalog_path.exists():
-            raise FileNotFoundError(f"price_catalog.xlsx not found at {price_catalog_path}")
-
-        # Change to project root temporarily if needed
-        original_cwd = os.getcwd()
-        os.chdir(project_root)
-
-        try:
-            price_catalog = get_price_catalog()
-            price_catalog.load_catalog()  # Always reload to ensure latest values
-        finally:
-            os.chdir(original_cwd)
+        catalog = _get_price_catalog_instance()
 
         def calc_impact(row):
             category = row.get('AI_Category', 'Unclassified')
+            sub_category = row.get('AI_Sub_Category', '')
             severity = row.get('Severity_Norm', row.get('tickets_data_severity', 'Medium'))
             origin = row.get('Origin_Norm', row.get('tickets_data_origin', 'Internal'))
-            # Use tickets_data_issue_summary (the actual column name) for keyword pattern matching
             description = str(row.get('tickets_data_issue_summary', row.get('Summary', '')))
 
-            result = price_catalog.calculate_financial_impact(
+            result = catalog.calculate_financial_impact(
                 category=str(category) if pd.notna(category) else 'Unclassified',
+                sub_category=str(sub_category) if pd.notna(sub_category) else '',
                 severity=str(severity) if pd.notna(severity) else 'Medium',
                 origin=str(origin) if pd.notna(origin) else 'Technical',
                 description=description
             )
-            return result['total_impact']
+            return result
 
-        df['Financial_Impact'] = df.apply(calc_impact, axis=1)
+        impact_results = df.apply(calc_impact, axis=1)
+        df['Financial_Impact'] = impact_results.apply(lambda r: r['total_impact'])
+        df['Financial_Impact_Source'] = impact_results.apply(lambda r: r['source'])
         print(f"✓ Calculated Financial_Impact using price_catalog.xlsx: ${df['Financial_Impact'].sum():,.0f} total")
 
     except Exception as e:

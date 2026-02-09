@@ -69,24 +69,28 @@ def calculate_strategic_friction(df: pd.DataFrame) -> pd.DataFrame:
     def get_financial_impact(row):
         """Calculate financial impact using price catalog."""
         category = row.get('AI_Category', 'Unclassified')
+        sub_category = row.get('AI_Sub_Category', '')
         severity = row['Severity_Norm']
         origin = row['Origin_Norm']
         description = str(row.get(COL_SUMMARY, ''))
-        
+
         impact = price_catalog.calculate_financial_impact(
             category=category,
+            sub_category=sub_category if pd.notna(sub_category) else '',
             severity=severity,
             origin=origin,
             description=description,
-            delay_hours=4.0
         )
-        return impact['total_impact']
+        return impact
 
     df['Strategic_Friction_Score'] = df.apply(get_score, axis=1)
-    
-    # Add financial impact column
-    df['Financial_Impact'] = df.apply(get_financial_impact, axis=1)
+
+    # Add financial impact columns (value + audit trail)
+    impact_results = df.apply(get_financial_impact, axis=1)
+    df['Financial_Impact'] = impact_results.apply(lambda r: r['total_impact'])
+    df['Financial_Impact_Source'] = impact_results.apply(lambda r: r['source'])
     logger.info(f"  → Total estimated financial impact: ${df['Financial_Impact'].sum():,.2f}")
+    logger.info(f"  → Impact sources: {df['Financial_Impact_Source'].value_counts().to_dict()}")
     
     # Additional metrics
     df = _add_risk_tier(df)
