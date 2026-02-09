@@ -79,7 +79,7 @@ def _get_price_catalog_instance():
     """Get the PriceCatalog singleton, ensuring it's loaded from the correct path."""
     import os
     from pathlib import Path as _Path
-    from ..feedback.price_catalog import PriceCatalog, get_price_catalog
+    from escalation_ai.feedback.price_catalog import PriceCatalog, get_price_catalog
 
     # Ensure we find price_catalog.xlsx regardless of working directory
     project_root = _Path(__file__).parent.parent.parent
@@ -3093,7 +3093,7 @@ def generate_ai_lesson_recommendations(df, use_ollama: bool = True) -> List[Dict
     if use_ollama:
         try:
             import requests
-            from ..core.config import OLLAMA_BASE_URL, GEN_MODEL
+            from escalation_ai.core.config import OLLAMA_BASE_URL, GEN_MODEL
 
             # Build context for AI
             context_lines = [
