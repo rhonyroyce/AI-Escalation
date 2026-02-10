@@ -20,8 +20,8 @@ import pandas as pd
 from utils.data_loader import load_pulse_data, get_default_file_path
 from utils.styles import (
     inject_css, STATUS_CONFIG, STATUS_ORDER, SCORE_DIMENSIONS,
-    get_pulse_status, MCKINSEY_COLORS, DIMENSION_COLORS, REGION_LINE_COLORS,
-    pulse_css_class, heat_css_class, score_css_class,
+    get_pulse_status, get_pulse_color, MCKINSEY_COLORS, DIMENSION_COLORS,
+    REGION_LINE_COLORS, pulse_css_class, heat_css_class, score_css_class,
 )
 
 # ============================================================================
@@ -87,13 +87,56 @@ mw_df = df.copy()
 if selected_regions:
     mw_df = mw_df[mw_df['Region'].isin(selected_regions)]
 
-latest_week = st.session_state.get('selected_week', df['Wk'].max())
-latest_year = st.session_state.get('selected_year', df['Year'].max())
-avg_pulse = filtered_df['Total Score'].mean()
 target = st.session_state.get('pulse_target', 17.0)
+
+# ============================================================================
+# WEEK SCOPE SELECTOR — default to All Weeks (Average)
+# ============================================================================
+yw_pairs_all = (
+    mw_df[['Year', 'Wk']].drop_duplicates()
+    .sort_values(['Year', 'Wk'])
+    .values.tolist()
+)
+week_labels_all = [f"{int(y)}-W{int(w):02d}" for y, w in yw_pairs_all]
+week_options_all = ['All Weeks (Average)'] + week_labels_all
+
+scope_c1, scope_c2 = st.columns([1, 3])
+with scope_c1:
+    home_week_scope = st.selectbox(
+        'Week Scope',
+        week_options_all,
+        index=0,  # default to All Weeks
+        key='home_week_scope',
+    )
+
+# Build scope_df based on selection
+if home_week_scope == 'All Weeks (Average)':
+    # Average all dimension scores and Total Score per project
+    agg_cols = {dim: 'mean' for dim in SCORE_DIMENSIONS}
+    agg_cols['Total Score'] = 'mean'
+    latest_idx = mw_df.sort_values(['Year', 'Wk']).groupby('Project').tail(1).index
+    meta_df = mw_df.loc[latest_idx, ['Project', 'Region', 'Area', 'PM Name']].drop_duplicates('Project')
+    avg_scores = mw_df.groupby('Project').agg(agg_cols).reset_index()
+    for dim in SCORE_DIMENSIONS:
+        avg_scores[dim] = avg_scores[dim].round(2)
+    avg_scores['Total Score'] = avg_scores['Total Score'].round(2)
+    scope_df = meta_df.merge(avg_scores, on='Project', how='inner')
+    scope_df['Pulse_Status'] = scope_df['Total Score'].apply(get_pulse_status)
+    scope_label = f"Average across {len(yw_pairs_all)} weeks | {scope_df['Project'].nunique()} projects"
+else:
+    yr_str, wk_str = home_week_scope.split('-W')
+    sel_yr, sel_wk = int(yr_str), int(wk_str)
+    scope_df = mw_df[(mw_df['Year'] == sel_yr) & (mw_df['Wk'] == sel_wk)].copy()
+    scope_label = f"Week {home_week_scope} | {len(scope_df)} projects"
+
+with scope_c2:
+    st.caption(scope_label)
+
+avg_pulse = scope_df['Total Score'].mean() if not scope_df.empty else 0
 variance = avg_pulse - target
 
 # ── Header ──
+scope_text = "All Weeks Avg" if home_week_scope == 'All Weeks (Average)' else home_week_scope
 st.markdown(f"""
 <div style="display:flex; align-items:center; gap:0.8rem; margin-bottom:0.5rem;">
     <div style="font-size:2rem;">\U0001f3d7\ufe0f</div>
@@ -103,7 +146,7 @@ st.markdown(f"""
     </div>
     <div style="margin-left:auto; text-align:right;">
         <div style="font-size:0.8rem; color:#94a3b8;">
-            Year {latest_year} | Week {latest_week} |
+            {scope_text} |
             Pulse: <b style="color:white;">{avg_pulse:.1f}</b> vs {target:.0f}
             (<span class="{'delta-positive' if variance >= 0 else 'delta-negative'}">{variance:+.1f}</span>)
         </div>
@@ -184,113 +227,134 @@ for _dim in SCORE_DIMENSIONS:
     _table_header += f'<th>{_short}</th>'
 _table_header += '</tr></thead>'
 
-# Build region → area hierarchy
+# Build region → area hierarchy from scope_df (respects week scope)
 region_info = {}
 for region in all_regions:
-    rdf = mw_df[mw_df['Region'] == region]
-    if len(rdf) == 0:
+    rdf_scope = scope_df[scope_df['Region'] == region]
+    rdf_full = mw_df[mw_df['Region'] == region]
+    if len(rdf_scope) == 0:
         continue
-    region_trend = rdf.groupby('Wk')['Total Score'].mean().sort_index().values
-    region_avg = rdf['Total Score'].mean()
-    region_scores = {c: rdf[c].mean() for c in SCORE_DIMENSIONS}
+    # Trend sparkline always uses full multi-week data
+    region_trend = rdf_full.groupby('Wk')['Total Score'].mean().sort_index().values
+    # Scores come from scope_df (averaged or week-specific)
+    region_avg = rdf_scope['Total Score'].mean()
+    region_scores = {c: rdf_scope[c].mean() for c in SCORE_DIMENSIONS}
     region_info[region] = {
         'trend': region_trend, 'pulse': region_avg, **region_scores,
         'areas': {}
     }
-    for area in sorted(rdf['Area'].dropna().unique()):
-        adf = rdf[rdf['Area'] == area]
-        if len(adf) == 0:
+    for area in sorted(rdf_scope['Area'].dropna().unique()):
+        adf_scope = rdf_scope[rdf_scope['Area'] == area]
+        adf_full = rdf_full[rdf_full['Area'] == area]
+        if len(adf_scope) == 0:
             continue
-        area_trend = adf.groupby('Wk')['Total Score'].mean().sort_index().values
-        area_avg = adf['Total Score'].mean()
-        area_scores = {c: adf[c].mean() for c in SCORE_DIMENSIONS}
+        area_trend = adf_full.groupby('Wk')['Total Score'].mean().sort_index().values
+        area_avg = adf_scope['Total Score'].mean()
+        area_scores = {c: adf_scope[c].mean() for c in SCORE_DIMENSIONS}
         region_info[region]['areas'][area] = {
             'trend': area_trend, 'pulse': area_avg, **area_scores,
         }
 
 total_trend = mw_df.groupby('Wk')['Total Score'].mean().sort_index().values
-total_avg = mw_df['Total Score'].mean()
-total_scores = {c: mw_df[c].mean() for c in SCORE_DIMENSIONS}
+total_avg = scope_df['Total Score'].mean()
+total_scores = {c: scope_df[c].mean() for c in SCORE_DIMENSIONS}
 
 col_left, col_right = st.columns([2.2, 1])
 
-# ── Region | Area Matrix (collapsible drill-down) ──
+# ── Region | Area Interactive Matrix ──
 with col_left:
     st.markdown('<div class="section-title">Project Pulse \u2013 Region | Area</div>',
                 unsafe_allow_html=True)
 
-    # Summary: 4 regions + Total (always visible)
-    summary_html = f'<div class="matrix-container"><table class="matrix-table">{_table_header}<tbody>'
-    for region in all_regions:
-        if region in region_info:
-            summary_html += _score_row_html(region, region_info[region], 'region')
-    summary_html += _score_row_html(
-        'Total', {'trend': total_trend, 'pulse': total_avg, **total_scores}, 'total'
-    )
-    summary_html += '</tbody></table></div>'
-    st.markdown(summary_html, unsafe_allow_html=True)
+    # ── Region expand toggles (compact checkboxes) ──
+    avail_regions = [r for r in all_regions if r in region_info]
+    r_cols = st.columns(len(avail_regions))
+    expanded_regions = set()
+    for i, region in enumerate(avail_regions):
+        with r_cols[i]:
+            if st.checkbox(f'\u25B6 {region}', key=f'exp_r_{region}'):
+                expanded_regions.add(region)
 
-    # Expandable region drill-down
-    for region in all_regions:
-        if region not in region_info:
-            continue
+    # ── Area expand toggles (only for expanded regions) ──
+    expandable_areas = []
+    for r in expanded_regions:
+        for a in region_info[r]['areas']:
+            expandable_areas.append((r, a))
+
+    expanded_areas = set()
+    if expandable_areas:
+        a_cols = st.columns(min(len(expandable_areas), 6))
+        for i, (r, a) in enumerate(expandable_areas):
+            col_idx = i % min(len(expandable_areas), 6)
+            with a_cols[col_idx]:
+                if st.checkbox(f'\u25B6 {a}', key=f'exp_a_{r}_{a}'):
+                    expanded_areas.add(f'{r}/{a}')
+
+    # ── Build ONE unified HTML table ──
+    # Main table has 11 cols: Name | Trend | Pulse | 8 dims
+    # Project sub-rows reuse same 11 cols: Project | PM Name | 8 dims | Total Score (mapped)
+    unified_html = f'<div class="matrix-container"><table class="matrix-table">{_table_header}<tbody>'
+
+    for region in avail_regions:
         info = region_info[region]
-        pulse_val = info['pulse']
-        status = get_pulse_status(pulse_val)
-        color = STATUS_CONFIG[status]['color']
+        is_expanded = region in expanded_regions
 
-        with st.expander(f"\U0001f50d {region} \u2014 Avg Pulse: {pulse_val:.1f}"):
-            # Area breakdown table
-            area_html = f'<div class="matrix-container"><table class="matrix-table">{_table_header}<tbody>'
+        # Region row (with indicator)
+        indicator = '\u25BC' if is_expanded else '\u25B6'
+        unified_html += _score_row_html(f'{indicator} {region}', info, 'region')
+
+        if is_expanded:
             for area_name, area_data in info['areas'].items():
-                area_html += _score_row_html(area_name, area_data, 'area')
-            area_html += '</tbody></table></div>'
-            st.markdown(area_html, unsafe_allow_html=True)
+                area_key = f'{region}/{area_name}'
+                area_expanded = area_key in expanded_areas
+                a_indicator = '\u25BC' if area_expanded else '\u25B6'
 
-            # Area-level project drill-down
-            for area_name in info['areas']:
-                with st.expander(f"\U0001f4cb {area_name} \u2014 Projects"):
-                    proj_df = filtered_df[
-                        (filtered_df['Region'] == region) &
-                        (filtered_df['Area'] == area_name)
-                    ]
-                    if proj_df.empty:
-                        st.info("No projects for the selected week.")
-                    else:
-                        proj_cols = ['Project', 'PM Name'] + SCORE_DIMENSIONS + ['Total Score']
-                        available = [c for c in proj_cols if c in proj_df.columns]
-                        proj_display = proj_df[available].sort_values('Total Score', ascending=True)
+                unified_html += _score_row_html(f'{a_indicator} {area_name}', area_data, 'area')
 
-                        proj_html = (
-                            '<div class="matrix-container" style="max-height:300px; overflow-y:auto;">'
-                            '<table class="matrix-table"><thead><tr>'
+                if area_expanded:
+                    # Project sub-header row (reuses 11 cols)
+                    proj_cols_ordered = ['Project', 'PM Name'] + SCORE_DIMENSIONS + ['Total Score']
+                    proj_avail = [c for c in proj_cols_ordered if c in scope_df.columns]
+
+                    unified_html += '<tr style="background:#0c1a30; border-top:1px solid #1e3a5f;">'
+                    for c in proj_avail:
+                        align = 'text-align:left;' if c in ('Project', 'PM Name') else ''
+                        label = c.replace('PM Performance', 'PM Perf')
+                        unified_html += (
+                            f'<th style="{align} font-size:0.6rem; padding:0.25rem;'
+                            f' color:#64748b; background:#0c1a30;">{label}</th>'
                         )
-                        for c in available:
+                    unified_html += '</tr>'
+
+                    # Project data rows
+                    proj_df = scope_df[
+                        (scope_df['Region'] == region) &
+                        (scope_df['Area'] == area_name)
+                    ].sort_values('Total Score', ascending=True)
+
+                    for _, r in proj_df.iterrows():
+                        unified_html += '<tr style="background:rgba(255,255,255,0.02);">'
+                        for c in proj_avail:
+                            val = r[c]
+                            if c == 'Total Score':
+                                cls = pulse_css_class(val)
+                                display = f'<span class="score-cell {cls}">{val:.1f}</span>' if pd.notna(val) else '\u2014'
+                            elif c in SCORE_DIMENSIONS:
+                                cls = f"rating-{int(round(val))}" if pd.notna(val) else ""
+                                display = f'<span class="rating-badge {cls}">{val:.1f}</span>' if pd.notna(val) else '\u2014'
+                            elif c in ('Project', 'PM Name'):
+                                display = str(val)[:40] if pd.notna(val) else '\u2014'
+                            else:
+                                display = str(val) if pd.notna(val) else '\u2014'
                             align = 'text-align:left;' if c in ('Project', 'PM Name') else ''
-                            label = c.replace('PM Performance', 'PM Perf')
-                            proj_html += f'<th style="{align}">{label}</th>'
-                        proj_html += '</tr></thead><tbody>'
+                            unified_html += f'<td style="{align} padding-left:2.5rem;">{display}</td>' if c == proj_avail[0] else f'<td style="{align}">{display}</td>'
+                        unified_html += '</tr>'
 
-                        for _, r in proj_display.iterrows():
-                            proj_html += '<tr>'
-                            for c in available:
-                                val = r[c]
-                                if c == 'Total Score':
-                                    cls = pulse_css_class(val)
-                                    display = f'<span class="score-cell {cls}">{int(val)}</span>' if pd.notna(val) else '\u2014'
-                                elif c in SCORE_DIMENSIONS:
-                                    cls = f"rating-{int(val)}" if pd.notna(val) else ""
-                                    display = f'<span class="rating-badge {cls}">{int(val)}</span>' if pd.notna(val) else '\u2014'
-                                elif c in ('Project', 'PM Name'):
-                                    display = str(val)[:50] if pd.notna(val) else '\u2014'
-                                else:
-                                    display = str(val) if pd.notna(val) else '\u2014'
-                                align = 'text-align:left;' if c in ('Project', 'PM Name') else ''
-                                proj_html += f'<td style="{align}">{display}</td>'
-                            proj_html += '</tr>'
-
-                        proj_html += '</tbody></table></div>'
-                        st.markdown(proj_html, unsafe_allow_html=True)
+    # Total row
+    total_data = {'trend': total_trend, 'pulse': total_avg, **total_scores}
+    unified_html += _score_row_html('Total', total_data, 'total')
+    unified_html += '</tbody></table></div>'
+    st.markdown(unified_html, unsafe_allow_html=True)
 
 # ── Weekly Trend Heatmap (scrollable, all weeks) ──
 with col_right:

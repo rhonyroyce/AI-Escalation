@@ -2,11 +2,11 @@
 Pulse Dashboard - AI Insights (Ollama-Powered)
 
 5 tabs:
-1. Executive Summary Generator
-2. Issue Categorization
-3. Risk Scoring
-4. Semantic Search
-5. Action Item Extraction
+1. Executive Summary (pre-generated on startup)
+2. Issue Categorization (pre-generated on startup)
+3. Risk Scoring (on-demand)
+4. Semantic Search (index pre-built on startup)
+5. Action Item Extraction (on-demand)
 """
 
 import sys
@@ -36,13 +36,21 @@ df = st.session_state.df
 st.markdown('<p class="main-header">AI Insights</p>', unsafe_allow_html=True)
 
 # ============================================================================
-# OLLAMA CHECK
+# OLLAMA STATUS
 # ============================================================================
-ollama_ok = check_ollama()
+ollama_ok = st.session_state.get('ollama_available', False)
 if not ollama_ok:
-    st.error("Ollama is not running. AI features are unavailable.")
-    st.code(f"ollama serve\nollama pull {CHAT_MODEL}\nollama pull {EMBED_MODEL}", language="bash")
-    st.info("Start Ollama and refresh this page to enable AI features.")
+    st.warning(
+        "Ollama is not running — AI features are unavailable. "
+        "Pre-computed results (if any) are shown below."
+    )
+    with st.expander("How to enable Ollama"):
+        st.code(
+            f"ollama serve\nollama pull {CHAT_MODEL}\nollama pull {EMBED_MODEL}",
+            language="bash",
+        )
+else:
+    st.success("Ollama is connected — AI features are active.")
 
 # ============================================================================
 # TABS
@@ -52,22 +60,23 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Semantic Search", "Action Items",
 ])
 
-# ── Tab 1: Executive Summary Generator ──
+# ── Tab 1: Executive Summary ──
 with tab1:
     st.markdown("### AI Executive Summary")
-    st.markdown("Analyze pain points and generate a structured executive briefing.")
 
-    pain_points = filtered_df['Pain Points'].dropna()
-    st.markdown(f"*{len(pain_points)} pain points available from {len(filtered_df)} entries*")
+    cached_summary = st.session_state.get('ai_exec_summary')
 
-    if st.button("Generate Executive Summary", disabled=not ollama_ok, key="gen_exec"):
-        if pain_points.empty:
-            st.warning("No pain points to analyze.")
-        else:
-            texts = pain_points.head(20).tolist()
-            combined = "\n".join([f"- {t[:300]}" for t in texts])
+    if cached_summary:
+        st.markdown("---")
+        st.markdown(cached_summary)
+        st.caption("Generated automatically on startup.")
 
-            prompt = f"""Analyze these project pain points from a telecom portfolio and provide:
+        if ollama_ok and st.button("Regenerate Summary", key="regen_exec"):
+            pain_points = filtered_df['Pain Points'].dropna()
+            if not pain_points.empty:
+                texts = pain_points.head(20).tolist()
+                combined = "\n".join([f"- {t[:300]}" for t in texts])
+                prompt = f"""Analyze these project pain points from a telecom portfolio and provide:
 1. A 2-3 sentence executive summary
 2. Top 5 recurring themes
 3. Most urgent issue requiring immediate attention
@@ -84,20 +93,53 @@ THEMES:
 4. <theme>: <description>
 5. <theme>: <description>
 URGENT: <urgent issue>"""
-
-            with st.spinner("Generating AI summary..."):
-                response = ollama_generate(prompt)
-
-            if response:
-                st.markdown("---")
-                st.markdown(response)
+                with st.spinner("Regenerating summary..."):
+                    response = ollama_generate(prompt)
+                if response:
+                    st.session_state.ai_exec_summary = response
+                    st.rerun()
+                else:
+                    st.error("Regeneration failed.")
+    elif ollama_ok:
+        pain_points = filtered_df['Pain Points'].dropna()
+        st.markdown(f"*{len(pain_points)} pain points available from {len(filtered_df)} entries*")
+        st.info("Executive summary was not pre-generated. Click below to generate now.")
+        if st.button("Generate Executive Summary", key="gen_exec"):
+            if pain_points.empty:
+                st.warning("No pain points to analyze.")
             else:
-                st.error("AI generation failed. Check Ollama status.")
+                texts = pain_points.head(20).tolist()
+                combined = "\n".join([f"- {t[:300]}" for t in texts])
+                prompt = f"""Analyze these project pain points from a telecom portfolio and provide:
+1. A 2-3 sentence executive summary
+2. Top 5 recurring themes
+3. Most urgent issue requiring immediate attention
+
+Pain Points:
+{combined}
+
+Format your response exactly as:
+SUMMARY: <summary>
+THEMES:
+1. <theme>: <description>
+2. <theme>: <description>
+3. <theme>: <description>
+4. <theme>: <description>
+5. <theme>: <description>
+URGENT: <urgent issue>"""
+                with st.spinner("Generating AI summary..."):
+                    response = ollama_generate(prompt)
+                if response:
+                    st.session_state.ai_exec_summary = response
+                    st.rerun()
+                else:
+                    st.error("AI generation failed. Check Ollama status.")
+    else:
+        st.info("Ollama is not available. Start Ollama and restart the app to auto-generate the executive summary.")
 
 # ── Tab 2: Issue Categorization ──
 with tab2:
     st.markdown("### Issue Categorization")
-    st.markdown("Classify pain points into operational categories.")
 
     CATEGORIES = [
         "Resource/Staffing", "Timeline/Delays", "Technical/Engineering",
@@ -106,50 +148,79 @@ with tab2:
         "Scope Change", "Other"
     ]
 
-    pain_points_cat = filtered_df['Pain Points'].dropna()
-    st.markdown(f"*{len(pain_points_cat)} pain points to classify*")
+    cached_cats = st.session_state.get('ai_issue_categories')
+    cached_texts = st.session_state.get('ai_issue_texts')
 
-    if st.button("Classify Issues", disabled=not ollama_ok, key="classify"):
-        if pain_points_cat.empty:
-            st.warning("No pain points to classify.")
-        else:
-            categories_result = []
-            progress = st.progress(0)
-            texts = pain_points_cat.head(30).tolist()
+    if cached_cats and cached_texts:
+        import plotly.express as px
+        from utils.styles import get_plotly_theme
 
-            for i, text in enumerate(texts):
-                prompt = f"""Categorize this telecom project issue into ONE of: {', '.join(CATEGORIES)}
-Issue: {text[:300]}
-Respond with ONLY the category name, nothing else."""
+        cat_series = pd.Series(cached_cats)
+        cat_counts = cat_series.value_counts()
 
-                result = ollama_generate(prompt, temperature=0.1, timeout=30)
-                if result:
-                    # Match to closest category
-                    result_clean = result.strip()
-                    matched = next((c for c in CATEGORIES if c.lower() in result_clean.lower()), 'Other')
-                    categories_result.append(matched)
-                else:
-                    categories_result.append('Other')
-                progress.progress((i + 1) / len(texts))
+        fig = px.bar(
+            x=cat_counts.index, y=cat_counts.values,
+            title=f'Issue Category Distribution ({len(cached_cats)} issues classified)',
+            labels={'x': 'Category', 'y': 'Count'},
+            color=cat_counts.values,
+            color_continuous_scale='Blues',
+        )
+        fig.update_layout(**get_plotly_theme())
+        st.plotly_chart(fig, use_container_width=True)
 
-            progress.empty()
+        # Detail table
+        detail_df = pd.DataFrame({
+            'Issue': [t[:120] for t in cached_texts],
+            'Category': cached_cats,
+        })
+        st.dataframe(detail_df, use_container_width=True, hide_index=True)
+        st.caption("Classified automatically on startup.")
 
-            # Show distribution
-            cat_series = pd.Series(categories_result)
-            cat_counts = cat_series.value_counts()
-
-            import plotly.express as px
-            from utils.styles import get_plotly_theme
-
-            fig = px.bar(
-                x=cat_counts.index, y=cat_counts.values,
-                title='Issue Category Distribution',
-                labels={'x': 'Category', 'y': 'Count'},
-                color=cat_counts.values,
-                color_continuous_scale='Blues',
-            )
-            fig.update_layout(**get_plotly_theme())
-            st.plotly_chart(fig, use_container_width=True)
+        if ollama_ok and st.button("Reclassify Issues", key="regen_cats"):
+            pain_points_cat = filtered_df['Pain Points'].dropna()
+            if not pain_points_cat.empty:
+                categories_result = []
+                texts = pain_points_cat.head(30).tolist()
+                progress = st.progress(0)
+                for i, text in enumerate(texts):
+                    p = f"Categorize this telecom project issue into ONE of: {', '.join(CATEGORIES)}\nIssue: {text[:300]}\nRespond with ONLY the category name, nothing else."
+                    result = ollama_generate(p, temperature=0.1, timeout=30)
+                    if result:
+                        matched = next((c for c in CATEGORIES if c.lower() in result.strip().lower()), 'Other')
+                        categories_result.append(matched)
+                    else:
+                        categories_result.append('Other')
+                    progress.progress((i + 1) / len(texts))
+                progress.empty()
+                st.session_state.ai_issue_categories = categories_result
+                st.session_state.ai_issue_texts = texts
+                st.rerun()
+    elif ollama_ok:
+        pain_points_cat = filtered_df['Pain Points'].dropna()
+        st.markdown(f"*{len(pain_points_cat)} pain points to classify*")
+        st.info("Issue categories were not pre-generated. Click below to classify now.")
+        if st.button("Classify Issues", key="classify"):
+            if pain_points_cat.empty:
+                st.warning("No pain points to classify.")
+            else:
+                categories_result = []
+                progress = st.progress(0)
+                texts = pain_points_cat.head(30).tolist()
+                for i, text in enumerate(texts):
+                    prompt = f"Categorize this telecom project issue into ONE of: {', '.join(CATEGORIES)}\nIssue: {text[:300]}\nRespond with ONLY the category name, nothing else."
+                    result = ollama_generate(prompt, temperature=0.1, timeout=30)
+                    if result:
+                        matched = next((c for c in CATEGORIES if c.lower() in result.strip().lower()), 'Other')
+                        categories_result.append(matched)
+                    else:
+                        categories_result.append('Other')
+                    progress.progress((i + 1) / len(texts))
+                progress.empty()
+                st.session_state.ai_issue_categories = categories_result
+                st.session_state.ai_issue_texts = texts
+                st.rerun()
+    else:
+        st.info("Ollama is not available. Start Ollama and restart the app to auto-classify issues.")
 
 # ── Tab 3: Risk Scoring ──
 with tab3:
@@ -164,7 +235,6 @@ with tab3:
         if proj_rows.empty:
             st.warning("No data for selected project.")
         else:
-            # Combine all text fields for the project
             text_parts = []
             for _, row in proj_rows.iterrows():
                 for col in ['Comments', 'Pain Points', 'Resolution Plan']:
@@ -209,16 +279,26 @@ with tab4:
     st.markdown("### Semantic Search")
     st.markdown("Search project data using natural language.")
 
+    index = st.session_state.get('embeddings_index')
+    if index and len(index.get('texts', [])) > 0:
+        st.success(f"Search index ready: {len(index['texts'])} documents embedded.")
+    else:
+        st.info("Search index not yet built.")
+
     query = st.text_input("Search query", placeholder="e.g., design approval delays")
 
-    # Build index button
-    if st.button("Build/Refresh Search Index", disabled=not ollama_ok, key="build_index"):
-        with st.spinner("Building embeddings index (this may take a few minutes)..."):
-            index = build_embeddings_index(df, columns=['Comments', 'Pain Points', 'Resolution Plan'])
-            st.session_state.embeddings_index = index
-            st.success(f"Index built: {len(index['texts'])} documents embedded.")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("Build/Refresh Index", disabled=not ollama_ok, key="build_index"):
+            with st.spinner("Building embeddings index (this may take a few minutes)..."):
+                new_index = build_embeddings_index(df, columns=['Comments', 'Pain Points', 'Resolution Plan'])
+                st.session_state.embeddings_index = new_index
+                st.success(f"Index built: {len(new_index['texts'])} documents embedded.")
 
-    if query and st.button("Search", disabled=not ollama_ok, key="search"):
+    with col_b:
+        search_clicked = st.button("Search", disabled=not ollama_ok, key="search")
+
+    if query and search_clicked:
         index = st.session_state.get('embeddings_index')
         if index is None or len(index.get('texts', [])) == 0:
             st.warning("Build the search index first.")

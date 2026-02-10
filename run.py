@@ -750,6 +750,151 @@ def run_pipeline(input_file=None, output_file=None):
         return False
 
 
+def pre_generate_ai_cache():
+    """Pre-generate AI insights and save to cache before Streamlit starts.
+
+    Loads ProjectPulse.xlsx, checks Ollama, generates:
+    - Executive Summary
+    - Issue Classifications
+    - Embeddings Index
+    Saves results to .cache/ai_insights.pkl so Streamlit loads instantly.
+    """
+    import pickle
+    project_root = Path(__file__).parent
+    cache_dir = project_root / '.cache'
+    cache_dir.mkdir(exist_ok=True)
+    cache_file = cache_dir / 'ai_insights.pkl'
+
+    # Check Ollama
+    sys.path.insert(0, str(project_root / 'pulse_dashboard'))
+    try:
+        from utils.pulse_insights import (
+            check_ollama, ollama_generate, build_embeddings_index,
+        )
+    except ImportError as e:
+        print(f"  ⚠️  Could not import pulse_insights: {e}")
+        return
+
+    if not check_ollama():
+        print("  ⚠️  Ollama not running — skipping AI pre-generation")
+        return
+
+    print()
+    print("=" * 60)
+    print("  🧠 Pre-generating AI Insights")
+    print("=" * 60)
+    print()
+
+    # Load Pulse data directly (no Streamlit cache)
+    pulse_file = project_root / 'ProjectPulse.xlsx'
+    if not pulse_file.exists():
+        print("  ⚠️  ProjectPulse.xlsx not found — skipping AI pre-generation")
+        return
+
+    import pandas as pd
+    import numpy as np
+    try:
+        df = pd.read_excel(pulse_file, sheet_name='Project Pulse')
+        # Minimal cleaning for text columns
+        for col in ['Comments', 'Pain Points', 'Resolution Plan']:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.replace('\xa0', ' ', regex=False).str.strip()
+                df[col] = df[col].replace({'nan': np.nan, '': np.nan, 'None': np.nan})
+        for col in ['Total Score']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    except Exception as e:
+        print(f"  ⚠️  Failed to load Pulse data: {e}")
+        return
+
+    cache = {'ollama_available': True}
+
+    # 1. Executive Summary
+    print("  📝 Generating Executive Summary...")
+    sys.stdout.flush()
+    pain = df['Pain Points'].dropna()
+    if not pain.empty:
+        texts = pain.head(20).tolist()
+        combined = "\n".join([f"- {t[:300]}" for t in texts])
+        prompt = f"""Analyze these project pain points from a telecom portfolio and provide:
+1. A 2-3 sentence executive summary
+2. Top 5 recurring themes
+3. Most urgent issue requiring immediate attention
+
+Pain Points:
+{combined}
+
+Format your response exactly as:
+SUMMARY: <summary>
+THEMES:
+1. <theme>: <description>
+2. <theme>: <description>
+3. <theme>: <description>
+4. <theme>: <description>
+5. <theme>: <description>
+URGENT: <urgent issue>"""
+        result = ollama_generate(prompt)
+        if result:
+            cache['ai_exec_summary'] = result
+            print("     ✅ Executive Summary generated")
+        else:
+            print("     ❌ Executive Summary failed")
+    sys.stdout.flush()
+
+    # 2. Issue Classification
+    print("  🏷️  Classifying issues...")
+    sys.stdout.flush()
+    CATEGORIES = [
+        "Resource/Staffing", "Timeline/Delays", "Technical/Engineering",
+        "Vendor/Partner", "Communication", "Process/Workflow",
+        "Customer Satisfaction", "Budget/Commercial", "Equipment/Tools",
+        "Scope Change", "Other"
+    ]
+    if not pain.empty:
+        texts = pain.head(30).tolist()
+        categories_result = []
+        for i, text in enumerate(texts):
+            p = f"Categorize this telecom project issue into ONE of: {', '.join(CATEGORIES)}\nIssue: {text[:300]}\nRespond with ONLY the category name, nothing else."
+            r = ollama_generate(p, temperature=0.1, timeout=30)
+            if r:
+                matched = next((c for c in CATEGORIES if c.lower() in r.strip().lower()), 'Other')
+                categories_result.append(matched)
+            else:
+                categories_result.append('Other')
+            if (i + 1) % 10 == 0:
+                print(f"     ... classified {i + 1}/{len(texts)}")
+                sys.stdout.flush()
+        cache['ai_issue_categories'] = categories_result
+        cache['ai_issue_texts'] = texts
+        print(f"     ✅ {len(categories_result)} issues classified")
+    sys.stdout.flush()
+
+    # 3. Embeddings Index
+    print("  🔍 Building embeddings index...")
+    sys.stdout.flush()
+    try:
+        # Add metadata columns needed by build_embeddings_index
+        index = build_embeddings_index(df, columns=['Comments', 'Pain Points', 'Resolution Plan'])
+        if index and len(index.get('texts', [])) > 0:
+            cache['embeddings_index'] = index
+            print(f"     ✅ Index built: {len(index['texts'])} documents embedded")
+        else:
+            print("     ⚠️  No documents to embed")
+    except Exception as e:
+        print(f"     ❌ Embeddings failed: {e}")
+    sys.stdout.flush()
+
+    # Save cache
+    try:
+        with open(cache_file, 'wb') as f:
+            pickle.dump(cache, f)
+        print(f"\n  💾 Cache saved to {cache_file}")
+    except Exception as e:
+        print(f"  ❌ Failed to save cache: {e}")
+
+    print()
+
+
 def launch_dashboard(port: int = 8501, open_browser: bool = True):
     """
     Launch the Streamlit dashboard with proper resource management.
@@ -896,22 +1041,25 @@ def main():
 
     try:
         if args.dashboard_only:
-            # Just launch dashboard
+            # Pre-generate AI insights, then launch dashboard
+            pre_generate_ai_cache()
             launch_dashboard(port=args.port, open_browser=not args.no_browser)
-            
+
         elif args.no_gui:
             # Just run pipeline
             success = run_pipeline(input_file=args.file, output_file=args.output)
             if not success:
                 sys.exit(1)
             print("✅ Pipeline complete. Run with --dashboard-only to view results.")
-            
+
         else:
-            # Full flow: pipeline + dashboard
+            # Full flow: pipeline + AI pre-generation + dashboard
             print("🔄 Running full analysis pipeline...")
             sys.stdout.flush()
             success = run_pipeline(input_file=args.file, output_file=args.output)
-            
+
+            pre_generate_ai_cache()
+
             if success:
                 print("✅ Launching dashboard to view results...")
                 launch_dashboard(port=args.port, open_browser=not args.no_browser)
