@@ -37,8 +37,78 @@ if filtered_df is None or filtered_df.empty:
 
 df = st.session_state.df
 target = st.session_state.get('pulse_target', 17.0)
+selected_regions = st.session_state.get('selected_regions', [])
 
 st.markdown('<p class="main-header">Drill-Down Analysis</p>', unsafe_allow_html=True)
+
+# ============================================================================
+# WEEK SCOPE SELECTOR — choose any week or overall average
+# ============================================================================
+# Build multi-week dataset (region-filtered, NOT week-filtered)
+mw_df = df.copy()
+if selected_regions:
+    mw_df = mw_df[mw_df['Region'].isin(selected_regions)]
+
+# Available weeks sorted chronologically
+yw_pairs = (
+    mw_df[['Year', 'Wk']].drop_duplicates()
+    .sort_values(['Year', 'Wk'])
+    .values.tolist()
+)
+week_labels = [f"{int(y)}-W{int(w):02d}" for y, w in yw_pairs]
+week_options = ['All Weeks (Average)'] + week_labels
+
+# Default to sidebar-selected week
+sidebar_year = st.session_state.get('selected_year')
+sidebar_week = st.session_state.get('selected_week')
+sidebar_label = f"{int(sidebar_year)}-W{int(sidebar_week):02d}" if sidebar_year and sidebar_week else None
+default_idx = (week_labels.index(sidebar_label) + 1) if sidebar_label in week_labels else 0
+
+scope_col1, scope_col2 = st.columns([1, 3])
+with scope_col1:
+    week_scope = st.selectbox(
+        'Analysis Scope',
+        week_options,
+        index=default_idx,
+        key='dd_week_scope',
+    )
+
+# Build the analysis DataFrame based on scope
+if week_scope == 'All Weeks (Average)':
+    # Average all dimension scores and Total Score per project (latest region/area/PM)
+    agg_cols = {dim: 'mean' for dim in SCORE_DIMENSIONS}
+    agg_cols['Total Score'] = 'mean'
+    # Keep latest metadata per project
+    latest_idx = mw_df.sort_values(['Year', 'Wk']).groupby('Project').tail(1).index
+    meta_df = mw_df.loc[latest_idx, ['Project', 'Region', 'Area', 'PM Name']].drop_duplicates('Project')
+
+    avg_scores = mw_df.groupby('Project').agg(agg_cols).reset_index()
+    # Round scores to nearest int for status mapping
+    for dim in SCORE_DIMENSIONS:
+        avg_scores[dim] = avg_scores[dim].round(1)
+    avg_scores['Total Score'] = avg_scores['Total Score'].round(1)
+
+    analysis_df = meta_df.merge(avg_scores, on='Project', how='inner')
+    analysis_df['Pulse_Status'] = analysis_df['Total Score'].apply(get_pulse_status)
+    analysis_df['Pulse_Color'] = analysis_df['Total Score'].apply(get_pulse_color)
+
+    with scope_col2:
+        st.caption(f"Showing average across {len(yw_pairs)} weeks | {len(analysis_df)} projects")
+else:
+    # Specific week selected
+    yr_str, wk_str = week_scope.split('-W')
+    sel_yr, sel_wk = int(yr_str), int(wk_str)
+    analysis_df = mw_df[(mw_df['Year'] == sel_yr) & (mw_df['Wk'] == sel_wk)].copy()
+
+    with scope_col2:
+        st.caption(f"Week {week_scope} | {len(analysis_df)} projects")
+
+if analysis_df.empty:
+    st.warning("No data for the selected scope.")
+    st.stop()
+
+# Use analysis_df instead of filtered_df for all drill-down content
+filtered_df = analysis_df
 
 
 # ============================================================================
@@ -219,6 +289,89 @@ def _kpi_row(data_df):
         """, unsafe_allow_html=True)
 
 
+def _click_project_detail(click_df, label, drill_df, full_df, target_score):
+    """Full project detail panel: KPIs, radar, trend, dimensions, text."""
+    row = click_df.iloc[0]
+    project_name = row.get('Project', label)
+    status = get_pulse_status(row['Total Score'])
+    color = STATUS_CONFIG[status]['color']
+
+    st.markdown(f"""
+    <div class="drilldown-panel">
+        <div class="drilldown-header">
+            <span class="drilldown-badge">{project_name}</span>
+            <span class="drilldown-context" style="color:{color};">
+                Score: {int(row['Total Score'])} &bull; {status} &bull;
+                PM: {row.get('PM Name', '\u2014')} &bull;
+                {row.get('Region', '')} / {row.get('Area', '')}
+            </span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Dimension score cards
+    dim_html = '<div style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">'
+    for dim in SCORE_DIMENSIONS:
+        val = int(row.get(dim, 0))
+        cls = score_css_class(val)
+        short = dim.replace('PM Performance', 'PM Perf')
+        dim_html += (
+            f'<div style="background:rgba(255,255,255,0.04); border-radius:8px;'
+            f' padding:8px 12px; text-align:center; min-width:70px;">'
+            f'<div><span class="score-cell {cls}" style="font-size:1.3rem;">{val}</span></div>'
+            f'<div style="font-size:0.65rem; color:#94a3b8; margin-top:2px;">{short}</div>'
+            f'</div>'
+        )
+    dim_html += '</div>'
+    st.markdown(dim_html, unsafe_allow_html=True)
+
+    # Radar + Trend side by side
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_radar = chart_radar(row)
+        st.plotly_chart(fig_radar, use_container_width=True)
+    with c2:
+        proj_history = full_df[full_df['Project'] == project_name]
+        if len(proj_history) > 1:
+            fig_trend = chart_project_trend(full_df, project_name, target_score)
+            st.plotly_chart(fig_trend, use_container_width=True)
+        else:
+            st.info("Only one week of data \u2014 no trend available.")
+
+    # Dimension comparison vs region & portfolio averages
+    st.markdown("**Dimension Scores vs Averages**")
+    avg_region = full_df[full_df['Region'] == row['Region']][SCORE_DIMENSIONS].mean()
+    avg_portfolio = drill_df[SCORE_DIMENSIONS].mean()
+
+    comp_html = (
+        '<div class="matrix-container"><table class="matrix-table">'
+        '<thead><tr>'
+        '<th style="text-align:left;">Dimension</th>'
+        '<th>Score</th><th>Region Avg</th><th>Portfolio Avg</th><th>vs Region</th>'
+        '</tr></thead><tbody>'
+    )
+    for dim in SCORE_DIMENSIONS:
+        val = row.get(dim, 0)
+        r_avg = avg_region[dim]
+        p_avg = avg_portfolio[dim]
+        diff = val - r_avg
+        diff_cls = 'delta-positive' if diff >= 0 else 'delta-negative'
+        cls = f"rating-{int(val)}" if pd.notna(val) else ""
+        short = dim.replace('PM Performance', 'PM Perf')
+        comp_html += (
+            f'<tr><td style="text-align:left; color:#e2e8f0;">{short}</td>'
+            f'<td><span class="rating-badge {cls}">{int(val)}</span></td>'
+            f'<td style="color:#94a3b8;">{r_avg:.2f}</td>'
+            f'<td style="color:#94a3b8;">{p_avg:.2f}</td>'
+            f'<td><span class="{diff_cls}">{diff:+.2f}</span></td></tr>'
+        )
+    comp_html += '</tbody></table></div>'
+    st.markdown(comp_html, unsafe_allow_html=True)
+
+    # All text fields
+    _text_summary_panel(click_df)
+
+
 def _click_detail_panel(click_df, label):
     """Show inline detail when a chart element is clicked."""
     st.markdown(f"""
@@ -340,13 +493,45 @@ with tab1:
         pt = event.selection.points[0]
         label = pt.get('label', '') if isinstance(pt, dict) else getattr(pt, 'label', '')
         if label:
-            click_df = drill_df[
-                (drill_df['Region'] == label) |
-                (drill_df['Area'] == label) |
-                (drill_df['Project'] == label)
-            ]
-            if not click_df.empty:
-                _click_detail_panel(click_df, label)
+            # Check if clicked label is a dimension name
+            if label in SCORE_DIMENSIONS:
+                # Dimension leaf clicked — show dimension analysis
+                st.markdown(f"""
+                <div class="drilldown-panel">
+                    <div class="drilldown-header">
+                        <span class="drilldown-badge">{label}</span>
+                        <span class="drilldown-context">Dimension Analysis</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                dim_color = DIMENSION_COLORS.get(label, '#2563eb')
+                dc1, dc2 = st.columns(2)
+                with dc1:
+                    fig_dist = chart_dimension_distribution(drill_df, label)
+                    st.plotly_chart(fig_dist, use_container_width=True)
+                with dc2:
+                    fig_bar = chart_dimension_by_region(drill_df, label, dim_color)
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                # Show low scorers
+                low = drill_df[drill_df[label] <= 1]
+                if not low.empty:
+                    st.markdown(f"**Projects scoring 0-1 on {label}** ({len(low)})")
+                    show_cols = ['Project', 'Region', 'Area', 'PM Name', label, 'Total Score']
+                    avail = [c for c in show_cols if c in low.columns]
+                    st.dataframe(low[avail].sort_values(label), use_container_width=True, hide_index=True)
+            else:
+                # Region / Area / Project clicked
+                click_df = drill_df[
+                    (drill_df['Region'] == label) |
+                    (drill_df['Area'] == label) |
+                    (drill_df['Project'] == label)
+                ]
+                if not click_df.empty:
+                    if click_df['Project'].nunique() == 1:
+                        # Single project — show full project detail with dimensions
+                        _click_project_detail(click_df, label, drill_df, df, target)
+                    else:
+                        _click_detail_panel(click_df, label)
 
 with tab2:
     fig = chart_treemap(drill_df)

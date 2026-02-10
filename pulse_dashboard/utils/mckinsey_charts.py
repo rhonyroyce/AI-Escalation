@@ -258,15 +258,96 @@ def chart_pareto(df: pd.DataFrame, target: float, groupby_col: str = 'Area') -> 
 # ============================================================================
 # SUNBURST
 # ============================================================================
+def _dim_color(score):
+    """Color for a single dimension score (0-3)."""
+    if score >= 3:
+        return '#059669'   # dark green
+    elif score >= 2:
+        return '#22c55e'   # green
+    elif score >= 1:
+        return '#f59e0b'   # yellow
+    else:
+        return '#ef4444'   # red
+
+
 def chart_sunburst(df: pd.DataFrame) -> go.Figure:
-    fig = px.sunburst(
-        df,
-        path=['Region', 'Area', 'Project'],
-        color='Total Score',
-        color_continuous_scale=CONTINUOUS_COLOR_SCALE,
-        color_continuous_midpoint=COLOR_MIDPOINT,
-    )
-    fig.update_layout(**get_plotly_theme(), title='Portfolio Hierarchy', height=600)
+    """Sunburst: Region -> Area -> Project -> Dimension (4 levels).
+
+    Colors use two scales:
+    - Dimensions (leaves): 0=red, 1=yellow, 2=green, 3=dark green
+    - Projects/Areas/Regions: Total Score rules (Red <14, Yellow <16, Green <20, DG 20-24)
+    """
+    ids, labels, parents, values, colors, hovertexts = [], [], [], [], [], []
+
+    # Root
+    portfolio_avg = df['Total Score'].mean()
+    ids.append('Portfolio')
+    labels.append('Portfolio')
+    parents.append('')
+    values.append(0)
+    colors.append(get_pulse_color(portfolio_avg))
+    hovertexts.append(f'Avg Pulse: {portfolio_avg:.1f}')
+
+    for region in sorted(df['Region'].dropna().unique()):
+        rdf = df[df['Region'] == region]
+        r_avg = rdf['Total Score'].mean()
+        r_id = region
+
+        ids.append(r_id)
+        labels.append(region)
+        parents.append('Portfolio')
+        values.append(0)
+        colors.append(get_pulse_color(r_avg))
+        hovertexts.append(f'Avg Pulse: {r_avg:.1f} ({rdf["Project"].nunique()} proj)')
+
+        for area in sorted(rdf['Area'].dropna().unique()):
+            adf = rdf[rdf['Area'] == area]
+            a_avg = adf['Total Score'].mean()
+            a_id = f'{region}/{area}'
+
+            ids.append(a_id)
+            labels.append(area)
+            parents.append(r_id)
+            values.append(0)
+            colors.append(get_pulse_color(a_avg))
+            hovertexts.append(f'Avg Pulse: {a_avg:.1f} ({adf["Project"].nunique()} proj)')
+
+            for _, row in adf.iterrows():
+                project = row['Project']
+                total = row['Total Score']
+                p_id = f'{region}/{area}/{project}'
+
+                ids.append(p_id)
+                labels.append(project)
+                parents.append(a_id)
+                values.append(0)
+                colors.append(get_pulse_color(total))
+                hovertexts.append(f'Total: {int(total)} | PM: {row.get("PM Name", "—")}')
+
+                for dim in SCORE_DIMENSIONS:
+                    score = int(row.get(dim, 0))
+                    d_id = f'{p_id}/{dim}'
+                    short = dim.replace('PM Performance', 'PM Perf')
+
+                    ids.append(d_id)
+                    labels.append(short)
+                    parents.append(p_id)
+                    values.append(1)
+                    colors.append(_dim_color(score))
+                    hovertexts.append(f'{dim}: {score}/3')
+
+    fig = go.Figure(go.Sunburst(
+        ids=ids,
+        labels=labels,
+        parents=parents,
+        values=values,
+        marker=dict(colors=colors),
+        hovertext=hovertexts,
+        hoverinfo='label+text',
+        branchvalues='remainder',
+        maxdepth=3,
+    ))
+    fig.update_layout(**get_plotly_theme(), title='Portfolio Hierarchy', height=650)
     return fig
 
 

@@ -55,49 +55,14 @@ for key, default in DEFAULTS.items():
 # DATA LOADING
 # ============================================================================
 if st.session_state.df is None:
-    st.markdown('<p class="main-header">Pulse Dashboard</p>', unsafe_allow_html=True)
-    st.markdown("#### Project Portfolio Intelligence")
-    st.markdown("---")
-
-    # Try default file first
     default_path = get_default_file_path()
-
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        uploaded_file = st.file_uploader(
-            "Upload Pulse Tracker (.xlsx)",
-            type=['xlsx', 'xls'],
-            help="Excel file must contain a 'Project Pulse' sheet",
-        )
-
-    with col2:
-        if default_path:
-            st.info(f"Default file found:\n`{default_path.name}`")
-            use_default = st.button("Load Default File", type="primary")
-        else:
-            use_default = False
-            st.warning("No ProjectPulse.xlsx found in project root")
-
-    # Load data
-    file_to_load = None
-    if uploaded_file:
-        file_to_load = uploaded_file
-    elif use_default and default_path:
-        file_to_load = str(default_path)
-
-    if file_to_load:
-        try:
-            with st.spinner("Loading and cleaning data..."):
-                df = load_pulse_data(file_to_load)
-                st.session_state.df = df
-                st.rerun()
-        except ValueError as e:
-            st.error(f"Data loading error: {e}")
-        except Exception as e:
-            st.error(f"Unexpected error: {e}")
-
-    st.stop()
+    if default_path:
+        with st.spinner("Loading ProjectPulse.xlsx..."):
+            st.session_state.df = load_pulse_data(str(default_path))
+        st.rerun()
+    else:
+        st.error("ProjectPulse.xlsx not found in project root.")
+        st.stop()
 
 # ============================================================================
 # LANDING PAGE (data loaded)

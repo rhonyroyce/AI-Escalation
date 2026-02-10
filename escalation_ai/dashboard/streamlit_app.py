@@ -36,6 +36,9 @@ from streamlit_js_eval import streamlit_js_eval
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# Guard: skip top-level Streamlit calls when imported as a module
+_STANDALONE = __name__ == "__main__"
+
 # Import advanced charts
 from escalation_ai.dashboard.advanced_plotly_charts import (
     chart_sla_funnel, chart_engineer_quadrant, chart_cost_waterfall,
@@ -51,12 +54,13 @@ from escalation_ai.dashboard.advanced_plotly_charts import (
 # PAGE CONFIG
 # ============================================================================
 
-st.set_page_config(
-    page_title="Escalation AI | Executive Intelligence",
-    page_icon="🎯",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+if _STANDALONE:
+    st.set_page_config(
+        page_title="Escalation AI | Executive Intelligence",
+        page_icon="🎯",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
 
 # ============================================================================
 # SESSION STATE INITIALIZATION
@@ -343,7 +347,8 @@ def save_action_items(items):
 # CUSTOM CSS - EXECUTIVE STYLING
 # ============================================================================
 
-st.markdown("""
+if _STANDALONE:
+    st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 

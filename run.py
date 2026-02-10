@@ -767,8 +767,8 @@ def launch_dashboard(port: int = 8501, open_browser: bool = True):
     print("=" * 60)
     print()
 
-    # Get the streamlit app path
-    dashboard_path = Path(__file__).parent / "escalation_ai" / "dashboard" / "streamlit_app.py"
+    # Get the unified app path (serves both Pulse + Escalation AI)
+    dashboard_path = Path(__file__).parent / "unified_app.py"
 
     if not dashboard_path.exists():
         print(f"❌ Error: Dashboard not found at {dashboard_path}")
