@@ -136,6 +136,11 @@ pulse_pages = [
         title="Project Details",
         icon="📋",
     ),
+    st.Page(
+        str(project_root / "pulse_dashboard" / "pages" / "7_Rankings.py"),
+        title="Rankings",
+        icon="🏅",
+    ),
 ]
 
 esc_pages = [
