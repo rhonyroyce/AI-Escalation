@@ -4,6 +4,55 @@ Similar Ticket Finder - AI-powered semantic similarity analysis.
 Uses embeddings to find semantically similar historical tickets,
 then compares resolutions to identify patterns and inconsistencies.
 
+Architecture Overview:
+    This module implements an embedding-based nearest-neighbour search system
+    for escalation tickets.  Given a query ticket, it retrieves the top-K most
+    semantically similar historical tickets and analyses whether those similar
+    tickets were resolved consistently or inconsistently.  The output informs
+    both operational recommendations (e.g., "follow the established approach")
+    and quality alerts (e.g., "inconsistent past resolutions -- review needed").
+
+Similarity Search Pipeline:
+    1. **Embedding generation** -- Each ticket's summary text is converted to a
+       dense vector (embedding) via the AI engine (e.g., OpenAI or a local model).
+       Embeddings are cached by ticket ID to avoid redundant API calls.
+    2. **Index construction** -- All historical embeddings are stacked into a
+       matrix and, when a compatible GPU is available, loaded into a RAPIDS cuML
+       ``NearestNeighbors`` index for sub-linear retrieval.  On CPU, a brute-
+       force row-by-row cosine similarity scan is used as fallback.
+    3. **Similarity scoring** -- Cosine similarity between the query embedding
+       and each candidate is computed.  Scores are optionally adjusted by
+       human feedback (confirmed matches are boosted +0.2; rejected matches
+       are penalised -0.5).
+    4. **Threshold filtering** -- Only candidates with adjusted similarity >=
+       ``similarity_threshold`` (default 0.75) are retained.  The top-K are
+       returned sorted by descending similarity.
+
+Resolution Consistency Analysis:
+    For each set of similar tickets, the module analyses:
+    - Unique root causes and action items
+    - Dominant resolution approach (most-common via Counter)
+    - Resolution time statistics (mean, min, max, std)
+    - Consistency score (1.0 = all identical resolutions, 0.0 = no resolution data)
+    - Human-readable insight text with alerts for high variance or inconsistency
+
+Human-in-the-Loop Feedback:
+    The module supports a feedback loop where domain experts can mark similarity
+    matches as "Similar" or "Not Similar" via an exported Excel file.  Feedback
+    is persisted to a JSON file (``SIMILARITY_FEEDBACK_PATH``) and loaded on
+    subsequent runs to refine similarity scores.
+
+Columns Added to DataFrame:
+    - Similar_Ticket_Count
+    - Best_Match_Similarity
+    - Resolution_Consistency
+    - Inconsistent_Resolution (boolean flag for dashboard filtering)
+    - Similar_Ticket_IDs
+    - Expected_Resolution_Days
+    - Avg_Similar_Resolution_Days
+    - Resolution_Recommendation
+    - Similarity_Feedback
+
 GPU-accelerated with RAPIDS cuML when available.
 """
 
@@ -36,25 +85,47 @@ logger = logging.getLogger(__name__)
 class SimilarTicketFinder:
     """
     AI-powered Similar Ticket Finder with Resolution Comparison.
-    
+
     Uses embeddings to find semantically similar historical tickets,
     then compares resolutions to identify patterns and inconsistencies.
-    
+
     Key Features:
     - Embedding-based semantic similarity (GPU-accelerated)
     - Resolution pattern analysis across similar tickets
     - Days to resolution comparison
     - Human-in-the-loop feedback for similarity validation
+
+    Attributes:
+        ai: Reference to the AI engine instance used for embedding generation.
+        top_k (int): Maximum number of similar tickets to return per query.
+        similarity_threshold (float): Minimum cosine similarity (0-1) for a
+            match to be considered.
+        embedding_cache (dict): In-memory cache mapping ticket identifiers to
+            their embedding vectors, preventing redundant API calls.
+        resolution_patterns (dict): Reserved for future pattern-based analysis.
+        feedback_data (dict): Human feedback entries keyed by
+            ``"ticket_id|similar_ticket_id"`` strings.
+        use_gpu (bool): Whether GPU acceleration is available and enabled.
+        gpu_search_index: GPU-accelerated NearestNeighbors index (or None if
+            CPU fallback is in use).
+        index_embeddings (np.ndarray): Stacked embedding matrix for the
+            historical corpus, shape (n_tickets, embedding_dim).
+        index_ids (list): Ordered list of DataFrame indices corresponding to
+            rows in ``index_embeddings``.
+        resolution_columns (list[str]): Column names inspected when extracting
+            resolution text from ticket rows.
     """
-    
+
     def __init__(self, ai_engine=None, top_k=5, similarity_threshold=0.75):
         """
         Initialize the Similar Ticket Finder.
-        
+
         Args:
-            ai_engine: AI engine instance for embeddings
-            top_k: Number of similar tickets to find per query
-            similarity_threshold: Minimum cosine similarity to consider (0-1)
+            ai_engine: AI engine instance for embeddings.  Must expose a
+                ``get_embedding(text)`` method returning a numpy array.
+            top_k (int): Number of similar tickets to find per query.
+            similarity_threshold (float): Minimum cosine similarity to consider
+                a ticket as "similar" (0-1 scale, where 1 = identical).
         """
         self.ai = ai_engine
         self.top_k = top_k
@@ -62,28 +133,39 @@ class SimilarTicketFinder:
         self.embedding_cache = {}
         self.resolution_patterns = {}
         self.feedback_data = {}
-        
+
         # GPU-accelerated similarity search index
         self.use_gpu = USE_GPU and is_gpu_available()
-        self.gpu_search_index = None
-        self.index_embeddings = None
-        self.index_ids = None
-        
+        self.gpu_search_index = None       # NearestNeighbors model (GPU or None)
+        self.index_embeddings = None       # stacked embedding matrix
+        self.index_ids = None              # corresponding DataFrame row indices
+
         # Load existing feedback if available
         self._load_feedback()
-        
-        # Resolution-related column names
+
+        # Resolution-related column names inspected when building resolution text
         self.resolution_columns = [
             COL_LESSON_TITLE,
             'Action_Required',
             'Root_Cause_Category',
             COL_ROOT_CAUSE,
         ]
-        
+
         logger.info(f"[Similar Ticket Finder] Initialized (GPU: {self.use_gpu})")
-    
+
+    # ------------------------------------------------------------------
+    # Feedback persistence
+    # ------------------------------------------------------------------
+
     def _load_feedback(self):
-        """Load human feedback on similarity matches from file."""
+        """
+        Load human feedback on similarity matches from a JSON file.
+
+        The feedback file maps ``"ticket_id|similar_ticket_id"`` keys to
+        dicts containing ``is_similar`` (bool), ``notes`` (str), and a
+        timestamp.  This feedback is used by
+        ``get_feedback_adjusted_similarity`` to boost or penalise scores.
+        """
         try:
             if os.path.exists(SIMILARITY_FEEDBACK_PATH):
                 with open(SIMILARITY_FEEDBACK_PATH, 'r') as f:
@@ -92,18 +174,29 @@ class SimilarTicketFinder:
         except Exception as e:
             logger.warning(f"[Similar Ticket Finder] Could not load feedback: {e}")
             self.feedback_data = {}
-    
+
     def _save_feedback(self):
-        """Save human feedback to file for future runs."""
+        """Save human feedback to JSON file for future runs."""
         try:
             with open(SIMILARITY_FEEDBACK_PATH, 'w') as f:
                 json.dump(self.feedback_data, f, indent=2)
             logger.info(f"[Similar Ticket Finder] Saved {len(self.feedback_data)} feedback entries")
         except Exception as e:
             logger.warning(f"[Similar Ticket Finder] Could not save feedback: {e}")
-    
+
     def record_feedback(self, ticket_id, similar_ticket_id, is_similar, notes=""):
-        """Record human feedback on whether two tickets are actually similar."""
+        """
+        Record human feedback on whether two tickets are actually similar.
+
+        This feedback is persisted to disk and used on subsequent runs to
+        adjust similarity scores via ``get_feedback_adjusted_similarity``.
+
+        Args:
+            ticket_id (str): ID of the query ticket.
+            similar_ticket_id (str): ID of the candidate match.
+            is_similar (bool): True if the human confirmed similarity.
+            notes (str): Optional free-text notes from the reviewer.
+        """
         feedback_key = f"{ticket_id}|{similar_ticket_id}"
         self.feedback_data[feedback_key] = {
             'ticket_id': str(ticket_id),
@@ -113,149 +206,303 @@ class SimilarTicketFinder:
             'timestamp': datetime.now().isoformat()
         }
         self._save_feedback()
-    
+
     def get_feedback_adjusted_similarity(self, ticket_id, similar_ticket_id, base_similarity):
-        """Adjust similarity score based on human feedback."""
+        """
+        Adjust similarity score based on human feedback.
+
+        Adjustment Rules:
+            - If the pair was confirmed as similar: +0.2 (capped at 1.0).
+            - If the pair was rejected: -0.5 (floored at 0.0).
+            - If no feedback exists: return the base similarity unchanged.
+
+        Both orderings of the ticket pair are checked (A|B and B|A) to handle
+        asymmetric feedback entry.
+
+        Args:
+            ticket_id (str): Query ticket ID.
+            similar_ticket_id (str): Candidate ticket ID.
+            base_similarity (float): Raw cosine similarity before adjustment.
+
+        Returns:
+            float: Adjusted similarity score in [0.0, 1.0].
+        """
         feedback_key = f"{ticket_id}|{similar_ticket_id}"
         reverse_key = f"{similar_ticket_id}|{ticket_id}"
-        
+
         feedback = self.feedback_data.get(feedback_key) or self.feedback_data.get(reverse_key)
-        
+
         if feedback:
             if feedback['is_similar']:
-                return min(1.0, base_similarity + 0.2)
+                return min(1.0, base_similarity + 0.2)  # boost confirmed matches
             else:
-                return max(0.0, base_similarity - 0.5)
-        
+                return max(0.0, base_similarity - 0.5)  # heavily penalise rejected matches
+
         return base_similarity
-    
+
+    # ------------------------------------------------------------------
+    # Resolution time calculation
+    # ------------------------------------------------------------------
+
     def _calculate_days_to_resolution(self, row):
-        """Calculate days from issue open to resolution."""
+        """
+        Calculate days from issue open to resolution.
+
+        Inspects several candidate columns for the open date and close date,
+        since the raw data schema may vary between data sources.  The first
+        non-null match wins.
+
+        Open date candidates: Issue_Date, COL_DATETIME
+        Close date candidates: COL_CLOSE_DATE, Close_Date, Resolution_Date
+
+        Args:
+            row: A pandas Series representing one ticket.
+
+        Returns:
+            int or None: Non-negative day count, or None if dates are
+                unavailable or unparseable.
+        """
         try:
             open_date = None
             close_date = None
-            
+
+            # Try multiple column names for the open date
             if 'Issue_Date' in row.index and pd.notna(row.get('Issue_Date')):
                 open_date = pd.to_datetime(row['Issue_Date'], errors='coerce')
             elif COL_DATETIME in row.index and pd.notna(row.get(COL_DATETIME)):
                 open_date = pd.to_datetime(row[COL_DATETIME], errors='coerce')
-            
+
+            # Try multiple column names for the close date
             if COL_CLOSE_DATE in row.index and pd.notna(row.get(COL_CLOSE_DATE)):
                 close_date = pd.to_datetime(row[COL_CLOSE_DATE], errors='coerce')
             elif 'Close_Date' in row.index and pd.notna(row.get('Close_Date')):
                 close_date = pd.to_datetime(row['Close_Date'], errors='coerce')
             elif 'Resolution_Date' in row.index and pd.notna(row.get('Resolution_Date')):
                 close_date = pd.to_datetime(row['Resolution_Date'], errors='coerce')
-            
+
             if open_date and close_date and pd.notna(open_date) and pd.notna(close_date):
                 delta = (close_date - open_date).days
-                return max(0, delta)
-            
+                return max(0, delta)  # floor at 0 to handle same-day resolution
+
         except Exception:
             pass
-        
+
         return None
-    
+
+    # ------------------------------------------------------------------
+    # GPU index construction
+    # ------------------------------------------------------------------
+
     def build_gpu_index(self, historical_df):
         """
         Build GPU-accelerated similarity search index from historical data.
-        
-        This pre-computes embeddings and builds a fast nearest neighbor index
-        for efficient similarity search.
+
+        This pre-computes embeddings for every ticket in ``historical_df`` and
+        assembles them into a float32 matrix.  When GPU is available, a RAPIDS
+        cuML NearestNeighbors model is fitted on this matrix for fast
+        approximate nearest neighbour retrieval.  On CPU, the matrix is stored
+        for brute-force cosine similarity scanning.
+
+        Complexity:
+            - Embedding computation: O(n) API calls (cached).
+            - GPU index fitting: O(n * d) where d is the embedding dimension.
+            - Each query then takes O(log n) on GPU vs O(n * d) on CPU.
+
+        Args:
+            historical_df (pd.DataFrame): The full ticket DataFrame.  Each
+                row's ``COL_SUMMARY`` (or 'Text') column is embedded.
         """
         from tqdm import tqdm
-        
+
         # Always build embeddings for caching, even if not using GPU for similarity search
         logger.info("[Similar Ticket Finder] Building similarity index...")
         print("  🧠 Pre-computing embeddings for similarity search...")
-        
+
         embeddings = []
         ids = []
-        
-        for idx, row in tqdm(historical_df.iterrows(), total=len(historical_df), 
+
+        # Iterate over all rows, computing embeddings for each ticket summary
+        for idx, row in tqdm(historical_df.iterrows(), total=len(historical_df),
                              desc="  Embedding tickets", ncols=80):
             text = str(row.get(COL_SUMMARY, row.get('Text', ''))).strip()
             if not text:
                 continue
-            
+
             embedding = self._get_embedding(text, f"hist_{idx}")
             if embedding is not None:
                 embeddings.append(embedding)
                 ids.append(idx)
-        
+
         if embeddings:
+            # Stack into a contiguous float32 matrix for efficient similarity ops
             self.index_embeddings = np.array(embeddings, dtype=np.float32)
             self.index_ids = ids
-            
+
             if self.use_gpu:
-                # Build GPU search index
+                # Build GPU search index (cuML NearestNeighbors with cosine metric)
                 self.gpu_search_index = GPUSimilaritySearch(
                     use_gpu=self.use_gpu,
                     metric='cosine',
+                    # Request 2x top_k neighbours to allow post-filtering
                     n_neighbors=min(self.top_k * 2, len(embeddings))
                 )
                 self.gpu_search_index.fit(self.index_embeddings)
                 print(f"  ✅ GPU index built with {len(embeddings)} embeddings")
             else:
                 print(f"  ✅ CPU index built with {len(embeddings)} embeddings")
-            
+
             logger.info(f"[Similar Ticket Finder] Index built with {len(embeddings)} embeddings")
-    
+
+    # ------------------------------------------------------------------
+    # Core similarity computation
+    # ------------------------------------------------------------------
+
     def _cosine_similarity(self, vec1, vec2):
-        """Calculate cosine similarity between two vectors (GPU-accelerated)."""
+        """
+        Calculate cosine similarity between two vectors (GPU-accelerated).
+
+        Cosine similarity measures the cosine of the angle between two vectors
+        in high-dimensional space.  It ranges from -1 (opposite) through 0
+        (orthogonal) to +1 (identical direction).  For normalised embeddings,
+        this is equivalent to the dot product.
+
+        Args:
+            vec1 (np.ndarray): First embedding vector.
+            vec2 (np.ndarray): Second embedding vector.
+
+        Returns:
+            float: Cosine similarity in [-1, 1].  Returns 0.0 if either
+                input is None.
+        """
         if vec1 is None or vec2 is None:
             return 0.0
         use_gpu = USE_GPU and is_gpu_available()
         return cosine_similarity_gpu(vec1, vec2, use_gpu=use_gpu)
-    
+
     def _get_embedding(self, text, ticket_id=None):
-        """Get embedding for text, with caching."""
+        """
+        Get embedding for text, with caching.
+
+        The embedding cache prevents redundant API calls when the same ticket
+        text is encountered multiple times (e.g., once during index building
+        and again during per-ticket query).
+
+        Args:
+            text (str): The text to embed.
+            ticket_id (str, optional): Cache key.  Defaults to a hash of
+                the text if not provided.
+
+        Returns:
+            np.ndarray or None: The embedding vector, or None if the text
+                is empty or the AI engine is unavailable.
+        """
         if not text or pd.isna(text):
             return None
-        
+
         text = str(text).strip()
         if not text:
             return None
-        
+
+        # Check the in-memory cache first
         cache_key = ticket_id if ticket_id else hash(text)
         if cache_key in self.embedding_cache:
             return self.embedding_cache[cache_key]
-        
+
+        # Call the AI engine to generate the embedding
         if self.ai:
             embedding = self.ai.get_embedding(text)
             if embedding is not None and len(embedding) > 0:
                 self.embedding_cache[cache_key] = embedding
                 return embedding
-        
+
         return None
-    
+
+    # ------------------------------------------------------------------
+    # Resolution text extraction
+    # ------------------------------------------------------------------
+
     def _get_resolution_text(self, row):
-        """Extract resolution/action text from a ticket row."""
+        """
+        Extract resolution/action text from a ticket row.
+
+        Combines Lesson Learned title, Action Required, and Root Cause into
+        a pipe-delimited string for display.  If none of these fields are
+        populated, returns "No resolution documented".
+
+        Args:
+            row: A pandas Series for one ticket.
+
+        Returns:
+            str: Human-readable resolution summary.
+        """
         resolution_parts = []
-        
+
+        # Lesson learned (primary resolution documentation)
         if COL_LESSON_TITLE in row.index:
             lesson = row.get(COL_LESSON_TITLE)
             if lesson and not pd.isna(lesson) and str(lesson).strip():
                 resolution_parts.append(f"Lesson: {lesson}")
-        
+
+        # Action required (prescriptive next step)
         if 'Action_Required' in row.index:
             action = row.get('Action_Required')
             if action and not pd.isna(action) and str(action).strip() and action != 'Monitor':
                 resolution_parts.append(f"Action: {action}")
-        
+
+        # Root cause (diagnostic finding)
         root_cause = None
         if 'Root_Cause_Category' in row.index:
             root_cause = row.get('Root_Cause_Category')
         elif COL_ROOT_CAUSE in row.index:
             root_cause = row.get(COL_ROOT_CAUSE)
-        
+
         if root_cause and not pd.isna(root_cause) and str(root_cause).strip():
             resolution_parts.append(f"Root Cause: {root_cause}")
-        
+
         return " | ".join(resolution_parts) if resolution_parts else "No resolution documented"
-    
+
+    # ------------------------------------------------------------------
+    # Resolution consistency analysis
+    # ------------------------------------------------------------------
+
     def _analyze_resolution_consistency(self, similar_tickets):
-        """Analyze if similar tickets had consistent resolutions."""
+        """
+        Analyze if similar tickets had consistent resolutions.
+
+        This is the core analytical method that turns raw similarity matches
+        into actionable intelligence.  It answers the question: "When we had
+        this problem before, did we solve it the same way each time?"
+
+        Consistency Scoring:
+            - ``total_unique`` counts the number of distinct root causes plus
+              distinct action items observed across the similar tickets.
+            - ``total_items`` counts the total number of root cause and action
+              entries (including duplicates).
+            - Consistency score:
+                * 0 items  =>  0.0 (no resolution data available)
+                * 1 unique =>  1.0 (perfectly consistent)
+                * 2 unique =>  0.7 (mostly consistent)
+                * 3+ unique => max(0.3, 1 - unique/total)
+
+        Resolution Time Analysis:
+            If resolution times are available, computes mean, min, max, std,
+            and flags high variance (std > 50% of mean) as a concern.
+
+        Args:
+            similar_tickets (list[dict]): List of similar ticket result dicts,
+                each containing root_cause, action, lesson, and
+                days_to_resolution fields.
+
+        Returns:
+            dict: Analysis results with keys:
+                - consistency_score (float, 0-1)
+                - status (str, human-readable with emoji)
+                - unique_approaches (int)
+                - dominant_approach (str or None)
+                - insight (str or None)
+                - has_lessons (bool, only present if >= 2 similar tickets)
+                - resolution_time (dict or None, time statistics)
+        """
         if len(similar_tickets) < 2:
             return {
                 'consistency_score': 1.0,
@@ -265,35 +512,38 @@ class SimilarTicketFinder:
                 'insight': None,
                 'resolution_time': None
             }
-        
+
+        # Collect resolution data from all similar tickets
         root_causes = []
         actions = []
         lessons = []
         resolution_times = []
-        
+
         for ticket in similar_tickets:
             rc = ticket.get('root_cause', '')
             if rc and rc != 'Unknown':
                 root_causes.append(rc)
-            
+
             action = ticket.get('action', '')
             if action and action != 'Monitor' and action != 'No resolution documented':
                 actions.append(action)
-            
+
             lesson = ticket.get('lesson', '')
             if lesson:
                 lessons.append(lesson)
-            
+
             days = ticket.get('days_to_resolution')
             if days is not None:
                 resolution_times.append(days)
-        
+
+        # Count unique resolution approaches
         unique_root_causes = len(set(root_causes)) if root_causes else 0
         unique_actions = len(set(actions)) if actions else 0
-        
+
         total_unique = unique_root_causes + unique_actions
         total_items = len(root_causes) + len(actions)
-        
+
+        # Compute consistency score based on ratio of unique to total approaches
         if total_items == 0:
             consistency_score = 0.0
             status = '⚠️ No resolution data available'
@@ -304,42 +554,47 @@ class SimilarTicketFinder:
             consistency_score = 0.7
             status = '🟡 Mostly consistent with minor variations'
         else:
+            # Consistency decreases as the proportion of unique approaches rises
             consistency_score = max(0.3, 1.0 - (total_unique / total_items))
             status = '🔴 Inconsistent resolutions - review needed'
-        
+
+        # Identify the most common resolution approach (Counter.most_common)
         all_approaches = root_causes + actions
         dominant = None
         if all_approaches:
             counts = Counter(all_approaches)
             dominant = counts.most_common(1)[0][0] if counts else None
-        
-        # Analyze resolution times
+
+        # Analyze resolution times (if available)
         resolution_time_analysis = None
         if resolution_times:
             avg_time = np.mean(resolution_times)
             min_time = min(resolution_times)
             max_time = max(resolution_times)
             std_time = np.std(resolution_times) if len(resolution_times) > 1 else 0
-            
+
             resolution_time_analysis = {
                 'avg_days': round(avg_time, 1),
                 'min_days': round(min_time, 1),
                 'max_days': round(max_time, 1),
                 'std_days': round(std_time, 1),
                 'sample_size': len(resolution_times),
+                # Flag high variance: std > 50% of mean indicates unpredictable resolution
                 'time_variance': 'High' if std_time > avg_time * 0.5 else 'Low'
             }
-        
+
+        # Generate human-readable insights
         insight = None
         if consistency_score < 0.5 and len(similar_tickets) >= 3:
             insight = f"⚠️ ALERT: {len(similar_tickets)} similar tickets resolved {unique_root_causes + unique_actions} different ways. Consider standardizing approach."
         elif consistency_score >= 0.8 and lessons:
             insight = f"✅ Consistent approach: {dominant if dominant else lessons[0][:50]}"
-        
+
+        # Append time-variance insight if applicable
         if resolution_time_analysis and resolution_time_analysis['time_variance'] == 'High':
             time_insight = f"⏱️ Resolution time varies significantly ({resolution_time_analysis['min_days']}-{resolution_time_analysis['max_days']} days)"
             insight = f"{insight}\n{time_insight}" if insight else time_insight
-        
+
         return {
             'consistency_score': consistency_score,
             'status': status,
@@ -349,14 +604,32 @@ class SimilarTicketFinder:
             'has_lessons': len(lessons) > 0,
             'resolution_time': resolution_time_analysis
         }
-    
+
     def _build_similar_ticket_result(self, idx, hist_row, query_id, adjusted_similarity, base_similarity):
-        """Build a similar ticket result dictionary."""
+        """
+        Build a similar ticket result dictionary.
+
+        Constructs a standardised dict with all relevant metadata for a
+        single similar-ticket match.  This dict is consumed by the resolution
+        consistency analyser and by the Excel export functions.
+
+        Args:
+            idx: DataFrame index of the historical ticket.
+            hist_row: pandas Series for the historical ticket.
+            query_id: Identifier of the query ticket (for feedback lookup).
+            adjusted_similarity (float): Feedback-adjusted similarity score.
+            base_similarity (float): Raw cosine similarity before adjustment.
+
+        Returns:
+            dict: Comprehensive match result with text, scores, metadata,
+                resolution info, and feedback status.
+        """
         hist_text = str(hist_row.get(COL_SUMMARY, hist_row.get('Text', ''))).strip()
         hist_ticket_id = hist_row.get('ID', str(idx))
         resolution_text = self._get_resolution_text(hist_row)
         days_to_resolution = self._calculate_days_to_resolution(hist_row)
-        
+
+        # Check if human feedback exists for this pair (either direction)
         feedback_key = f"{query_id}|{hist_ticket_id}"
         reverse_key = f"{hist_ticket_id}|{query_id}"
         has_feedback = feedback_key in self.feedback_data or reverse_key in self.feedback_data
@@ -365,7 +638,7 @@ class SimilarTicketFinder:
             fb = self.feedback_data.get(feedback_key) or self.feedback_data.get(reverse_key)
             if fb:
                 feedback_status = "✅ Confirmed" if fb.get('is_similar') else "❌ Rejected"
-        
+
         return {
             'index': idx,
             'id': hist_ticket_id,
@@ -386,82 +659,120 @@ class SimilarTicketFinder:
             'days_to_resolution': days_to_resolution,
             'feedback_status': feedback_status
         }
-    
+
+    # ------------------------------------------------------------------
+    # Primary search method
+    # ------------------------------------------------------------------
+
     def find_similar(self, query_row, historical_df, exclude_self=True):
-        """Find tickets similar to the query ticket (GPU-accelerated when available)."""
+        """
+        Find tickets similar to the query ticket (GPU-accelerated when available).
+
+        Search Strategy:
+            1. If a GPU index has been built (``build_gpu_index`` was called),
+               perform a fast nearest-neighbour search returning 2*top_k
+               candidates, then filter and sort.
+            2. Otherwise, fall back to a brute-force row-by-row cosine
+               similarity scan over the historical DataFrame.
+
+        In both paths, similarity scores are adjusted by human feedback before
+        the threshold is applied.
+
+        Args:
+            query_row: pandas Series for the query ticket.
+            historical_df (pd.DataFrame): Full historical ticket DataFrame.
+            exclude_self (bool): If True, skip matches where the candidate
+                has the same summary text as the query (prevents self-matching).
+
+        Returns:
+            list[dict]: Up to ``top_k`` similar ticket result dicts, sorted
+                by descending similarity score.
+        """
         query_id = query_row.get(COL_SUMMARY, query_row.get('ID', ''))
         query_text = str(query_row.get(COL_SUMMARY, query_row.get('Text', ''))).strip()
-        
+
         if not query_text:
             return []
-        
+
+        # Compute the query embedding (cached)
         query_embedding = self._get_embedding(query_text, f"query_{hash(query_text)}")
         if query_embedding is None:
             return []
-        
+
         similar_tickets = []
-        
-        # Use GPU index if available for fast search
+
+        # ---- Path A: GPU-accelerated nearest-neighbour search ----
         if self.gpu_search_index is not None and self.index_ids is not None:
-            # Fast GPU-based nearest neighbor search
+            # Fast GPU-based nearest neighbor search; returns 2x top_k to allow
+            # for post-filtering (self-exclusion, threshold, feedback adjustment)
             similarities, indices = self.gpu_search_index.search(query_embedding, k=self.top_k * 2)
-            
+
             for sim, local_idx in zip(similarities, indices):
+                # Guard against out-of-bounds indices from the GPU search
                 if local_idx >= len(self.index_ids):
                     continue
-                    
+
                 idx = self.index_ids[local_idx]
                 if idx not in historical_df.index:
                     continue
-                    
+
                 hist_row = historical_df.loc[idx]
-                
+
+                # Exclude self-matches (same summary text)
                 if exclude_self:
                     hist_id = hist_row.get(COL_SUMMARY, hist_row.get('ID', ''))
                     if hist_id == query_id:
                         continue
-                
+
                 base_similarity = float(sim)
                 hist_ticket_id = hist_row.get('ID', str(idx))
+                # Adjust score based on prior human feedback
                 adjusted_similarity = self.get_feedback_adjusted_similarity(
                     str(query_id), str(hist_ticket_id), base_similarity
                 )
-                
+
+                # Apply threshold filter
                 if adjusted_similarity >= self.similarity_threshold:
                     similar_tickets.append(
-                        self._build_similar_ticket_result(idx, hist_row, query_id, 
+                        self._build_similar_ticket_result(idx, hist_row, query_id,
                                                           adjusted_similarity, base_similarity)
                     )
-            
+
             similar_tickets.sort(key=lambda x: x['similarity'], reverse=True)
             return similar_tickets[:self.top_k]
-        
-        # Fallback: CPU-based row-by-row search
+
+        # ---- Path B: CPU brute-force row-by-row search ----
         for idx, hist_row in historical_df.iterrows():
+            # Exclude self-matches
             if exclude_self:
                 hist_id = hist_row.get(COL_SUMMARY, hist_row.get('ID', ''))
                 if hist_id == query_id:
                     continue
-            
+
             hist_text = str(hist_row.get(COL_SUMMARY, hist_row.get('Text', ''))).strip()
             if not hist_text:
                 continue
-            
+
+            # Compute embedding for the candidate (cached)
             hist_embedding = self._get_embedding(hist_text, f"hist_{idx}")
             if hist_embedding is None:
                 continue
-            
+
+            # Compute cosine similarity between query and candidate
             base_similarity = self._cosine_similarity(query_embedding, hist_embedding)
-            
+
             hist_ticket_id = hist_row.get('ID', str(idx))
+            # Adjust score based on prior human feedback
             adjusted_similarity = self.get_feedback_adjusted_similarity(
                 str(query_id), str(hist_ticket_id), base_similarity
             )
-            
+
+            # Apply threshold filter
             if adjusted_similarity >= self.similarity_threshold:
                 resolution_text = self._get_resolution_text(hist_row)
                 days_to_resolution = self._calculate_days_to_resolution(hist_row)
-                
+
+                # Check for existing feedback on this pair
                 feedback_key = f"{query_id}|{hist_ticket_id}"
                 reverse_key = f"{hist_ticket_id}|{query_id}"
                 has_feedback = feedback_key in self.feedback_data or reverse_key in self.feedback_data
@@ -470,7 +781,7 @@ class SimilarTicketFinder:
                     fb = self.feedback_data.get(feedback_key) or self.feedback_data.get(reverse_key)
                     if fb:
                         feedback_status = "✅ Confirmed" if fb.get('is_similar') else "❌ Rejected"
-                
+
                 similar_tickets.append({
                     'index': idx,
                     'id': hist_ticket_id,
@@ -491,14 +802,50 @@ class SimilarTicketFinder:
                     'days_to_resolution': days_to_resolution,
                     'feedback_status': feedback_status
                 })
-        
+
+        # Sort by similarity (descending) and truncate to top_k
         similar_tickets.sort(key=lambda x: x['similarity'], reverse=True)
         return similar_tickets[:self.top_k]
-    
+
+    # ------------------------------------------------------------------
+    # Full ticket analysis (similarity + resolution comparison)
+    # ------------------------------------------------------------------
+
     def analyze_ticket(self, query_row, historical_df):
-        """Full analysis of a ticket: find similar and compare resolutions."""
+        """
+        Full analysis of a ticket: find similar and compare resolutions.
+
+        This method orchestrates the end-to-end analysis for a single query
+        ticket:
+        1. Find the top-K similar historical tickets.
+        2. Analyze resolution consistency across those matches.
+        3. Generate a recommendation based on consistency score.
+        4. Append lessons learned and recurrence warnings.
+
+        Recommendation Logic:
+            - Consistency >= 0.8 and dominant approach exists:
+              "RECOMMENDED: Follow established approach"
+            - Consistency >= 0.5:
+              "SUGGESTED: Review past resolutions"
+            - Consistency < 0.5:
+              "CAUTION: Inconsistent past resolutions"
+
+        Args:
+            query_row: pandas Series for the query ticket.
+            historical_df (pd.DataFrame): Full historical ticket DataFrame.
+
+        Returns:
+            dict: Analysis results with keys:
+                - similar_tickets (list[dict])
+                - match_count (int)
+                - avg_similarity (float)
+                - resolution_analysis (dict or None)
+                - recommendation (str)
+                - confidence (str, 'High'/'Medium'/'Low')
+                - expected_resolution_days (float or None)
+        """
         similar = self.find_similar(query_row, historical_df)
-        
+
         if not similar:
             return {
                 'similar_tickets': [],
@@ -508,9 +855,11 @@ class SimilarTicketFinder:
                 'confidence': 'Low',
                 'expected_resolution_days': None
             }
-        
+
+        # Analyze resolution consistency across similar tickets
         resolution_analysis = self._analyze_resolution_consistency(similar)
-        
+
+        # Generate recommendation based on consistency score
         if resolution_analysis['consistency_score'] >= 0.8 and resolution_analysis['dominant_approach']:
             recommendation = f"✅ RECOMMENDED: Follow established approach - {resolution_analysis['dominant_approach']}"
             confidence = 'High'
@@ -520,21 +869,24 @@ class SimilarTicketFinder:
         else:
             recommendation = "🔴 CAUTION: Inconsistent past resolutions. Consult with team lead."
             confidence = 'Low'
-        
+
+        # Append expected resolution time if available
         expected_days = None
         if resolution_analysis.get('resolution_time'):
             time_info = resolution_analysis['resolution_time']
             expected_days = time_info['avg_days']
             recommendation += f"\n\n⏱️ EXPECTED: {time_info['avg_days']} days (range: {time_info['min_days']}-{time_info['max_days']} days)"
-        
+
+        # Append lessons learned from similar tickets (up to 3)
         lessons = [t['lesson'] for t in similar if t.get('lesson') and isinstance(t['lesson'], str)]
         if lessons:
             recommendation += f"\n\n📚 LESSONS LEARNED:\n" + "\n".join([f"  • {l[:100]}" for l in lessons[:3]])
-        
+
+        # Append recurrence warnings if similar tickets recurred
         recurrence_info = [t for t in similar if t.get('recurred') in ['Yes', True, 1]]
         if recurrence_info:
             recommendation += f"\n\n⚠️ WARNING: {len(recurrence_info)} of {len(similar)} similar tickets recurred!"
-        
+
         return {
             'similar_tickets': similar,
             'match_count': len(similar),
@@ -544,20 +896,51 @@ class SimilarTicketFinder:
             'confidence': confidence,
             'expected_resolution_days': expected_days
         }
-    
+
+    # ------------------------------------------------------------------
+    # Batch processing
+    # ------------------------------------------------------------------
+
     def process_all_tickets(self, df, progress_callback=None):
-        """Find similar tickets for all tickets in the dataset."""
+        """
+        Find similar tickets for all tickets in the dataset.
+
+        Batch Processing Pipeline:
+            1. Build the GPU / CPU similarity index from all ticket embeddings.
+            2. For each ticket, run ``analyze_ticket`` against the full dataset.
+            3. Populate nine new columns on the DataFrame with results.
+
+        Columns Added:
+            - Similar_Ticket_Count (int): Number of similar matches found.
+            - Best_Match_Similarity (float): Average similarity of matches.
+            - Resolution_Consistency (str): Human-readable consistency status.
+            - Inconsistent_Resolution (bool): Easy-filter flag for dashboards.
+            - Similar_Ticket_IDs (str): Comma-separated list of match IDs.
+            - Expected_Resolution_Days (float): Average resolution days from
+              similar tickets.
+            - Avg_Similar_Resolution_Days (float): Same as above (alternate col).
+            - Resolution_Recommendation (str): First line of recommendation text.
+            - Similarity_Feedback (str): Placeholder for feedback data.
+
+        Args:
+            df (pd.DataFrame): The enriched ticket DataFrame.
+            progress_callback (callable, optional): Function accepting
+                (processed_count, total_count) for progress reporting.
+
+        Returns:
+            pd.DataFrame: Same DataFrame with new columns populated.
+        """
         from tqdm import tqdm
-        
+
         logger.info(f"[Similar Ticket Finder] Processing {len(df)} tickets...")
-        
+
         df = df.copy()
-        
-        # Build GPU index first for fast similarity search
+
+        # Step 1: Build GPU index first for fast similarity search
         # This pre-computes all embeddings once
         self.build_gpu_index(df)
-        
-        # Initialize new columns
+
+        # Step 2: Initialize new columns with default values
         df['Similar_Ticket_Count'] = 0
         df['Best_Match_Similarity'] = 0.0
         df['Resolution_Consistency'] = 'N/A'
@@ -567,78 +950,111 @@ class SimilarTicketFinder:
         df['Avg_Similar_Resolution_Days'] = np.nan
         df['Resolution_Recommendation'] = ''
         df['Similarity_Feedback'] = ''
-        
+
         processed = 0
         total = len(df)
-        
-        # Use tqdm progress bar
+
+        # Step 3: Analyze each ticket against the full historical corpus
         for idx, row in tqdm(df.iterrows(), total=total, desc="  Analyzing tickets", ncols=80):
             analysis = self.analyze_ticket(row, df)
-            
+
             df.at[idx, 'Similar_Ticket_Count'] = analysis['match_count']
             df.at[idx, 'Best_Match_Similarity'] = analysis.get('avg_similarity', 0)
-            
+
             if analysis['resolution_analysis']:
                 status = analysis['resolution_analysis']['status']
                 df.at[idx, 'Resolution_Consistency'] = status
                 # Set boolean flag for easy dashboard filtering
                 df.at[idx, 'Inconsistent_Resolution'] = 'Inconsistent' in status
 
+                # Populate average resolution time from similar tickets
                 if analysis['resolution_analysis'].get('resolution_time'):
                     time_info = analysis['resolution_analysis']['resolution_time']
                     df.at[idx, 'Avg_Similar_Resolution_Days'] = time_info['avg_days']
-            
+
             if analysis.get('expected_resolution_days') is not None:
                 df.at[idx, 'Expected_Resolution_Days'] = analysis['expected_resolution_days']
-            
+
+            # Build a compact string of similar ticket IDs with resolution times
             if analysis['similar_tickets']:
                 similar_info = []
-                for t in analysis['similar_tickets'][:3]:
+                for t in analysis['similar_tickets'][:3]:  # top 3 for display
                     ticket_str = str(t['id'])
                     if t.get('days_to_resolution') is not None:
                         ticket_str += f" ({t['days_to_resolution']}d)"
                     similar_info.append(ticket_str)
                 df.at[idx, 'Similar_Ticket_IDs'] = ', '.join(similar_info)
-            
+
+            # Store only the first line of the recommendation for the DataFrame column
             df.at[idx, 'Resolution_Recommendation'] = analysis['recommendation'].split('\n')[0]
-            
+
             processed += 1
             if progress_callback and processed % 10 == 0:
                 progress_callback(processed, total)
-        
+
+        # Log summary statistics
         has_matches = (df['Similar_Ticket_Count'] > 0).sum()
         inconsistent = df['Resolution_Consistency'].str.contains('Inconsistent', na=False).sum()
         has_time_estimate = df['Expected_Resolution_Days'].notna().sum()
-        
+
         logger.info(f"[Similar Ticket Finder] Complete:")
         logger.info(f"  → {has_matches}/{total} tickets have similar historical matches")
         logger.info(f"  → {inconsistent} tickets have inconsistent resolution patterns")
         logger.info(f"  → {has_time_estimate} tickets have resolution time estimates")
-        
+
         return df
-    
+
+    # ------------------------------------------------------------------
+    # Excel export for human feedback
+    # ------------------------------------------------------------------
+
     def export_for_feedback(self, df, output_path):
-        """Export similar ticket matches for human review with dropdowns."""
+        """
+        Export similar ticket matches for human review with dropdowns.
+
+        Creates an Excel workbook with:
+        - **Instructions** sheet: Explains how to provide feedback.
+        - **Similarity Feedback** sheet: One row per (ticket, similar_ticket) pair
+          with a "Similar / Not Similar" dropdown in the Is_Similar column.
+
+        The Is_Similar column uses Excel data validation (dropdown list) so
+        reviewers can select from a constrained set of values.  Previously
+        submitted feedback is pre-filled.
+
+        Formatting:
+            - Header row: White text on dark blue (#004C97) background.
+            - Is_Similar column (F): Light yellow (#FFF3CD) background to
+              indicate editability.
+
+        Args:
+            df (pd.DataFrame): Ticket DataFrame with Similar_Ticket_IDs populated.
+            output_path (str): File path for the output Excel file.
+
+        Returns:
+            str: The output path (for confirmation logging).
+        """
         feedback_rows = []
-        
+
         for idx, row in df.iterrows():
             ticket_id = row.get('ID', str(idx))
             similar_ids_str = row.get('Similar_Ticket_IDs', '')
             similarity = row.get('Best_Match_Similarity', 0)
             category = row.get('AI_Category', 'Unknown')
-            
+
             actual_days = self._calculate_days_to_resolution(row)
-            
+
             if similar_ids_str:
+                # Parse the comma-separated similar ticket ID string
                 for similar_info in similar_ids_str.split(', '):
                     similar_id = similar_info.split('(')[0].strip()
-                    
+
+                    # Pre-fill with existing feedback if available
                     feedback_key = f"{ticket_id}|{similar_id}"
                     existing = self.feedback_data.get(feedback_key, {})
                     existing_feedback = ""
                     if existing:
                         existing_feedback = "Similar" if existing.get('is_similar') else "Not Similar"
-                    
+
                     feedback_rows.append({
                         'Ticket_ID': ticket_id,
                         'Ticket_Summary': str(row.get(COL_SUMMARY, ''))[:100],
@@ -650,10 +1066,11 @@ class SimilarTicketFinder:
                         'Expected_Resolution_Days': '',
                         'Notes': existing.get('notes', '')
                     })
-        
+
         feedback_df = pd.DataFrame(feedback_rows)
-        
+
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            # Instructions sheet
             instructions = pd.DataFrame({
                 'Instructions': [
                     'SIMILARITY FEEDBACK & RESOLUTION TIME INPUT',
@@ -670,63 +1087,86 @@ class SimilarTicketFinder:
             })
             instructions.to_excel(writer, sheet_name='Instructions', index=False)
             feedback_df.to_excel(writer, sheet_name='Similarity Feedback', index=False)
-            
+
             ws = writer.sheets['Similarity Feedback']
-            
+
+            # Add dropdown validation for the Is_Similar column (column F)
             similarity_validation = DataValidation(
                 type='list',
                 formula1='"Similar,Not Similar"',
                 allow_blank=True,
-                showDropDown=False
+                showDropDown=False  # In openpyxl, False actually shows the dropdown
             )
             similarity_validation.error = 'Please select Similar or Not Similar'
             similarity_validation.errorTitle = 'Invalid Selection'
-            
+
             if len(feedback_df) > 0:
                 similarity_validation.add(f'F2:F{len(feedback_df) + 1}')
                 ws.add_data_validation(similarity_validation)
-            
+
+            # Format header row: white text on dark blue background
             for col_idx in range(1, 10):
                 cell = ws.cell(row=1, column=col_idx)
                 cell.font = Font(bold=True, color="FFFFFF")
                 cell.fill = PatternFill(start_color="004C97", end_color="004C97", fill_type="solid")
-            
+
+            # Highlight the Is_Similar column with light yellow for editability
             for row_idx in range(2, len(feedback_df) + 2):
                 cell = ws.cell(row=row_idx, column=6)
                 cell.fill = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
-        
+
         logger.info(f"[Similar Ticket Finder] Feedback file exported to {output_path}")
         return output_path
-    
+
     def load_feedback_from_excel(self, excel_path):
-        """Load human feedback from the Similar Tickets feedback Excel file."""
+        """
+        Load human feedback from the Similar Tickets feedback Excel file.
+
+        Reads the "Similarity Feedback" sheet and processes two types of input:
+        1. **Similarity feedback**: "Similar" or "Not Similar" in the Is_Similar
+           column, recorded via ``record_feedback``.
+        2. **Resolution time expectations**: Numeric values in the
+           Expected_Resolution_Days column, aggregated by category into
+           mean expected days.
+
+        Args:
+            excel_path (str): Path to the feedback Excel file.
+
+        Returns:
+            tuple:
+                - loaded (int): Number of similarity feedback entries processed.
+                - resolution_expectations (dict): Mapping of category name to
+                  mean expected resolution days.
+        """
         resolution_expectations = {}
-        
+
         try:
             if not os.path.exists(excel_path):
                 return 0, resolution_expectations
-            
+
             feedback_df = pd.read_excel(excel_path, sheet_name='Similarity Feedback')
-            
+
             loaded = 0
             for _, row in feedback_df.iterrows():
                 ticket_id = str(row.get('Ticket_ID', ''))
                 similar_id = str(row.get('Similar_Ticket_ID', ''))
                 category = str(row.get('Category', 'Unknown'))
-                
+
                 feedback = str(row.get('Is_Similar', row.get('Human_Feedback', ''))).strip().lower()
                 notes = str(row.get('Notes', ''))
-                
+
+                # Parse the feedback string into a boolean
                 is_similar = None
                 if feedback in ['similar', 'correct']:
                     is_similar = True
                 elif feedback in ['not similar', 'wrong']:
                     is_similar = False
-                
+
                 if ticket_id and similar_id and is_similar is not None:
                     self.record_feedback(ticket_id, similar_id, is_similar, notes)
                     loaded += 1
-                
+
+                # Collect resolution time expectations (per-category)
                 expected_days = row.get('Expected_Resolution_Days', None)
                 if pd.notna(expected_days) and expected_days != '':
                     try:
@@ -736,43 +1176,70 @@ class SimilarTicketFinder:
                         resolution_expectations[category].append(exp_days)
                     except (ValueError, TypeError):
                         pass
-            
+
+            # Aggregate per-category lists into mean values
             for cat in resolution_expectations:
                 resolution_expectations[cat] = np.mean(resolution_expectations[cat])
-            
+
             logger.info(f"[Similar Ticket Finder] Loaded {loaded} feedback entries")
             return loaded, resolution_expectations
-            
+
         except Exception as e:
             logger.warning(f"[Similar Ticket Finder] Could not load Excel feedback: {e}")
             return 0, resolution_expectations
 
 
-# Global similar ticket finder instance
+# ---------------------------------------------------------------------------
+# Module-level singleton and convenience function
+# ---------------------------------------------------------------------------
+
+# Global similar ticket finder instance (lazily initialised by
+# ``apply_similar_ticket_analysis``).
 similar_ticket_finder = None
 
 
 def apply_similar_ticket_analysis(df, ai_engine=None):
-    """Apply similar ticket analysis to the dataframe."""
+    """
+    Apply similar ticket analysis to the dataframe.
+
+    This is the top-level entry point called by the main analysis pipeline.
+    It:
+    1. Instantiates a ``SimilarTicketFinder`` with default parameters
+       (top_k=5, threshold=0.70).
+    2. Loads any existing human feedback from the similarity feedback Excel.
+    3. Runs the full batch processing pipeline (embed, index, search, analyse).
+    4. Exports a fresh feedback Excel for the next review cycle.
+
+    Args:
+        df (pd.DataFrame): Enriched ticket DataFrame.
+        ai_engine: AI engine instance for embedding generation (must expose
+            ``get_embedding(text)``).
+
+    Returns:
+        pd.DataFrame: DataFrame augmented with similarity analysis columns.
+    """
     global similar_ticket_finder
-    
+
     logger.info("[Similar Ticket Finder] Initializing similar ticket analysis...")
-    
+
     similar_ticket_finder = SimilarTicketFinder(
         ai_engine=ai_engine,
         top_k=5,
         similarity_threshold=0.70
     )
-    
+
+    # Load existing human feedback if the feedback Excel exists
     similarity_feedback_excel = "similarity_feedback.xlsx"
     if os.path.exists(similarity_feedback_excel):
         similar_ticket_finder.load_feedback_from_excel(similarity_feedback_excel)
-    
+
+    # Run the full batch analysis
     df = similar_ticket_finder.process_all_tickets(df)
-    
+
+    # Export a fresh feedback file for human review
     try:
         similar_ticket_finder.export_for_feedback(df, similarity_feedback_excel)
     except Exception as e:
         logger.warning(f"Could not export similarity feedback file: {e}")
-    
+
     return df

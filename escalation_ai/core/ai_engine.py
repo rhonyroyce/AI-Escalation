@@ -1,5 +1,51 @@
 """
 AI Engine module - Handles Ollama-based embeddings and text generation.
+
+This module provides the ``OllamaBrain`` class, which is the single interface
+through which the entire Escalation AI pipeline communicates with the **Ollama**
+local LLM server.  It exposes two core capabilities:
+
+1. **Embedding generation** (``get_embedding`` / ``get_embeddings_batch``) --
+   Converts free-text ticket descriptions into dense numeric vectors (typically
+   768 or 1024 dimensions, depending on the configured model).  These vectors
+   are used by:
+     - The hybrid classifier (Phase 1) for cosine-similarity-based category
+       assignment.
+     - The recidivism detector (Phase 3) for pairwise similarity scoring.
+     - The similar-ticket finder (Phase 5) for k-NN search.
+
+2. **Text generation / synthesis** (``generate_synthesis``) --
+   Sends a structured statistical context to the generative LLM and receives
+   back a McKinsey-style executive summary.  Used in Phase 7.
+
+Architecture notes
+------------------
+- Communication with Ollama uses its REST API (``/api/embed`` for embeddings,
+  ``/api/generate`` for text generation).  No Python SDK is required.
+- The embedding model and generation model are independently configurable via
+  ``core.config`` (``EMBED_MODEL`` and ``GEN_MODEL``).  This allows using a
+  lightweight embedding model (e.g. ``nomic-embed-text``) alongside a more
+  capable generation model (e.g. ``deepseek-r1``).
+- Batch embedding automatically selects the optimal batch size based on GPU
+  VRAM (via ``gpu_utils.get_optimal_embedding_batch_size``).
+
+Data flow within the pipeline
+-----------------------------
+::
+
+    [Pipeline Phase]                 [OllamaBrain method]
+    ─────────────────               ─────────────────────
+    Phase 1 (classify)     ──>  get_embeddings_batch()  ──>  cosine sim vs anchors
+    Phase 3 (recidivism)   ──>  get_embedding()          ──>  pairwise similarity
+    Phase 5 (similar)      ──>  (reuses Phase 3 embeddings)
+    Phase 7 (summary)      ──>  generate_synthesis()     ──>  LLM text output
+
+Error handling strategy
+-----------------------
+All API calls are wrapped in try/except.  On failure, embeddings return a
+zero-vector (which will result in low similarity scores and an "Unclassified"
+label) and generation returns a fallback auto-generated summary.  This ensures
+the pipeline never crashes due to a transient Ollama issue.
 """
 
 import re
@@ -17,15 +63,54 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaBrain:
-    """Handles both Embedding (Left Brain) and Generation (Right Brain)"""
-   
+    """Handles both Embedding (Left Brain) and Generation (Right Brain).
+
+    This class encapsulates all interaction with the Ollama inference server.
+    It maintains a small amount of state:
+
+    - ``embed_model`` / ``gen_model`` -- the model identifiers loaded from
+      config.
+    - ``_embed_dim`` -- cached embedding dimensionality (lazily discovered on
+      the first call to :meth:`get_dim`).
+
+    Thread safety: instances are **not** thread-safe.  The pipeline is
+    single-threaded so this is acceptable.
+    """
+
     def __init__(self):
-        self.embed_model = EMBED_MODEL
-        self.gen_model = GEN_MODEL
-        self._embed_dim = None
+        """Initialise model names from configuration.
+
+        No network calls are made here -- model availability is verified
+        separately by :func:`check_models`.
+        """
+        self.embed_model = EMBED_MODEL   # e.g. "nomic-embed-text"
+        self.gen_model = GEN_MODEL       # e.g. "deepseek-r1:14b"
+        self._embed_dim = None           # Cached embedding vector length
+
+    # ==================================================================
+    # EMBEDDING METHODS
+    # ==================================================================
 
     def get_embedding(self, text):
-        """Get vector for a single string"""
+        """Get a dense embedding vector for a single string.
+
+        Calls the Ollama ``/api/embed`` endpoint with a single input string
+        and returns the resulting vector as a 1-D numpy array.
+
+        The Ollama API may return the vector under either the ``"embedding"``
+        key (older API) or the ``"embeddings"`` key (newer batch API).  Both
+        are handled transparently.
+
+        Args:
+            text: The input string to embed.  If ``NaN`` or empty, a zero
+                vector of the correct dimensionality is returned immediately
+                (no API call).
+
+        Returns:
+            A 1-D ``numpy.ndarray`` of shape ``(embedding_dim,)``.  On any
+            error a zero vector is returned so downstream cosine-similarity
+            calculations produce a score of 0 rather than crashing.
+        """
         if pd.isna(text) or text == "":
             return np.zeros(self.get_dim())
         try:
@@ -35,18 +120,47 @@ class OllamaBrain:
                 timeout=30
             )
             if res.status_code == 200:
+                # Handle both old ("embedding") and new ("embeddings") response schemas
                 vec = res.json().get('embedding') or res.json().get('embeddings', [[]])[0]
                 return np.array(vec)
         except Exception as e:
             logger.warning(f"Embedding failed: {e}")
+        # Fallback: zero vector -- produces 0 cosine similarity with any anchor
         return np.zeros(self.get_dim())
 
     def get_embeddings_batch(self, texts: List[str], batch_size: int = None) -> List[np.ndarray]:
-        """Get vectors for multiple strings in batched API calls
-        
+        """Get embedding vectors for multiple strings in batched API calls.
+
+        This is the high-throughput path used during Phase 1 classification,
+        where hundreds or thousands of tickets need to be embedded.  Texts
+        are sent to Ollama in batches to balance throughput against memory
+        usage and API timeout constraints.
+
+        Batch size selection
+        --------------------
+        If ``batch_size`` is ``None``, the optimal size is auto-detected from
+        the GPU VRAM via :func:`gpu_utils.get_optimal_embedding_batch_size`:
+
+        - 24 GB+ VRAM (e.g. RTX 5090, A100):  100 items per batch
+        - 16-24 GB VRAM (e.g. RTX 5080):       50 items per batch
+        - 12-16 GB VRAM (e.g. RTX 5070 Ti):    20 items per batch
+        -  8-12 GB VRAM (e.g. RTX 5070):        10 items per batch
+        - < 8 GB or CPU-only:                    5 items per batch
+
+        Empty / NaN handling
+        --------------------
+        Empty texts are *not* sent to the API.  Their positions are
+        pre-filled with zero vectors so the returned list has a 1:1
+        correspondence with the input ``texts`` list.
+
         Args:
-            texts: List of strings to embed
-            batch_size: Items per batch (auto-detected from GPU VRAM if None)
+            texts: List of strings to embed.
+            batch_size: Items per batch.  If ``None``, auto-detected from GPU
+                VRAM.
+
+        Returns:
+            List of ``numpy.ndarray`` with the same length as ``texts``.
+            Each element is a 1-D array of shape ``(embedding_dim,)``.
         """
         # Auto-detect optimal batch size based on GPU VRAM
         if batch_size is None:
@@ -54,8 +168,9 @@ class OllamaBrain:
             logger.info(f"Auto-detected embedding batch size: {batch_size}")
         if not texts:
             return []
-        
-        # Filter out empty texts, keep track of indices
+
+        # Separate valid (non-empty) texts from blanks while preserving
+        # original indices so we can reassemble the results in order.
         valid_indices = []
         valid_texts = []
         for i, text in enumerate(texts):
@@ -63,19 +178,22 @@ class OllamaBrain:
                 continue
             valid_indices.append(i)
             valid_texts.append(str(text))
-        
-        # Initialize result with zero vectors
+
+        # Pre-fill the result list with zero vectors for every position
         result = [np.zeros(self.get_dim()) for _ in texts]
-        
+
         if not valid_texts:
             return result
-        
-        # Process in batches to avoid timeout
+
+        # ------------------------------------------------------------------
+        # Process valid texts in batches to avoid API timeouts.
+        # Each batch is a single POST to /api/embed with a list of strings.
+        # ------------------------------------------------------------------
         all_embeddings = []
         for batch_start in range(0, len(valid_texts), batch_size):
             batch_end = min(batch_start + batch_size, len(valid_texts))
             batch_texts = valid_texts[batch_start:batch_end]
-            
+
             try:
                 res = requests.post(
                     f"{OLLAMA_BASE_URL}/api/embed",
@@ -83,39 +201,107 @@ class OllamaBrain:
                     timeout=600  # 10 minutes per batch for slower GPUs
                 )
                 if res.status_code == 200:
+                    # The batch API returns {"embeddings": [[...], [...], ...]}
                     batch_embeddings = res.json().get('embeddings', [])
                     all_embeddings.extend(batch_embeddings)
                 else:
+                    # Non-200 response -- fill this batch with zero vectors
                     logger.warning(f"Batch embedding returned status {res.status_code}")
                     all_embeddings.extend([np.zeros(self.get_dim()).tolist() for _ in batch_texts])
             except Exception as e:
+                # Network error or timeout -- fill this batch with zero vectors
                 logger.warning(f"Batch embedding failed: {e}")
                 all_embeddings.extend([np.zeros(self.get_dim()).tolist() for _ in batch_texts])
-        
-        # Map embeddings back to original indices
+
+        # Map the collected embeddings back to their original positions
         for idx, vec in zip(valid_indices, all_embeddings):
             result[idx] = np.array(vec)
-        
+
         return result
 
     def get_dim(self):
-        """Get embedding dimension"""
+        """Get the embedding dimensionality by issuing a test embedding.
+
+        The result is cached after the first call so subsequent invocations
+        are free.
+
+        Returns:
+            Integer dimensionality of the configured embedding model (e.g. 768).
+        """
         if self._embed_dim:
             return self._embed_dim
-        # Test call to get dimension
+        # Issue a lightweight test embedding to discover the dimension
         v = self.get_embedding("test")
         self._embed_dim = len(v)
         return self._embed_dim
 
+    # ==================================================================
+    # TEXT GENERATION METHODS
+    # ==================================================================
+
     def _strip_thinking_tags(self, text):
-        """Remove <think>...</think> blocks from LLM output"""
+        """Remove ``<think>...</think>`` blocks from LLM output.
+
+        Some reasoning-oriented models (e.g. DeepSeek-R1) emit their
+        chain-of-thought inside ``<think>`` tags.  This internal reasoning
+        is not suitable for the executive summary, so we strip it out,
+        keeping only the final answer.
+
+        Args:
+            text: Raw LLM output string.
+
+        Returns:
+            The cleaned string with all ``<think>`` blocks removed.
+        """
         if not text:
             return text
+        # re.DOTALL makes '.' match newlines so multi-line think blocks are removed
         cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
         return cleaned.strip()
 
     def generate_synthesis(self, context_text):
-        """Use the LLM to write a comprehensive executive summary using McKinsey frameworks"""
+        """Use the LLM to write a comprehensive executive summary.
+
+        This method constructs a detailed prompt following **McKinsey
+        consulting frameworks** (Pyramid Principle, MECE, Pareto 80/20,
+        Impact-Effort Matrix) and sends it to the Ollama generation model.
+
+        Prompt design
+        -------------
+        The prompt is structured in seven sections:
+
+        1. **The Bottom Line** -- Pyramid Principle answer-first paragraph.
+        2. **Situation Overview** -- high-level context bullets.
+        3. **Key Findings** -- MECE-structured findings across four pillars.
+        4. **80/20 Analysis** -- Pareto identification of vital-few drivers.
+        5. **Prioritized Recommendations** -- Impact-Effort matrix actions.
+        6. **Risk Assessment** -- RAG (Red/Amber/Green) traffic lights.
+        7. **Executive Callout** -- one memorable CEO-level statement.
+
+        The ``CRITICAL RULES`` section in the prompt explicitly instructs the
+        LLM to use **only** numbers from the provided ``context_text`` and
+        never fabricate statistics.
+
+        Generation parameters
+        ---------------------
+        - ``num_predict: 12000`` -- generous token budget for a 600-800 word
+          output.
+        - ``num_ctx: 32768`` -- large context window to accommodate the full
+          statistical summary.
+        - ``temperature: 0.5`` -- moderate creativity; biased toward factual
+          accuracy for financial data.
+        - ``timeout: 600s`` -- 10-minute ceiling; the generation model may
+          need to be loaded into VRAM on first call.
+
+        Args:
+            context_text: The structured statistical summary string assembled
+                by ``EscalationPipeline.generate_executive_summary()``.
+
+        Returns:
+            The LLM-generated executive summary as a string.  If the LLM is
+            unavailable or times out, :meth:`_generate_fallback_summary` is
+            called instead.
+        """
         prompt = f"""You are a McKinsey Principal Consultant specializing in Telecom Operations. Write an executive-ready analysis using consulting best practices.
 
 CRITICAL RULES:
@@ -212,15 +398,16 @@ FORMATTING:
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "num_predict": 12000,  # Increased for complete executive summary
-                        "num_ctx": 32768,      # Larger context window for full analysis
-                        "temperature": 0.5,    # More factual for financial data
+                        "num_predict": 12000,  # Generous token budget for full summary
+                        "num_ctx": 32768,      # Large context window for stats + prompt
+                        "temperature": 0.5,    # Moderate temp -- factual bias for financials
                     }
                 },
-                timeout=600  # 10 minutes for comprehensive financial analysis
+                timeout=600  # 10-minute ceiling for comprehensive financial analysis
             )
             if res.status_code == 200:
                 raw_response = res.json()['response'].strip()
+                # Strip chain-of-thought tags from reasoning models (e.g. DeepSeek-R1)
                 cleaned = self._strip_thinking_tags(raw_response)
                 if cleaned:
                     logger.info(f"  ✓ AI synthesis complete ({len(cleaned)} chars)")
@@ -239,17 +426,31 @@ FORMATTING:
             return self._generate_fallback_summary(context_text)
 
     def _generate_fallback_summary(self, context_text):
-        """Generate a basic summary when AI is unavailable"""
+        """Generate a basic summary when the LLM is unavailable.
+
+        Parses a few key metrics from the context string using regex and
+        assembles a minimal auto-generated summary.  This ensures the report
+        always contains *some* executive text, even when Ollama is down.
+
+        Args:
+            context_text: The same structured statistical summary that would
+                have been sent to the LLM.
+
+        Returns:
+            A short plaintext summary prefixed with ``[AUTO-GENERATED SUMMARY]``
+            to make it clear this was not AI-written.
+        """
         logger.warning("Using fallback summary generation (AI unavailable)")
-        
+
+        # Extract key metrics from the context string via regex
         total_match = re.search(r'Total Weighted Friction Score: ([\d,]+)', context_text)
         external_match = re.search(r'External.*?: ([\d.]+)%', context_text)
         repeat_match = re.search(r'Confirmed Repeat Offenses: (\d+)', context_text)
-        
+
         total = total_match.group(1) if total_match else "N/A"
         external = external_match.group(1) if external_match else "N/A"
         repeats = repeat_match.group(1) if repeat_match else "0"
-        
+
         return (
             f"[AUTO-GENERATED SUMMARY - AI Unavailable]\n\n"
             f"This report analyzed escalation data with a total weighted friction score of {total}. "
@@ -258,8 +459,20 @@ FORMATTING:
             f"Please review the detailed data and charts below for full analysis."
         )
 
+    # ==================================================================
+    # RESOURCE MANAGEMENT
+    # ==================================================================
+
     def unload(self):
-        """Unload both models to free VRAM"""
+        """Unload both models from Ollama to free GPU VRAM.
+
+        Sends a ``keep_alive: 0`` request for each model, which instructs
+        Ollama to evict the model from memory immediately rather than
+        keeping it warm for the default keep-alive duration.
+
+        This is typically called at the end of the pipeline or when
+        switching to a different set of models.
+        """
         for m in [self.embed_model, self.gen_model]:
             try:
                 requests.post(f"{OLLAMA_BASE_URL}/api/generate", json={"model": m, "keep_alive": 0})
@@ -267,11 +480,35 @@ FORMATTING:
                 logger.warning(f"Failed to unload model {m}: {e}")
 
 
+# ============================================================================
+# MODULE-LEVEL HEALTH-CHECK FUNCTIONS
+# ============================================================================
+# These are used by the pipeline orchestrator during initialisation to verify
+# that the Ollama server is up and that the required models are available.
+# ============================================================================
+
 def check_models(ai):
-    """Quick probe to ensure required AI models exist and are working"""
+    """Quick probe to ensure required AI models exist and are working.
+
+    Performs two checks:
+
+    1. **Embedding model** (blocking) -- a test embedding is requested.  If
+       it returns a zero vector or raises an exception the pipeline cannot
+       proceed, so ``False`` is returned and a tkinter error dialog is shown.
+
+    2. **Generation model** (non-blocking) -- a minimal generation request is
+       sent.  If it fails a warning is logged but the pipeline is allowed to
+       continue (the executive summary will fall back to auto-generation).
+
+    Args:
+        ai: An ``OllamaBrain`` instance.
+
+    Returns:
+        ``True`` if the embedding model is operational, ``False`` otherwise.
+    """
     logger.info("Checking AI model availability...")
-    
-    # Check embedding model
+
+    # ---- Check embedding model (required) ----
     try:
         test_vec = ai.get_embedding("test connection")
         if len(test_vec) == 0 or np.all(test_vec == 0):
@@ -280,14 +517,14 @@ def check_models(ai):
     except Exception as e:
         logger.error(f"Embedding model check failed: {e}")
         messagebox.showerror(
-            "Model Not Found", 
+            "Model Not Found",
             f"Embedding model '{EMBED_MODEL}' is not available.\n\n"
             f"Please run:\n  ollama pull {EMBED_MODEL}\n\n"
             f"Error: {e}"
         )
         return False
-    
-    # Check generation model (optional - just warn, don't block)
+
+    # ---- Check generation model (optional -- warn only) ----
     try:
         res = requests.post(
             f"{OLLAMA_BASE_URL}/api/generate",
@@ -300,12 +537,19 @@ def check_models(ai):
             logger.warning(f"Generation model '{GEN_MODEL}' may not be available (status: {res.status_code})")
     except Exception as e:
         logger.warning(f"Generation model '{GEN_MODEL}' check failed: {e}. Executive summary may not work.")
-    
+
     return True
 
 
 def check_ollama_server():
-    """Check if Ollama server is running"""
+    """Check if Ollama server is running.
+
+    Sends a simple GET to the Ollama root URL.  If the server is unreachable
+    a tkinter error dialog guides the user to start it.
+
+    Returns:
+        ``True`` if the server responds, ``False`` otherwise.
+    """
     try:
         requests.get(f"{OLLAMA_BASE_URL}/", timeout=3)
         return True

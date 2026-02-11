@@ -1,50 +1,137 @@
 """
-Chart Generator Module - McKinsey-Style Executive Visualizations
-Charts organized by category for clear reporting structure.
+Chart Generator Module - McKinsey-Style Executive Visualizations.
+
+Generates static PNG charts organized into numbered subdirectories for
+structured reporting. All charts follow a consistent McKinsey-style
+design language with professional color palettes, clean grid lines,
+bold typography, and executive-ready formatting.
+
+Architecture Overview:
+    The ChartGenerator class encapsulates all chart creation logic, with
+    each chart method following a consistent pattern:
+    1. Extract relevant data from analysis_data dict (with fallback defaults)
+    2. Create matplotlib figure with appropriate sizing
+    3. Render chart with McKinsey color palette and styling
+    4. Add value labels, legends, and annotations
+    5. Save as high-resolution PNG (150 DPI) to the appropriate subdirectory
+    6. Close figure to free memory and return file path
+
+Chart Directory Structure:
+    01_risk/         - Friction Pareto, risk origin pie, risk trend, severity heatmap
+    02_engineer/     - Engineer friction analysis, engineer learning progress
+    03_lob/          - LOB friction, LOB performance matrix, LOB category breakdown
+    04_analysis/     - Root cause, learning integrity, category/subcategory breakdown,
+                       category heatmap, category drift, distribution comparison
+    05_predictive/   - Model accuracy trends, AI recurrence prediction, resolution time
+    06_financial/    - Financial impact analysis, sub-category financial impact
+    10_similarity/   - Count distribution, resolution consistency, score distribution,
+                       resolution comparison, similarity effectiveness heatmap
+    11_lessons_learned/ - Learning grades, lesson completion, recurrence vs lessons,
+                          learning heatmap, AI recommendations summary
+
+Design Patterns:
+    - Every chart method returns Optional[str] (file path or None on error)
+    - Every chart method is wrapped in try/except with plt.close('all') in except
+    - Placeholder charts are generated when data is unavailable (blank canvas
+      with "Data Not Available" message) to maintain consistent report layout
+    - Long category/engineer names are truncated with '..' suffix for readability
+    - Color-coding follows consistent conventions:
+        * Red (#DC3545) = danger/high risk/critical
+        * Orange (#FF6600) = accent/warning
+        * Yellow (#FFC107) = medium risk
+        * Green (#28A745) = success/low risk
+        * Blue (#003366, #0066CC) = primary/neutral data
+
+Integration Points:
+    - Instantiated by: run.py pipeline after analysis completes
+    - Called by: report_generator.py to embed chart images in Excel report
+    - Input: analysis_data dict built by report_generator._build_analysis_data()
+    - Output: PNG files in PLOT_DIR subdirectories
+    - Config: PLOT_DIR from core/config.py (default output directory)
+
+Dependencies:
+    - matplotlib + seaborn for static chart rendering
+    - numpy for numerical operations (cumulative sums, normalization)
+    - pandas for data aggregation and rolling averages
 """
 
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import seaborn as sns
-import numpy as np
-import pandas as pd
-from pathlib import Path
+import matplotlib.pyplot as plt          # Core plotting library for all static charts
+import matplotlib.patches as mpatches    # Custom legend patches (colored rectangles)
+import seaborn as sns                    # Statistical visualization (heatmaps)
+import numpy as np                       # Numerical operations (cumsum, normalization)
+import pandas as pd                      # Data manipulation (rolling averages, groupby)
+from pathlib import Path                 # Cross-platform file path handling
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
+# PLOT_DIR: Base output directory for all chart images (from centralized config)
 from ..core.config import PLOT_DIR
 
 
 class ChartGenerator:
     """
     Generates McKinsey-style executive charts organized by category.
-    
+
+    This is the primary static chart generation class for the Escalation AI
+    pipeline. It produces ~25 distinct chart types across 8 output directories.
+    Each chart is saved as a high-resolution PNG (150 DPI) suitable for
+    embedding in Excel reports or presenting in executive dashboards.
+
     Chart Categories:
-        01_risk/       - Risk analysis and friction charts
-        02_engineer/   - Engineer performance metrics
-        03_lob/        - Line of Business analysis
-        04_analysis/   - Root cause and learning charts
-        05_predictive/ - ML model performance charts
-        06_financial/  - Financial impact analysis
+        01_risk/          - Risk analysis: Pareto, origin pie, trend, severity heatmap
+        02_engineer/      - Engineer performance: friction bars, learning progress
+        03_lob/           - LOB analysis: friction, performance matrix, category stacked bars
+        04_analysis/      - Root cause, learning integrity, category breakdown, heatmap,
+                            drift analysis, distribution comparison
+        05_predictive/    - ML model: accuracy trend, recurrence prediction, resolution time
+        06_financial/     - Financial: impact analysis, sub-category financial breakdown
+        10_similarity/    - Similarity search: count dist, consistency, score dist,
+                            resolution comparison, effectiveness heatmap
+        11_lessons_learned/ - Lessons: grades, completion, recurrence scatter, heatmap, recs
+
+    Usage:
+        generator = ChartGenerator(output_dir=Path("./charts"))
+        chart_paths = generator.generate_all_charts(analysis_data)
+        # chart_paths = {'risk': ['path/to/chart1.png', ...], ...}
+
+    Error Handling:
+        Every chart method catches all exceptions and returns None on failure.
+        This ensures that one failing chart doesn't break the entire pipeline.
+        The generate_all_charts() method filters out None values before returning.
     """
-    
-    # Color palette - McKinsey style
+
+    # McKinsey-style color palette for consistent visual branding.
+    # These colors are used throughout all charts for semantic consistency:
+    # primary/secondary = data presentation, accent = highlights,
+    # success/warning/danger = performance tiers, neutral/light = backgrounds.
     COLORS = {
-        'primary': '#003366',      # Deep blue
-        'secondary': '#0066CC',    # Medium blue
-        'accent': '#FF6600',       # Orange
-        'success': '#28A745',      # Green
-        'warning': '#FFC107',      # Yellow
-        'danger': '#DC3545',       # Red
-        'neutral': '#6C757D',      # Gray
-        'light': '#F8F9FA',        # Light gray
+        'primary': '#003366',      # Deep blue - main data bars/lines
+        'secondary': '#0066CC',    # Medium blue - secondary data series
+        'accent': '#FF6600',       # Orange - highlights, cumulative lines
+        'success': '#28A745',      # Green - good performance, targets met
+        'warning': '#FFC107',      # Yellow - medium risk, caution
+        'danger': '#DC3545',       # Red - high risk, failures, breaches
+        'neutral': '#6C757D',      # Gray - unavailable data, neutral
+        'light': '#F8F9FA',        # Light gray - backgrounds, empty portions
     }
-    
+
+    # Gradient palettes for continuous color mapping (light to dark)
     GRADIENT_BLUES = ['#E6F2FF', '#B3D9FF', '#66B3FF', '#3399FF', '#0066CC', '#003366']
+    # Risk gradient: green (low) -> yellow -> orange -> red (high)
     GRADIENT_RISK = ['#28A745', '#7CB342', '#FFC107', '#FF9800', '#FF5722', '#DC3545']
     
     def __init__(self, output_dir: Optional[Path] = None):
-        """Initialize chart generator with output directory."""
+        """
+        Initialize chart generator with output directory.
+
+        Creates the chart subdirectory structure and configures matplotlib
+        with executive-style formatting (Arial/Helvetica fonts, bold titles,
+        subtle gridlines, white backgrounds).
+
+        Args:
+            output_dir: Root directory for chart outputs. If None, uses
+                        PLOT_DIR from config. Accepts str or Path.
+        """
         if output_dir is None:
             self.output_dir = PLOT_DIR
         elif isinstance(output_dir, str):
@@ -55,7 +142,13 @@ class ChartGenerator:
         self._setup_style()
         
     def _setup_directories(self):
-        """Create organized chart subdirectories."""
+        """
+        Create organized chart subdirectories.
+
+        Numbered prefixes (01_, 02_, ...) ensure consistent alphabetical
+        ordering in file explorers and report generators. The 10_ and 11_
+        prefixes are for later-added analysis modules (similarity, lessons).
+        """
         self.chart_dirs = {
             'risk': self.output_dir / '01_risk',
             'engineer': self.output_dir / '02_engineer',

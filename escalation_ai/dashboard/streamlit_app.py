@@ -1,19 +1,160 @@
 """
 Escalation AI - Executive Intelligence Dashboard
+=================================================
 
-McKinsey-grade executive dashboard with:
-- C-Suite Executive Summary with strategic recommendations
-- Financial Impact Analysis with ROI calculations
-- Predictive Intelligence with 30/60/90 day forecasts
-- Competitive Benchmarking vs industry standards
-- Root Cause Analysis with Pareto & driver trees
-- Action Tracker with RACI and progress monitoring
-- Executive Presentation Mode with auto-cycling slides
-- Real-time KPI metrics with pulse indicators
-- Interactive Plotly charts
-- Category drift visualization
-- Smart alert monitoring
-- What-If scenario simulator
+A comprehensive Streamlit-based executive intelligence platform for analyzing,
+visualizing, and acting on telecom escalation ticket data. This is the main
+dashboard module (~9,200 lines) that powers all interactive visualizations.
+
+Architecture
+------------
+The file is organized into the following major sections:
+
+  1. IMPORTS & SETUP (lines ~19-51)
+     - Standard library and third-party imports
+     - Path configuration and _STANDALONE guard for conditional page config
+
+  2. PAGE CONFIG & SESSION STATE (lines ~53-77)
+     - Streamlit page configuration (guarded by _STANDALONE)
+     - Session state initialization (presentation_mode, slides, action_items)
+
+  3. PRICE CATALOG (lines ~78-114)
+     - Single source of truth for financial impact calculations
+     - Delegates to PriceCatalog class in escalation_ai.feedback.price_catalog
+     - Functions: _get_price_catalog_instance, get_catalog_cost, get_benchmark_costs
+
+  4. EXCEL API REFRESH UTILITY (lines ~115-320)
+     - Windows COM automation for refreshing Excel data connections
+     - Functions: is_excel_available, refresh_excel_connections, load_excel_with_refresh
+
+  5. ACTION ITEMS PERSISTENCE (lines ~322-345)
+     - JSON-based persistence for action items / initiative tracking
+     - Functions: load_action_items, save_action_items
+
+  6. CUSTOM CSS (lines ~346-1012)
+     - Injected CSS for dark theme, KPI cards, gradients, animations
+     - Guarded by _STANDALONE to avoid injecting when imported as module
+
+  7. DATA LOADING (lines ~1014-1253)
+     - DataFrame processing, column normalization, financial impact calculation
+     - Functions: process_dataframe, _calculate_financial_impact_from_catalog,
+       _load_excel_raw, load_excel_file, _find_data_file, load_data, generate_sample_data
+     - Key columns expected: AI_Category, AI_Sub_Category, Severity_Norm,
+       Origin_Norm, Strategic_Friction_Score, Financial_Impact,
+       Predicted_Resolution_Days, AI_Confidence, AI_Recurrence_Risk
+
+  8. INDUSTRY BENCHMARKS (lines ~1255-1266)
+     - Reference data: resolution_days, recurrence_rate, sla_breach_rate, etc.
+     - Three tiers: best_in_class, industry_avg, laggard
+
+  9. CHART FUNCTIONS (lines ~1268-2118)
+     - create_plotly_theme(): consistent dark theme for all charts
+     - CHART_DESCRIPTIONS dict + get_chart_insight(): hover tooltip system
+     - render_spectacular_header(), render_chart_with_insight(): UI helpers
+     - Individual chart functions:
+         chart_friction_by_category, chart_severity_distribution,
+         chart_trend_timeline, chart_recurrence_risk, chart_resolution_distribution,
+         chart_category_sunburst, chart_engineer_performance
+     - Executive charts:
+         chart_pareto_analysis, chart_driver_tree, chart_forecast_projection,
+         chart_risk_heatmap, chart_benchmark_gauge
+
+ 10. SIMILARITY SEARCH CHARTS (lines ~2119-2400)
+     - Visualizations for TF-IDF-based ticket similarity analysis
+     - Functions: chart_similarity_count_distribution, chart_resolution_consistency,
+       chart_similarity_score_distribution, chart_inconsistent_by_category,
+       chart_similarity_effectiveness_heatmap, chart_expected_vs_predicted_resolution
+
+ 11. LESSONS LEARNED EFFECTIVENESS (lines ~2403-3178)
+     - 6-pillar Learning Effectiveness Scorecard system:
+       learning_velocity, impact_management, knowledge_quality,
+       process_maturity, knowledge_transfer, outcome_effectiveness
+     - Functions: get_comprehensive_scorecard, chart_scorecard_radar,
+       chart_scorecard_comparison, chart_pillar_breakdown, chart_learning_grades,
+       chart_lesson_completion_rate, chart_recurrence_vs_lessons,
+       chart_learning_heatmap, chart_at_risk_categories
+     - _calculate_learning_grades: weighted scoring with
+       recurrence (35%) + completion (30%) + consistency (25%) + doc bonus (10%)
+     - generate_ai_lesson_recommendations: Ollama AI with rule-based fallback
+
+ 12. SYSTEMIC ISSUES ANALYSIS (lines ~3181-3401)
+     - SYSTEMIC_ISSUE_FIXES: 30+ sub-category root cause / fix mappings
+     - Functions: get_top_systemic_issues, generate_systemic_issue_initiatives
+
+ 13. STRATEGIC RECOMMENDATIONS & WHAT-IF (lines ~3404-3501)
+     - generate_strategic_recommendations: data-driven P1/P2/P3 recommendations
+
+ 14. RENDER FUNCTIONS - PAGE RENDERERS (lines ~3504-4959)
+     - render_executive_summary: C-Suite KPIs, recommendations, Pareto + forecast
+     - render_financial_analysis: 5 tabs (Overview, ROI, Cost Avoidance, Trends, Insights)
+     - render_benchmarking: 6 benchmark gauges + competitive position table
+     - render_root_cause: Pareto, driver tree, root cause quantification
+     - render_action_tracker: systemic issues table + initiative CRUD
+     - render_presentation_mode: 5 auto-advance slides
+     - render_whatif_simulator: scenario sliders + projection calculations
+     - render_drift_page: baseline vs current category distribution
+     - render_alerts_page: metric thresholds with warning/critical zones
+
+ 15. EXPORT FUNCTIONS (lines ~4961-5843)
+     - generate_executive_pdf_report: reportlab PDF with TOC and methodology
+     - generate_html_report: basic static HTML report
+     - generate_magnificent_html_report: interactive HTML with embedded Plotly
+
+ 16. CONSOLIDATED PAGE RENDERERS (lines ~5846-8068)
+     - render_excel_dashboard: main overview with KPI cards, sunburst, Sankey, etc.
+     - render_deep_analysis: 6 tabs (Categories, Engineers, Root Cause, Patterns,
+       Similarity, Lessons Learned)
+     - render_benchmarking_monitoring: 3 tabs (Benchmarks, Alerts, Drift)
+     - render_planning_actions: 3 tabs (What-If, Action Tracker, Learning Actions)
+
+ 17. MAIN APP (lines ~8071-8411)
+     - main(): sidebar navigation, data loading, filters, export, page routing
+
+ 18. LEGACY RENDERERS (lines ~8414-9261)
+     - render_advanced_insights: 4 tabs (SLA, Engineer, Cost, Patterns)
+     - render_dashboard: alternative dashboard page
+     - render_analytics: alternative analytics with 6-pillar scorecard
+
+ 19. ENTRY POINT (lines ~9264-9265)
+     - if __name__ == "__main__": main()
+
+Key Design Patterns
+-------------------
+- _STANDALONE guard: ``_STANDALONE = __name__ == "__main__"`` prevents
+  st.set_page_config() and CSS injection when imported as a module
+  (e.g., by unified_app.py or Pulse Home).
+- PriceCatalog single source of truth: All financial impact calculations
+  delegate to price_catalog.xlsx via PriceCatalog class.
+- Session state: Used for presentation_mode, current_slide, action_items,
+  uploaded_file_path.
+- Chart insight system: CHART_DESCRIPTIONS dict provides hover tooltips
+  with data-driven insights for each visualization.
+
+Expected DataFrame Columns
+--------------------------
+Core columns produced by the pipeline (run.py):
+  - AI_Category (str): 8-category telecom classification
+  - AI_Sub_Category (str): Detailed sub-type within category
+  - AI_Confidence (float): Classification confidence 0-1
+  - Strategic_Friction_Score (float): Operational impact score 0-200
+  - Financial_Impact (float): Dollar cost (recalculated from PriceCatalog)
+  - Predicted_Resolution_Days (float): ML-predicted resolution time
+  - AI_Recurrence_Risk (float): Recurrence probability 0-1
+  - Severity_Norm (str): Critical / Major / Minor
+  - Origin_Norm (str): External / Internal
+  - tickets_data_issue_datetime (datetime): Issue creation timestamp
+  - Engineer (str): Assigned engineer name
+  - LOB (str): Line of business
+  - Best_Match_Similarity (float): TF-IDF similarity score 0-1
+  - Resolution_Consistency (str): Consistent / Inconsistent
+  - Similar_Ticket_Count (int): Count of similar historical tickets
+
+Financial Impact Formula
+------------------------
+  Total_Impact = (Material + Labor x Rate + Delay) x Severity_Mult x (1 + Origin_Premium)
+  - Material, Labor, Rate, Delay: from price_catalog.xlsx Category Costs sheet
+  - Severity_Mult: from Severity Multipliers sheet (Critical=2.5, Major=1.5, Minor=0.8)
+  - Origin_Premium: from Origin Premiums sheet (External=15%, Internal=0%)
 """
 
 import streamlit as st
@@ -1021,33 +1162,40 @@ def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     Note: Similarity columns (Best_Match_Similarity, Resolution_Consistency)
     are generated by the pipeline's similar_tickets.py module during analysis.
     """
-    # Map column names to expected format
+    # --- Column Normalization ---
+    # The pipeline outputs use prefixed column names (e.g., tickets_data_engineer_name).
+    # Map them to shorter aliases expected by chart functions.
     if 'tickets_data_engineer_name' in df.columns and 'Engineer' not in df.columns:
         df['Engineer'] = df['tickets_data_engineer_name']
     if 'tickets_data_lob' in df.columns and 'LOB' not in df.columns:
         df['LOB'] = df['tickets_data_lob']
 
-    # Use AI_Recurrence_Probability as the numeric recurrence risk
-    # (AI_Recurrence_Risk in file is string like "Elevated (50-70%)")
+    # --- Recurrence Risk Conversion ---
+    # The Excel file stores AI_Recurrence_Risk as a string (e.g., "Elevated (50-70%)").
+    # AI_Recurrence_Probability is the numeric float (0-1) produced by the pipeline.
+    # Overwrite AI_Recurrence_Risk with the numeric version for chart calculations.
     if 'AI_Recurrence_Probability' in df.columns:
         df['AI_Recurrence_Risk'] = pd.to_numeric(df['AI_Recurrence_Probability'], errors='coerce').fillna(0.15)
 
-    # Ensure numeric columns are numeric
+    # --- Numeric Type Enforcement ---
+    # Ensure all metric columns are numeric (Excel sometimes stores as mixed types).
     numeric_cols = ['Strategic_Friction_Score', 'Financial_Impact', 'Predicted_Resolution_Days',
                    'AI_Confidence', 'Resolution_Prediction_Confidence', 'Best_Match_Similarity']
     for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-    # Map AI_Origin from available origin columns (for heatmap visualization)
+    # --- Origin Column Resolution ---
+    # Multiple origin column names may exist; pick the first available.
     if 'AI_Origin' not in df.columns:
         for col in ['Origin_Norm', 'tickets_data_escalation_origin', 'tickets_data_origin', 'Origin']:
             if col in df.columns:
                 df['AI_Origin'] = df[col]
                 break
 
-    # ALWAYS recalculate Financial_Impact using PriceCatalog
-    # This ensures the dashboard reflects the current price_catalog.xlsx configuration
+    # --- Financial Impact Recalculation ---
+    # ALWAYS recalculate from PriceCatalog to ensure dashboard reflects
+    # the current price_catalog.xlsx configuration, not stale Excel values.
     df = _calculate_financial_impact_from_catalog(df)
 
     return df
@@ -1485,6 +1633,10 @@ def get_chart_insight(chart_key: str, df: pd.DataFrame) -> dict:
     }
 
 
+# ============================================================================
+# UI HELPER RENDERING FUNCTIONS
+# ============================================================================
+
 def render_spectacular_header(title: str, subtitle: str, icon: str = "📊"):
     """Render a spectacular gradient header with timestamp."""
     from datetime import datetime
@@ -1553,8 +1705,23 @@ def render_chart_with_insight(chart_key: str, chart_fig, df: pd.DataFrame, conta
         st.plotly_chart(chart_fig, use_container_width=True)
 
 
+# ============================================================================
+# INDIVIDUAL CHART FUNCTIONS - Each returns a Plotly Figure
+# ============================================================================
+
 def chart_friction_by_category(df):
-    """Interactive bar chart of friction by category."""
+    """Interactive horizontal bar chart of cumulative friction by category.
+
+    Displays Strategic_Friction_Score summed per AI_Category, sorted ascending
+    so the highest-friction category appears at the top. Uses a Blues colorscale
+    to visually encode friction magnitude.
+
+    Args:
+        df: DataFrame with columns 'AI_Category' and 'Strategic_Friction_Score'.
+
+    Returns:
+        Plotly Figure (horizontal bar chart).
+    """
     friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=True)
     
     # Create gradient colors
@@ -1585,7 +1752,18 @@ def chart_friction_by_category(df):
 
 
 def chart_severity_distribution(df):
-    """Donut chart of severity distribution."""
+    """Donut chart of severity distribution (Critical / Major / Minor).
+
+    Displays ticket count per severity level as a donut/pie chart with a
+    center annotation showing total ticket count. Color-coded:
+    Critical=red, Major=yellow, Minor=green.
+
+    Args:
+        df: DataFrame with column 'tickets_data_severity'.
+
+    Returns:
+        Plotly Figure (donut pie chart).
+    """
     severity_counts = df['tickets_data_severity'].value_counts()
     
     colors = {'Critical': '#DC3545', 'Major': '#FFC107', 'Minor': '#28A745'}
@@ -1620,7 +1798,19 @@ def chart_severity_distribution(df):
 
 
 def chart_trend_timeline(df):
-    """Animated area chart of escalations over time."""
+    """Dual-axis area chart of escalation volume and friction over time.
+
+    Computes daily aggregates, then applies a 7-day rolling average to smooth
+    fluctuations. Primary y-axis shows friction score (filled area), secondary
+    y-axis shows escalation count (dotted line).
+
+    Args:
+        df: DataFrame with 'tickets_data_issue_datetime' and
+            'Strategic_Friction_Score' columns.
+
+    Returns:
+        Plotly Figure (dual-axis area + line chart).
+    """
     df_temp = df.copy()
     df_temp['date'] = pd.to_datetime(df_temp['tickets_data_issue_datetime']).dt.date
     daily = df_temp.groupby('date').agg({
@@ -1674,7 +1864,19 @@ def chart_trend_timeline(df):
 
 
 def chart_recurrence_risk(df):
-    """Gauge chart for average recurrence risk."""
+    """Gauge chart for average recurrence risk across all tickets.
+
+    Displays a gauge indicator (0-100%) with three color zones:
+    Green (0-20%), Yellow (20-40%), Red (40-100%). Delta is referenced
+    against 15% baseline. AI_Recurrence_Risk is guaranteed numeric by
+    process_dataframe().
+
+    Args:
+        df: DataFrame with 'AI_Recurrence_Risk' column (float 0-1).
+
+    Returns:
+        Plotly Figure (gauge indicator).
+    """
     # AI_Recurrence_Risk is now guaranteed to be numeric from load_data()
     avg_risk = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
 
@@ -1710,7 +1912,18 @@ def chart_recurrence_risk(df):
 
 
 def chart_resolution_distribution(df):
-    """Histogram of predicted resolution times."""
+    """Histogram of predicted resolution times with mean reference line.
+
+    Displays the distribution of Predicted_Resolution_Days across all tickets.
+    A dashed red vertical line marks the mean. Useful for identifying whether
+    resolution times are tightly clustered or have a long tail.
+
+    Args:
+        df: DataFrame with 'Predicted_Resolution_Days' column.
+
+    Returns:
+        Plotly Figure (histogram).
+    """
     fig = go.Figure(go.Histogram(
         x=df['Predicted_Resolution_Days'],
         nbinsx=20,
@@ -1742,7 +1955,20 @@ def chart_resolution_distribution(df):
 
 
 def chart_category_sunburst(df):
-    """Interactive sunburst chart of categories and sub-categories with drill-down."""
+    """Interactive sunburst chart showing category/sub-category hierarchy.
+
+    If AI_Sub_Category column exists, creates a two-level sunburst
+    (Category -> Sub-Category) with click-to-drill-down. Falls back to
+    Category -> Severity if sub-categories are unavailable. Optionally
+    merges Financial_Impact data for cost context.
+
+    Args:
+        df: DataFrame with 'AI_Category' and optionally 'AI_Sub_Category',
+            'tickets_data_severity', 'Financial_Impact'.
+
+    Returns:
+        Plotly Figure (sunburst chart).
+    """
     # Check if AI_Sub_Category column exists
     sub_cat_col = 'AI_Sub_Category' if 'AI_Sub_Category' in df.columns else None
     cost_col = 'Financial_Impact' if 'Financial_Impact' in df.columns else None
@@ -1792,7 +2018,19 @@ def chart_category_sunburst(df):
 
 
 def chart_engineer_performance(df):
-    """Horizontal bar chart of engineer friction."""
+    """Horizontal bar chart ranking engineers by average friction score.
+
+    Aggregates Strategic_Friction_Score per engineer (mean) with ticket count.
+    Uses RdYlGn_r colorscale so high-friction engineers appear in red, low
+    in green. Falls back to ticket_count ranking if friction data unavailable.
+
+    Args:
+        df: DataFrame with 'Engineer' and optionally 'Strategic_Friction_Score',
+            'AI_Recurrence_Risk'.
+
+    Returns:
+        Plotly Figure or None if 'Engineer' column missing.
+    """
     if 'Engineer' not in df.columns:
         return None
     
@@ -1850,7 +2088,19 @@ def chart_engineer_performance(df):
 # ============================================================================
 
 def chart_pareto_analysis(df):
-    """Pareto chart showing 80/20 rule for escalation causes."""
+    """Pareto chart showing 80/20 rule for escalation friction causes.
+
+    Displays category friction as bars (sorted descending) with a cumulative
+    percentage line on the secondary y-axis. A horizontal dashed line at 80%
+    highlights the Pareto threshold. Categories contributing to the first 80%
+    are colored red; the rest are gray.
+
+    Args:
+        df: DataFrame with 'AI_Category' and 'Strategic_Friction_Score'.
+
+    Returns:
+        Plotly Figure (dual-axis bar + line chart).
+    """
     category_friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=False)
     cumulative_pct = category_friction.cumsum() / category_friction.sum() * 100
     
@@ -1894,7 +2144,19 @@ def chart_pareto_analysis(df):
 
 
 def chart_driver_tree(df):
-    """Create a driver tree showing impact decomposition."""
+    """Create a treemap showing friction decomposition by Origin and Severity.
+
+    Builds a hierarchical structure: Total Friction -> Origin (External/Internal)
+    -> Severity (Critical/Major/Minor). Uses RdYlBu_r colorscale to encode
+    friction values. Hover shows percentage of parent for each segment.
+
+    Args:
+        df: DataFrame with 'tickets_data_escalation_origin',
+            'tickets_data_severity', 'Strategic_Friction_Score'.
+
+    Returns:
+        Plotly Figure (treemap).
+    """
     total_friction = df['Strategic_Friction_Score'].sum()
     
     # Level 1: By Origin
@@ -1942,7 +2204,18 @@ def chart_driver_tree(df):
 
 
 def chart_forecast_projection(df):
-    """Create 30/60/90 day forecast visualization."""
+    """Create 30/60/90 day escalation forecast with uncertainty cone.
+
+    Fits a linear regression (np.polyfit degree=1) to daily escalation counts,
+    then projects forward 90 days. Adds a +/-2 standard deviation uncertainty
+    cone. Returns both the figure and the slope for trend reporting.
+
+    Args:
+        df: DataFrame with 'tickets_data_issue_datetime' and 'AI_Category'.
+
+    Returns:
+        tuple: (Plotly Figure, float slope) where positive slope = increasing trend.
+    """
     df_temp = df.copy()
     df_temp['date'] = pd.to_datetime(df_temp['tickets_data_issue_datetime']).dt.date
     daily = df_temp.groupby('date').agg({
@@ -1951,18 +2224,20 @@ def chart_forecast_projection(df):
     }).rename(columns={'AI_Category': 'count'}).reset_index()
     daily['date'] = pd.to_datetime(daily['date'])
     
-    # Calculate trend
+    # Fit linear regression (degree=1 polynomial) to daily escalation counts.
+    # day_num converts dates to integer offsets for polyfit.
+    # z[0] = slope (escalations/day trend), z[1] = intercept.
     daily['day_num'] = (daily['date'] - daily['date'].min()).dt.days
     z = np.polyfit(daily['day_num'], daily['count'], 1)
-    slope = z[0]
-    
-    # Forecast
+    slope = z[0]  # Positive = escalations increasing over time
+
+    # Project the linear trend forward 90 days from last data point
     last_date = daily['date'].max()
     forecast_dates = pd.date_range(start=last_date + timedelta(days=1), periods=90, freq='D')
     forecast_day_nums = np.arange(daily['day_num'].max() + 1, daily['day_num'].max() + 91)
     forecast_values = np.polyval(z, forecast_day_nums)
-    
-    # Add uncertainty cone
+
+    # Uncertainty cone: +/- 2 standard deviations of historical daily counts
     std = daily['count'].std()
     
     fig = go.Figure()
@@ -2026,7 +2301,19 @@ def chart_forecast_projection(df):
 
 
 def chart_risk_heatmap(df):
-    """Create risk heatmap by category and severity."""
+    """Create risk heatmap showing friction by category (rows) x severity (columns).
+
+    Pivots Strategic_Friction_Score into a Category x Severity matrix and renders
+    it as a heatmap with RdYlGn_r colorscale (high friction = red). Cell text
+    shows integer friction values.
+
+    Args:
+        df: DataFrame with 'AI_Category', 'tickets_data_severity',
+            'Strategic_Friction_Score'.
+
+    Returns:
+        Plotly Figure (heatmap).
+    """
     pivot = df.pivot_table(
         values='Strategic_Friction_Score',
         index='AI_Category',
@@ -2062,14 +2349,31 @@ def chart_risk_heatmap(df):
 
 
 def chart_benchmark_gauge(metric_name, current_value, benchmark_data, unit=''):
-    """Create a benchmark gauge showing position vs industry."""
+    """Create a gauge chart showing a metric's position vs industry benchmarks.
+
+    Automatically detects whether lower or higher is better by comparing
+    best_in_class vs laggard values. Green/yellow/red zones are arranged
+    accordingly. Delta reference is the industry average.
+
+    Args:
+        metric_name: Display title for the gauge.
+        current_value: The actual metric value to display.
+        benchmark_data: Dict with keys 'best_in_class', 'industry_avg', 'laggard'.
+        unit: Suffix for display (e.g., '%', ' days', '$').
+
+    Returns:
+        Plotly Figure (gauge indicator with benchmark annotations).
+    """
     best = benchmark_data['best_in_class']
     avg = benchmark_data['industry_avg']
     laggard = benchmark_data['laggard']
-    
-    # Determine if lower is better
+
+    # Auto-detect polarity: if best < laggard then lower values are better
+    # (e.g., resolution time, recurrence rate). If best > laggard then
+    # higher values are better (e.g., customer satisfaction, FCR).
     lower_better = best < laggard
-    
+
+    # Set gauge range with padding beyond the benchmark boundaries
     if lower_better:
         min_val, max_val = best * 0.5, laggard * 1.2
     else:
@@ -2121,7 +2425,18 @@ def chart_benchmark_gauge(metric_name, current_value, benchmark_data, unit=''):
 # ============================================================================
 
 def chart_similarity_count_distribution(df):
-    """Histogram showing distribution of similar ticket counts."""
+    """Histogram showing how many similar historical tickets each current ticket has.
+
+    Uses the Similar_Ticket_Count column (generated by similar_tickets.py).
+    Zero-match tickets are highlighted in the subtitle. A vertical reference
+    line marks the average count.
+
+    Args:
+        df: DataFrame with 'Similar_Ticket_Count' column.
+
+    Returns:
+        Plotly Figure or None if column missing/empty.
+    """
     if 'Similar_Ticket_Count' not in df.columns:
         return None
 
@@ -2166,7 +2481,17 @@ def chart_similarity_count_distribution(df):
 
 
 def chart_resolution_consistency(df):
-    """Pie chart showing resolution consistency breakdown."""
+    """Donut chart showing resolution consistency (Consistent/Inconsistent/No Data).
+
+    Compares current ticket resolutions against how similar historical tickets
+    were resolved. Green = consistent approach, Red = different approach taken.
+
+    Args:
+        df: DataFrame with 'Resolution_Consistency' column.
+
+    Returns:
+        Plotly Figure or None if column missing/empty.
+    """
     if 'Resolution_Consistency' not in df.columns:
         return None
 
@@ -2203,7 +2528,18 @@ def chart_resolution_consistency(df):
 
 
 def chart_similarity_score_distribution(df):
-    """Histogram of best match similarity scores."""
+    """Histogram of TF-IDF best-match similarity scores with quality thresholds.
+
+    Filters out zero scores (no match). Vertical reference lines at 0.7 (high)
+    and 0.5 (medium) indicate confidence tiers. RdYlGn colorscale maps scores
+    to color (red=low, green=high).
+
+    Args:
+        df: DataFrame with 'Best_Match_Similarity' column (float 0-1).
+
+    Returns:
+        Plotly Figure or None if column missing/empty.
+    """
     if 'Best_Match_Similarity' not in df.columns:
         return None
 
@@ -2251,7 +2587,18 @@ def chart_similarity_score_distribution(df):
 
 
 def chart_inconsistent_by_category(df):
-    """Bar chart showing inconsistent resolutions by category."""
+    """Horizontal bar chart of inconsistent resolution counts per category.
+
+    Filters to Inconsistent_Resolution == True, then counts per AI_Category.
+    Helps identify categories where engineers are deviating from proven
+    historical resolution approaches.
+
+    Args:
+        df: DataFrame with 'Inconsistent_Resolution' and 'AI_Category'.
+
+    Returns:
+        Plotly Figure or None if columns missing or no inconsistencies found.
+    """
     if 'Inconsistent_Resolution' not in df.columns or 'AI_Category' not in df.columns:
         return None
 
@@ -2291,7 +2638,19 @@ def chart_inconsistent_by_category(df):
 
 
 def chart_similarity_effectiveness_heatmap(df):
-    """Heatmap showing similarity effectiveness by category and origin."""
+    """Heatmap of average similar ticket matches by category and origin.
+
+    Measures knowledge base coverage: higher values mean better historical
+    data exists for that category/origin combination. Green = good coverage,
+    red = sparse data needing enrichment.
+
+    Args:
+        df: DataFrame with 'Similar_Ticket_Count', 'AI_Category', and an
+            origin column (tickets_data_origin, Origin, etc.).
+
+    Returns:
+        Plotly Figure or None if required columns missing.
+    """
     if 'Similar_Ticket_Count' not in df.columns or 'AI_Category' not in df.columns:
         return None
 
@@ -2338,7 +2697,19 @@ def chart_similarity_effectiveness_heatmap(df):
 
 
 def chart_expected_vs_predicted_resolution(df):
-    """Grouped bar comparing expected (from similar tickets) vs AI predicted resolution."""
+    """Grouped bar chart comparing historical expected vs AI predicted resolution days.
+
+    Aggregates by AI_Category and shows two bars per category: the average
+    resolution from similar historical tickets (blue) and the AI predicted
+    resolution (orange). Large discrepancies suggest evolving issue patterns.
+
+    Args:
+        df: DataFrame with 'Expected_Resolution_Days' (or 'Similar_Expected_Days'),
+            'Predicted_Resolution_Days', and 'AI_Category'.
+
+    Returns:
+        Plotly Figure or None if required columns missing.
+    """
     if 'Expected_Resolution_Days' not in df.columns or 'Predicted_Resolution_Days' not in df.columns:
         # Try alternate column name
         if 'Similar_Expected_Days' in df.columns:
@@ -3045,14 +3416,16 @@ def _calculate_learning_grades(df) -> Dict[str, Dict]:
         # 4. Has any lesson documented (bonus)
         has_lessons = 1 if lessons_documented > 0 else 0
 
-        # Calculate weighted score
-        # Lower recurrence = better, so invert it
+        # Calculate weighted learning effectiveness score (0-100)
+        # Weights: recurrence prevention 35%, lesson completion 30%,
+        #          resolution consistency 25%, documentation bonus 10%
+        # Recurrence is inverted: lower recurrence = higher score
         recurrence_score = max(0, 100 - recurrence_rate)
         score = (
-            recurrence_score * 0.35 +
-            lesson_completion * 0.30 +
-            consistency * 0.25 +
-            has_lessons * 10  # Bonus points for documenting
+            recurrence_score * 0.35 +      # 35%: inverted recurrence (0-100 -> 0-35)
+            lesson_completion * 0.30 +       # 30%: % of lessons completed (0-100 -> 0-30)
+            consistency * 0.25 +             # 25%: % of consistent resolutions (0-100 -> 0-25)
+            has_lessons * 10                 # 10%: binary bonus for any documentation
         )
 
         # Assign grade
@@ -3406,22 +3779,38 @@ def generate_systemic_issue_initiatives(df):
 # ============================================================================
 
 def generate_strategic_recommendations(df):
-    """Generate AI-powered strategic recommendations with confidence scores."""
+    """Generate data-driven strategic recommendations with confidence scores.
+
+    Analyzes key metrics against thresholds to produce P1/P2/P3 recommendations:
+    - P1 if top category >15% of friction or recurrence >20%
+    - P2 if SLA breach >10%, resolution >2.5d, or critical >12%
+    - P3 always (process automation as evergreen recommendation)
+
+    Each recommendation includes estimated investment, ROI, and timeline.
+
+    Args:
+        df: Processed DataFrame with standard columns.
+
+    Returns:
+        list of dicts with keys: priority, title, description, impact,
+        confidence, timeline, investment, roi.
+    """
     recommendations = []
-    
-    # Analyze data patterns
+
+    # Analyze data patterns to determine which recommendations to generate
     category_friction = df.groupby('AI_Category')['Strategic_Friction_Score'].sum().sort_values(ascending=False)
     top_category = category_friction.index[0]
     top_category_pct = category_friction.iloc[0] / category_friction.sum() * 100
-    
-    # Get safe values
+
+    # Safe value extraction with defaults for missing columns
     avg_recurrence = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
     critical_pct = (df['tickets_data_severity'] == 'Critical').mean() * 100 if 'tickets_data_severity' in df.columns else 10
     avg_resolution = df['Predicted_Resolution_Days'].mean() if 'Predicted_Resolution_Days' in df.columns else 5
-    
+
     sla_breach_rate = df['SLA_Breached'].mean() * 100 if 'SLA_Breached' in df.columns else 12
-    
-    # Recommendation 1: Category Focus
+
+    # Threshold-based recommendation generation (P1 = high priority)
+    # Recommendation 1: Category Focus - triggers if one category dominates friction
     if top_category_pct > 15:
         recommendations.append({
             'priority': 'P1',
@@ -3501,8 +3890,24 @@ def generate_strategic_recommendations(df):
     return recommendations
 
 
+# ============================================================================
+# PAGE RENDERERS - Each function renders a full Streamlit page
+# ============================================================================
+
 def render_executive_summary(df):
-    """Render the C-Suite Executive Summary page."""
+    """Render the C-Suite Executive Summary page.
+
+    Displays:
+    - 4 top-line KPI cards: Total Operational Cost, Revenue at Risk,
+      Savings Opportunity (35% reduction target), Operational Health Score
+    - Strategic Recommendations from generate_strategic_recommendations()
+      with priority/confidence/timeline/ROI cards
+    - Pareto analysis chart (left) and 90-day forecast (right)
+
+    Args:
+        df: Processed DataFrame with Financial_Impact, Revenue_At_Risk,
+            AI_Recurrence_Risk, Strategic_Friction_Score columns.
+    """
     render_spectacular_header("Executive Intelligence Brief", "Strategic insights for leadership decision-making", "🎯")
     
     # Top-line executive KPIs
@@ -3545,7 +3950,9 @@ def render_executive_summary(df):
         """, unsafe_allow_html=True)
     
     with col4:
-        # Get safe values
+        # Operational Health Score: composite metric derived from recurrence and friction.
+        # Formula: 100 - recurrence% - (avg_friction / 2), floored at 20.
+        # Higher = healthier. Thresholds: >70 green, >50 yellow, else red.
         recurrence_rate = df['AI_Recurrence_Risk'].mean() * 100 if 'AI_Recurrence_Risk' in df.columns else 15
         friction_mean = df['Strategic_Friction_Score'].mean() if 'Strategic_Friction_Score' in df.columns else 50
         health_score = max(20, 100 - recurrence_rate - (friction_mean / 2))
@@ -3615,7 +4022,27 @@ def render_executive_summary(df):
 
 
 def render_financial_analysis(df):
-    """Render the Enhanced Financial Impact Analysis page with advanced metrics."""
+    """Render the Enhanced Financial Impact Analysis page.
+
+    Five tabs of financial intelligence:
+    1. Overview: Waterfall chart, efficiency scorecard, category cost comparison,
+       cost concentration (Pareto)
+    2. ROI Opportunities: Category-level ROI projections with payback periods
+    3. Cost Avoidance: Recurring issues, preventable categories, knowledge
+       sharing, and automation savings potential
+    4. Trends & Forecast: Cost timeline with 30/60/90-day projections,
+       risk scenarios (best/expected/worst)
+    5. Insights & Actions: Priority-ranked financial insights with
+       potential savings estimates
+
+    Also includes an interactive ROI Scenario Calculator at the bottom with
+    sliders for reduction %, investment amount, and timeline. Calculates
+    annual savings, first-year ROI, payback period, and 3-year NPV (8% discount).
+
+    Args:
+        df: Processed DataFrame with Financial_Impact column. Imports from
+            escalation_ai.financial for all metric calculations.
+    """
     from escalation_ai.financial import (
         calculate_financial_metrics,
         calculate_roi_metrics,
@@ -3960,11 +4387,15 @@ def render_financial_analysis(df):
         timeline_months = st.slider("Implementation Timeline (months)", 3, 18, 6)
 
     with col2:
-        # Calculate ROI
+        # Calculate ROI from user-specified parameters
         total_cost = financial_metrics.total_cost
-        annual_savings = (total_cost * 4) * (reduction_pct / 100)  # Annualized
+        # Annualize: multiply by 4 since data covers ~90 days (1 quarter)
+        annual_savings = (total_cost * 4) * (reduction_pct / 100)
+        # First-year ROI = (savings - investment) / investment
         roi = ((annual_savings - investment) / investment) * 100 if investment > 0 else 0
+        # Payback = investment / monthly savings
         payback_months = investment / (annual_savings / 12) if annual_savings > 0 else float('inf')
+        # 3-year NPV at 8% discount rate; year 0 includes investment subtraction
         npv = sum([(annual_savings - investment if i == 0 else annual_savings) / (1.08 ** i) for i in range(3)])
 
         st.markdown(f"""
@@ -3993,7 +4424,22 @@ def render_financial_analysis(df):
 
 
 def render_benchmarking(df):
-    """Render the Competitive Benchmarking page."""
+    """Render the Competitive Benchmarking page.
+
+    Displays 6 benchmark gauge charts in a 3x2 grid:
+    - Resolution Time, Recurrence Rate, SLA Breach Rate
+    - First Contact Resolution, Cost per Escalation, Customer Satisfaction
+
+    Each gauge shows the current metric positioned against best-in-class,
+    industry average, and laggard benchmarks from INDUSTRY_BENCHMARKS dict.
+    Below the gauges, a summary table classifies each metric as
+    Best-in-Class / Above Average / Below Average / Laggard with the
+    gap to best-in-class.
+
+    Args:
+        df: Processed DataFrame with AI_Recurrence_Risk, Predicted_Resolution_Days,
+            SLA_Breached, Financial_Impact, Customer_Impact_Score.
+    """
     render_spectacular_header("Competitive Benchmarking", "How you compare against industry standards", "🏆")
     
     # Get safe values with defaults
@@ -4104,7 +4550,18 @@ def render_benchmarking(df):
 
 
 def render_root_cause(df):
-    """Render Root Cause Analysis page."""
+    """Render the Root Cause Analysis page.
+
+    Displays:
+    - Pareto analysis chart (left) and friction driver tree (right)
+    - Root Cause Impact Quantification: dual horizontal bar charts showing
+      friction score and cost impact per Root_Cause, if column exists
+    - Risk heatmap (Category x Severity matrix) with chart insight
+
+    Args:
+        df: Processed DataFrame with AI_Category, Strategic_Friction_Score,
+            Financial_Impact, tickets_data_severity, and optionally Root_Cause.
+    """
     render_spectacular_header("Root Cause Analysis", "Identify and quantify the drivers of escalation friction", "🔬")
 
     col1, col2 = st.columns(2)
@@ -4165,7 +4622,23 @@ def render_root_cause(df):
 
 
 def render_action_tracker(df):
-    """Render the Action Tracker page."""
+    """Render the Action Tracker page for systemic issues and initiative management.
+
+    Two main sections:
+    1. Top 5 Systemic Issues: Data-driven table from get_top_systemic_issues()
+       showing sub-category root causes and recommended fixes (from
+       SYSTEMIC_ISSUE_FIXES dict). Quick-action buttons to convert issues
+       into tracked initiatives.
+    2. Initiative Management: Full CRUD for action items with status
+       (Not Started / In Progress / Completed / Blocked), owner assignment,
+       progress slider, and JSON persistence via save_action_items().
+       Auto-merges AI-generated recommendations from
+       generate_strategic_recommendations() and generate_systemic_issue_initiatives().
+
+    Args:
+        df: Processed DataFrame with AI_Category, AI_Sub_Category,
+            Financial_Impact, Strategic_Friction_Score.
+    """
     render_spectacular_header("Action Tracker", "Strategic initiatives monitoring and accountability", "📋")
 
     # =========================================================================
@@ -4420,7 +4893,17 @@ def render_action_tracker(df):
 
 
 def render_presentation_mode(df):
-    """Render Executive Presentation Mode with auto-cycling slides."""
+    """Render Executive Presentation Mode with 5 auto-cycling slides.
+
+    Slides: Executive Summary, Financial Impact, Benchmarking,
+    Strategic Recommendations, 90-Day Forecast.
+    Supports manual Previous/Next navigation and optional auto-advance
+    (10-second interval via st.checkbox). Uses session_state.current_slide
+    for slide tracking.
+
+    Args:
+        df: Processed DataFrame (passed through to individual slide renderers).
+    """
     render_spectacular_header("Executive Presentation", "Auto-cycling executive slides", "📽️")
     
     slides = [
@@ -4535,7 +5018,24 @@ def render_presentation_mode(df):
 
 
 def render_whatif_simulator(df):
-    """Render the What-If Scenario Simulator page."""
+    """Render the What-If Scenario Simulator with interactive parameter sliders.
+
+    Left panel: 4 scenario parameter sliders:
+    - Staffing: add/remove engineers (-3 to +5, each = 8% resolution, 5% recurrence)
+    - Training: error reduction 0-50% (affects recurrence x0.5, resolution x0.2)
+    - Volume: escalation change -30% to +50%
+    - Process: efficiency gain 0-40%
+
+    Right panel: Projected impact on resolution time, recurrence rate,
+    monthly friction, and monthly cost vs baseline.
+
+    Bottom: ROI calculation using price_catalog hourly rate for investment
+    estimation (engineer salary, training hours, process work hours).
+
+    Args:
+        df: Processed DataFrame with AI_Recurrence_Risk, Predicted_Resolution_Days,
+            Strategic_Friction_Score, Financial_Impact, Engineer.
+    """
     render_spectacular_header("What-If Scenario Simulator", "Adjust parameters to simulate impact on escalation metrics", "🔮")
     
     # Get safe values with defaults
@@ -4580,20 +5080,27 @@ def render_whatif_simulator(df):
     with col2:
         st.markdown("#### 📈 Projected Impact")
         
-        # Calculate projections (simplified model)
-        # Staffing effect: more engineers = faster resolution, less recurrence
-        resolution_factor = 1 - (engineer_change * 0.08)  # Each engineer reduces time by 8%
-        recurrence_factor = 1 - (engineer_change * 0.05)  # Each engineer reduces recurrence by 5%
-        
-        # Training effect
-        recurrence_factor *= (1 - training_effect / 100 * 0.5)  # Training reduces recurrence
-        resolution_factor *= (1 - training_effect / 100 * 0.2)  # Training speeds resolution
-        
-        # Volume effect
+        # Calculate projections using a simplified multiplicative model.
+        # Each parameter produces a factor (1.0 = no change, <1 = improvement).
+        # Factors are multiplied together for compounding effects.
+
+        # Staffing: each additional engineer improves resolution by 8%
+        # and recurrence by 5% (diminishing returns not modeled)
+        resolution_factor = 1 - (engineer_change * 0.08)
+        recurrence_factor = 1 - (engineer_change * 0.05)
+
+        # Training: reduces recurrence (half of training %) and speeds
+        # resolution (20% of training %). Multiplicative with staffing.
+        recurrence_factor *= (1 - training_effect / 100 * 0.5)
+        resolution_factor *= (1 - training_effect / 100 * 0.2)
+
+        # Volume: directly scales cost and friction (80% passthrough for friction
+        # since some friction is fixed overhead)
         cost_factor = 1 + (volume_change / 100)
         friction_factor = 1 + (volume_change / 100 * 0.8)
-        
-        # Process effect
+
+        # Process: directly reduces resolution time and friction (70% passthrough
+        # for friction since not all friction is process-related)
         resolution_factor *= (1 - process_improvement / 100)
         friction_factor *= (1 - process_improvement / 100 * 0.7)
         
@@ -4644,11 +5151,13 @@ def render_whatif_simulator(df):
     st.markdown("---")
     st.markdown("#### 💰 Return on Investment")
     
-    # Costs of changes (derived from price_catalog hourly rate)
+    # Investment estimation derived from price_catalog hourly rate.
+    # Uses industry-standard assumptions for cost modeling.
     hourly_rate = get_benchmark_costs()['hourly_rate']
-    annual_salary = hourly_rate * 2000  # 2000 work hours per year
-    engineer_cost = max(0, engineer_change) * annual_salary
-    training_cost_per_engineer = hourly_rate * 25  # ~25 hours of training per level
+    annual_salary = hourly_rate * 2000  # 2000 work hours/year = fully loaded salary
+    engineer_cost = max(0, engineer_change) * annual_salary  # Only count new hires (not reductions)
+    training_cost_per_engineer = hourly_rate * 25  # ~25 hours of training per effectiveness level
+    # Total training cost = level x per-engineer cost x number of engineers
     training_cost = training_effect * training_cost_per_engineer * len(df['Engineer'].unique()) if 'Engineer' in df.columns else training_effect * (training_cost_per_engineer * 10)
     process_cost = process_improvement * (hourly_rate * 100)  # ~100 hours of process work per level
     
@@ -4683,7 +5192,19 @@ def render_whatif_simulator(df):
 # ============================================================================
 
 def render_drift_page(df):
-    """Render the Category Drift Detection page."""
+    """Render the Category Drift Detection page.
+
+    Splits the data into baseline (first 60%) and current (last 40%)
+    by date, then compares AI_Category distributions. Displays a grouped
+    bar chart (baseline vs current) and highlights emerging categories
+    (>2% increase) and declining categories (>2% decrease).
+
+    Requires a date column (Issue_Date, tickets_data_issue_datetime, etc.)
+    and at least 10 data points. Shows a warning if dates are unavailable.
+
+    Args:
+        df: Processed DataFrame with AI_Category and a date column.
+    """
     try:
         render_spectacular_header("Category Drift Detection", "Analyze how escalation patterns are changing over time", "📊")
 
@@ -4732,11 +5253,14 @@ def render_drift_page(df):
 
         st.success(f"✓ Found {len(df_temp)} tickets with valid dates for drift analysis")
 
+        # Split data 60/40 by chronological order for drift comparison.
+        # Baseline = first 60% of data (historical norm).
+        # Current  = last 40% of data (recent behavior to check for drift).
         split_idx = int(len(df_temp) * 0.6)
         baseline_df = df_temp.iloc[:split_idx]
         current_df = df_temp.iloc[split_idx:]
 
-        # Calculate distributions
+        # Normalize category counts to percentages for fair comparison
         baseline_dist = baseline_df['AI_Category'].value_counts(normalize=True)
         current_dist = current_df['AI_Category'].value_counts(normalize=True)
 
@@ -4829,7 +5353,20 @@ def render_drift_page(df):
 # ============================================================================
 
 def render_alerts_page(df):
-    """Render the Smart Alerts page."""
+    """Render the Smart Alerts page with metric thresholds and timeline.
+
+    Monitors 3 metrics against dynamic thresholds:
+    - Daily Escalations: warning at 75th percentile, critical at 90th
+    - Daily Friction: warning at 75th percentile, critical at 90th
+    - Recurrence Risk: warning at 25%, critical at 40%
+
+    Displays status badges (NORMAL/WARNING/CRITICAL) for each metric and
+    an interactive timeline chart with colored threshold zones (green/yellow/red).
+
+    Args:
+        df: Processed DataFrame with AI_Category, Strategic_Friction_Score,
+            AI_Recurrence_Risk, and a date column.
+    """
     render_spectacular_header("Smart Alert Thresholds", "Real-time monitoring of key metrics against dynamic thresholds", "⚠️")
 
     # Find date column
@@ -4963,7 +5500,24 @@ def render_alerts_page(df):
 # ============================================================================
 
 def generate_executive_pdf_report(df):
-    """Generate comprehensive PDF reference guide with scoring methodology, assumptions, and usage guide."""
+    """Generate a comprehensive PDF reference guide (reportlab) with TOC.
+
+    Sections:
+    1. Quick Start Guide: Tab-by-tab usage instructions
+    2. Scoring Methodology: Strategic Friction Score formula/weights,
+       Learning Effectiveness Score, Similarity Score, AI Recurrence Risk
+    3. Financial Analysis: Reads actual pricing from price_catalog.xlsx
+       (Category Costs, Severity Multipliers, Origin Premiums, formula)
+    4. Data Overview: Summary metrics, record type pie chart, friction bar chart
+    5. Key Metrics Reference: threshold table (good/warning/critical)
+    6. Glossary: Term definitions
+
+    Args:
+        df: Processed DataFrame for data overview metrics.
+
+    Returns:
+        bytes: PDF content as BytesIO bytes, or None if reportlab unavailable.
+    """
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter
@@ -5344,7 +5898,19 @@ def generate_executive_pdf_report(df):
 
 
 def generate_html_report(df):
-    """Generate an HTML report that can be converted to PDF."""
+    """Generate a static HTML executive report suitable for PDF conversion.
+
+    Includes KPI cards, metric benchmarks, strategic recommendations, and
+    a Pareto-style category friction table. Styled with Inter font and
+    print-friendly CSS media queries.
+
+    Args:
+        df: Processed DataFrame with Financial_Impact, Revenue_At_Risk,
+            Predicted_Resolution_Days, AI_Recurrence_Risk, AI_Category.
+
+    Returns:
+        str: Complete HTML document as a string.
+    """
     total_cost = df['Financial_Impact'].sum() if 'Financial_Impact' in df.columns else len(df) * get_benchmark_costs()['avg_per_ticket']
     revenue_risk = df['Revenue_At_Risk'].sum() if 'Revenue_At_Risk' in df.columns else total_cost * 0.20
     avg_resolution = df['Predicted_Resolution_Days'].mean()
@@ -5498,7 +6064,22 @@ def generate_html_report(df):
 
 
 def generate_magnificent_html_report(df):
-    """Generate a magnificent HTML report with interactive Plotly charts."""
+    """Generate an interactive HTML report with embedded Plotly charts.
+
+    Dark-themed executive report with:
+    - KPI cards (Financial Impact, Revenue at Risk, Critical Issues, Avg Resolution)
+    - Strategic Recommendations (P1/P2/P3 cards with confidence scores)
+    - Embedded interactive charts: Category Sunburst, Severity Distribution,
+      Friction by Category, Engineer Performance, Escalation Timeline
+    - Plotly.js loaded from CDN for interactivity
+    - Print-friendly CSS overrides
+
+    Args:
+        df: Processed DataFrame with standard columns.
+
+    Returns:
+        str: Complete HTML document with embedded Plotly charts.
+    """
     import plotly.io as pio
 
     # Calculate metrics
@@ -5848,9 +6429,26 @@ def generate_magnificent_html_report(df):
 # ============================================================================
 
 def render_excel_dashboard(df):
-    """
-    Spectacular interactive dashboard with visual impact.
-    Features large sunburst charts, animated gauges, and interactive elements.
+    """Render the main Executive Dashboard page (primary overview).
+
+    A data-dense dashboard inspired by executive Excel reports, featuring:
+    - KPI cards row: Total Cost, Total Records, Critical Issues, Avg Cost
+    - Category friction horizontal bar chart
+    - Trend timeline (7-day moving average)
+    - Category/Sub-Category treemap (advanced drill-down)
+    - Severity donut chart
+    - Quarterly escalation bar chart
+    - Origin drill-down bar chart
+    - Sankey flow diagram: Category -> Severity -> Origin flow
+    - Strategic recommendations from generate_strategic_recommendations()
+
+    The Sankey diagram constructs flows by iterating all unique combinations
+    of (Category, Severity, Origin) and summing ticket counts for each link.
+
+    Args:
+        df: Processed DataFrame with AI_Category, Financial_Impact,
+            tickets_data_severity, tickets_data_escalation_origin,
+            tickets_data_issue_datetime, AI_Sub_Category.
     """
 
     # Calculate metrics
@@ -6415,7 +7013,11 @@ def render_excel_dashboard(df):
     </div>
     """, unsafe_allow_html=True)
 
-    # Create Sankey data - check for multiple severity column names
+    # Sankey Flow Diagram: Category -> Severity -> Resolution Speed
+    # Constructs a 3-level flow showing how tickets move from category
+    # classification through severity to resolution speed buckets.
+    # Node indices: [0..N_cat-1] = categories, [N_cat..N_cat+N_sev-1] = severities,
+    # [N_cat+N_sev..end] = resolution speeds.
     sev_col_sankey = None
     for col in ['tickets_data_severity', 'Severity_Norm', 'Severity', 'severity']:
         if col in df.columns:
@@ -6423,7 +7025,7 @@ def render_excel_dashboard(df):
             break
 
     if 'AI_Category' in df.columns and sev_col_sankey:
-        # Derive Resolution Speed from Predicted_Resolution_Days
+        # Derive Resolution Speed buckets from Predicted_Resolution_Days
         df_sankey = df.copy()
         if 'Predicted_Resolution_Days' in df_sankey.columns:
             # Create resolution speed categories
@@ -6611,7 +7213,26 @@ def render_excel_dashboard(df):
 # ============================================================================
 
 def render_deep_analysis(df):
-    """Render consolidated Deep Analysis page (Analytics + Root Cause + Advanced Insights)."""
+    """Render the consolidated Deep Analysis page with 6 analysis tabs.
+
+    Tabs:
+    1. Categories: Cross-category sub-category performance (top/bottom),
+       category selector with sunburst, financial drilldown, comparison table
+    2. Engineers: Performance matrix (friction vs volume quadrant), engineer
+       comparison and workload distribution
+    3. Root Cause: Pareto analysis, driver tree, root cause quantification,
+       risk heatmap (identical content to render_root_cause but embedded in tabs)
+    4. Patterns & SLA: SLA funnel, aging analysis, time heatmap,
+       recurrence patterns from advanced_plotly_charts module
+    5. Similarity: All similarity search charts if data available
+       (count distribution, consistency, scores, effectiveness heatmap)
+    6. Lessons Learned: 6-pillar scorecard radar, learning grades,
+       completion rates, recurrence vs lessons scatter, at-risk categories
+
+    Args:
+        df: Processed DataFrame with all standard columns including
+            AI_Sub_Category for drill-downs and similarity columns.
+    """
     render_spectacular_header("Deep Analysis", "Comprehensive drill-down for detailed insights", "📈")
 
     # Main tabs - flattened structure
@@ -7519,7 +8140,20 @@ def render_deep_analysis(df):
 # ============================================================================
 
 def render_benchmarking_monitoring(df):
-    """Render consolidated Benchmarking, Alerts, and Drift Detection page."""
+    """Render the Benchmarking and Monitoring page with 3 tabs.
+
+    Tabs:
+    1. Industry Benchmarks: 6 metric cards comparing current performance
+       against best-in-class and industry average targets. Color-coded
+       status indicators (green/yellow/red).
+    2. Alert Thresholds: Delegates to render_alerts_page() for metric
+       monitoring with warning/critical zones.
+    3. Drift Detection: Delegates to render_drift_page() for baseline vs
+       current category distribution comparison.
+
+    Args:
+        df: Processed DataFrame with standard metric columns.
+    """
     render_spectacular_header("Benchmarking & Monitoring", "Performance tracking against standards and thresholds", "🏆")
 
     tabs = st.tabs(["🏆 Industry Benchmarks", "⚠️ Alert Thresholds", "📊 Drift Detection"])
@@ -7725,7 +8359,22 @@ def render_benchmarking_monitoring(df):
 # ============================================================================
 
 def render_planning_actions(df):
-    """Render consolidated Planning & Actions page (What-If + Action Tracker)."""
+    """Render the Planning and Actions page with 3 tabs.
+
+    Tabs:
+    1. What-If Simulator: Extended version with lesson-specific parameters
+       (lesson coverage, similarity utilization) in addition to standard
+       staffing/training/volume/process sliders. Projects impact on
+       recurrence, resolution, friction, and cost.
+    2. Action Tracker: Delegates to render_action_tracker() for systemic
+       issue tracking and initiative CRUD.
+    3. Learning-Based Actions: AI recommendations from
+       generate_ai_lesson_recommendations(), learning grades table, and
+       at-risk category identification for targeted interventions.
+
+    Args:
+        df: Processed DataFrame with standard columns plus lesson columns.
+    """
     render_spectacular_header("Planning & Actions", "Scenario modeling and initiative tracking", "🎯")
 
     tabs = st.tabs(["🔮 What-If Simulator", "📋 Action Tracker", "📚 Learning-Based Actions"])
@@ -8073,7 +8722,27 @@ def render_planning_actions(df):
 # ============================================================================
 
 def main():
-    """Main application entry point."""
+    """Main application entry point for standalone dashboard mode.
+
+    Orchestrates the entire dashboard experience:
+    1. Sidebar: Navigation radio (6 pages), data loading via load_data(),
+       Excel-style filters (category, year, severity, date range) when on
+       Executive Dashboard page
+    2. Data loading: Reads Strategic_Report.xlsx, applies process_dataframe()
+       which recalculates Financial_Impact from price_catalog.xlsx
+    3. Export section: ZIP bundle, Excel, PDF, interactive HTML, and CSV
+       download buttons
+    4. Page routing: Dispatches to the appropriate render_* function based
+       on sidebar radio selection
+
+    Pages:
+    - Executive Dashboard -> render_excel_dashboard()
+    - Deep Analysis -> render_deep_analysis()
+    - Financial Intelligence -> render_financial_analysis()
+    - Benchmarking & Monitoring -> render_benchmarking_monitoring()
+    - Planning & Actions -> render_planning_actions()
+    - Presentation Mode -> render_presentation_mode()
+    """
     
     # Sidebar
     with st.sidebar:
@@ -8416,7 +9085,21 @@ def main():
 # ============================================================================
 
 def render_advanced_insights(df):
-    """Render the Advanced Insights page with high-value visualizations."""
+    """Render the Advanced Insights page with 4 specialized analysis tabs.
+
+    Tabs:
+    1. SLA & Aging: SLA compliance funnel, ticket aging burndown,
+       time-of-day heatmap for peak escalation identification
+    2. Engineer Efficiency: Quadrant chart (friction vs volume),
+       cost waterfall by engineer, health gauge
+    3. Cost Analysis: Cost waterfall breakdown, recurrence pattern analysis
+    4. Patterns: Resolution consistency analysis
+
+    All charts are imported from advanced_plotly_charts module.
+
+    Args:
+        df: Processed DataFrame with standard columns.
+    """
     render_spectacular_header("Advanced Insights", "Strategic visualizations for executive decision-making", "🚀")
     
     # Create tabs for different insight categories
@@ -8563,7 +9246,16 @@ def render_advanced_insights(df):
 
 
 def render_dashboard(df):
-    """Render the main dashboard page."""
+    """Render a legacy/alternative dashboard page (used when imported as module).
+
+    Displays 4 KPI cards (Total Records broken down by type, Critical Issues,
+    Total Financial Impact, Avg Resolution Time), followed by overview charts.
+    This is a simpler alternative to render_excel_dashboard().
+
+    Args:
+        df: Processed DataFrame with tickets_data_type, tickets_data_severity,
+            Financial_Impact, Predicted_Resolution_Days.
+    """
     render_spectacular_header("Dashboard", "Real-time escalation intelligence at a glance", "📊")
     
     # KPI Row
@@ -8636,7 +9328,24 @@ def render_dashboard(df):
 
 
 def render_analytics(df):
-    """Render the analytics page with detailed charts."""
+    """Render a legacy/alternative analytics page with 6 tabs.
+
+    Tabs:
+    1. Categories: Sunburst overview, sub-category drill-down, treemap,
+       detailed comparison table (all from advanced_plotly_charts)
+    2. Engineers: Performance bar chart with insights
+    3. Distributions: Resolution time histogram, recurrence gauge
+    4. Financial: Category cost comparison, financial drilldown charts
+    5. Similarity: Full similarity search analysis (if data available)
+    6. Lessons Learned: Comprehensive 6-pillar scorecard with radar charts,
+       learning grades, completion rates, recurrence correlation, heatmap,
+       at-risk categories, and AI recommendations
+
+    This is a more detailed alternative to render_deep_analysis().
+
+    Args:
+        df: Processed DataFrame with all standard columns.
+    """
     render_spectacular_header("Analytics", "Deep dive into escalation patterns and performance", "📈")
 
     tabs = st.tabs(["🎯 Categories", "👥 Engineers", "📊 Distributions", "💰 Financial", "🔗 Similarity", "📚 Lessons Learned"])
