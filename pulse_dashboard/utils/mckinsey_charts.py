@@ -964,81 +964,150 @@ def chart_sparklines(df: pd.DataFrame) -> go.Figure:
 # 2x2 IMPACT-EFFORT MATRIX
 # ============================================================================
 
+# Shared quadrant color mapping used by the scatter and the action table.
+_QUAD_COLORS = {
+    'Quick Wins': '#22c55e',       # Green - do these first
+    'Major Projects': '#f59e0b',   # Amber - needs planning
+    'Fill-ins': '#0077B6',         # Blue - nice to have
+    'Deprioritize': '#6D6E71',     # Gray - defer
+}
+
+
+def _classify_quadrant(impact, effort, impact_mid, effort_mid):
+    """Classify a project into one of four prioritization quadrants."""
+    hi = impact >= impact_mid
+    he = effort >= effort_mid
+    if hi and not he:
+        return 'Quick Wins'
+    elif hi and he:
+        return 'Major Projects'
+    elif not hi and not he:
+        return 'Fill-ins'
+    else:
+        return 'Deprioritize'
+
+
+def _is_matrix_clustered(df: pd.DataFrame, target: float) -> bool:
+    """Return True when the impact-effort data is too clustered for a useful
+    scatter plot, signalling that the ranked action table should be shown.
+
+    Triggers on ANY of:
+    1. Fewer than 4 distinct (Effort, Impact) coordinate pairs
+    2. More than 75 % of projects land in a single quadrant
+    3. Both axes have range <= 1
+    """
+    impact = (target - df['Total Score']).clip(lower=0)
+    effort = df['Effort']
+
+    # Heuristic 1: distinct coordinate pairs
+    coords = set(zip(effort, impact))
+    if len(coords) < 4:
+        return True
+
+    # Heuristic 2: quadrant dominance
+    impact_mid = max(impact.median(), 0.5)
+    effort_mid = max(effort.median(), 0.5)
+    quad_counts = [
+        ((impact >= impact_mid) & (effort < effort_mid)).sum(),
+        ((impact >= impact_mid) & (effort >= effort_mid)).sum(),
+        ((impact < impact_mid) & (effort < effort_mid)).sum(),
+        ((impact < impact_mid) & (effort >= effort_mid)).sum(),
+    ]
+    if max(quad_counts) / len(df) > 0.75:
+        return True
+
+    # Heuristic 3: axis range collapse
+    if (impact.max() - impact.min()) <= 1 and (effort.max() - effort.min()) <= 1:
+        return True
+
+    return False
+
+
 def chart_impact_effort_matrix(df: pd.DataFrame, target: float) -> go.Figure:
-    """2x2 quadrant scatter plot: Impact (gap to target) vs Effort (number of
-    weak dimensions).
-
-    This is a classic McKinsey prioritization matrix.  Projects are classified
-    into four quadrants:
-
-    * **Quick Wins** (top-left): high impact, low effort -- fix these first.
-    * **Major Projects** (top-right): high impact, high effort -- plan carefully.
-    * **Fill-ins** (bottom-left): low impact, low effort -- tackle when convenient.
-    * **Deprioritize** (bottom-right): low impact, high effort -- defer.
-
-    The quadrant boundaries are drawn at the median Impact and median Effort
-    values (with a floor of 0.5 to avoid degenerate splits).
+    """Enhanced 2x2 quadrant scatter with jitter, bubble sizing, project
+    labels, and quadrant corner annotations.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Must contain: ``Total Score``, ``Effort`` (pre-computed column: count
-        of dimensions scoring < 2), ``Project``, ``Region``.
+        Must contain ``Total Score``, ``Effort``, ``Project``, ``Region``.
     target : float
-        The target score used to compute the impact gap.
+        Target score for impact-gap computation.
 
     Returns
     -------
     go.Figure
-        A 500px scatter plot colored by quadrant assignment.
     """
     plot_df = df.copy()
-    # Impact = how far below target the project is (clamped to >= 0).
     plot_df['Impact'] = (target - plot_df['Total Score']).clip(lower=0)
 
-    # Compute quadrant boundary thresholds using the median.
-    # Floor of 0.5 prevents all points collapsing into one quadrant when
-    # median is 0 (e.g. when most projects are above target).
-    impact_mid = plot_df['Impact'].median() if len(plot_df) > 0 else 1
-    effort_mid = plot_df['Effort'].median() if len(plot_df) > 0 else 1
-    impact_mid = max(impact_mid, 0.5)
-    effort_mid = max(effort_mid, 0.5)
+    # Quadrant boundaries (median with 0.5 floor).
+    impact_mid = max(plot_df['Impact'].median(), 0.5) if len(plot_df) > 0 else 1
+    effort_mid = max(plot_df['Effort'].median(), 0.5) if len(plot_df) > 0 else 1
 
-    def quadrant(row):
-        """Classify a single project into one of four quadrants."""
-        hi = row['Impact'] >= impact_mid    # High impact?
-        he = row['Effort'] >= effort_mid    # High effort?
-        if hi and not he:
-            return 'Quick Wins'         # High impact, low effort
-        elif hi and he:
-            return 'Major Projects'     # High impact, high effort
-        elif not hi and not he:
-            return 'Fill-ins'           # Low impact, low effort
-        else:
-            return 'Deprioritize'       # Low impact, high effort
+    plot_df['Quadrant'] = plot_df.apply(
+        lambda r: _classify_quadrant(r['Impact'], r['Effort'], impact_mid, effort_mid),
+        axis=1,
+    )
 
-    plot_df['Quadrant'] = plot_df.apply(quadrant, axis=1)
+    # Worst dimension per project (for hover info).
+    plot_df['Worst_Dim'] = plot_df[SCORE_DIMENSIONS].idxmin(axis=1)
+    plot_df['Worst_Score'] = plot_df[SCORE_DIMENSIONS].min(axis=1).astype(int)
 
-    # Distinct color per quadrant for clear visual separation.
-    quad_colors = {
-        'Quick Wins': '#22c55e',       # Green - do these first
-        'Major Projects': '#f59e0b',   # Amber - needs planning
-        'Fill-ins': '#0077B6',         # Blue - nice to have
-        'Deprioritize': '#6D6E71',     # Gray - defer
-    }
+    # Overlap count for bubble sizing.
+    plot_df['_overlap'] = plot_df.groupby(['Effort', 'Impact'])['Project'].transform('count')
+    plot_df['_size'] = 10 + (plot_df['_overlap'] - 1) * 5
+
+    # Deterministic jitter so dots at the same integer coordinate separate.
+    rng = np.random.RandomState(42)
+    n = len(plot_df)
+    plot_df['_ej'] = (plot_df['Effort'] + rng.uniform(-0.15, 0.15, n)).clip(lower=0)
+    plot_df['_ij'] = (plot_df['Impact'] + rng.uniform(-0.25, 0.25, n)).clip(lower=0)
 
     fig = px.scatter(
         plot_df,
-        x='Effort', y='Impact',
+        x='_ej', y='_ij',
         color='Quadrant',
-        color_discrete_map=quad_colors,
-        hover_data=['Project', 'Region', 'Total Score'],
+        color_discrete_map=_QUAD_COLORS,
+        size='_size',
+        hover_data={
+            'Project': True, 'Region': True, 'Total Score': True,
+            'Effort': True, 'Impact': ':.0f',
+            'Worst_Dim': True, 'Worst_Score': True,
+            '_overlap': True,
+            '_ej': False, '_ij': False, '_size': False,
+        },
+        labels={'_overlap': 'Projects at position'},
         title='Impact-Effort Prioritization Matrix',
     )
 
-    # Draw dotted quadrant divider lines at the median thresholds.
+    # Project name labels for small datasets.
+    if len(plot_df) <= 20:
+        for trace in fig.data:
+            trace.update(
+                textposition='top center',
+                textfont=dict(size=9, color='#94a3b8'),
+                mode='markers+text',
+            )
+
+    # Quadrant divider lines.
     fig.add_hline(y=impact_mid, line_dash='dot', line_color='#94a3b8', line_width=1)
     fig.add_vline(x=effort_mid, line_dash='dot', line_color='#94a3b8', line_width=1)
+
+    # Quadrant corner labels.
+    for label, x, y, color in [
+        ('QUICK WINS',      0.02, 0.98, _QUAD_COLORS['Quick Wins']),
+        ('MAJOR PROJECTS',  0.98, 0.98, _QUAD_COLORS['Major Projects']),
+        ('FILL-INS',        0.02, 0.02, _QUAD_COLORS['Fill-ins']),
+        ('DEPRIORITIZE',    0.98, 0.02, _QUAD_COLORS['Deprioritize']),
+    ]:
+        fig.add_annotation(
+            text=label, xref='paper', yref='paper', x=x, y=y,
+            xanchor='left' if x < 0.5 else 'right',
+            yanchor='top' if y > 0.5 else 'bottom',
+            showarrow=False,
+            font=dict(size=11, color=color), opacity=0.5,
+        )
 
     fig.update_layout(
         **get_plotly_theme(),
@@ -1047,6 +1116,83 @@ def chart_impact_effort_matrix(df: pd.DataFrame, target: float) -> go.Figure:
         height=500,
     )
     return fig
+
+
+def prioritization_action_table(df: pd.DataFrame, target: float) -> str:
+    """Ranked action table for when the scatter is too clustered.
+
+    Sorted easiest-to-fix-first: Effort ascending, then Impact descending.
+    Returns an HTML string for ``st.markdown(..., unsafe_allow_html=True)``.
+    """
+    plot_df = df.copy()
+    plot_df['Impact'] = (target - plot_df['Total Score']).clip(lower=0)
+
+    impact_mid = max(plot_df['Impact'].median(), 0.5)
+    effort_mid = max(plot_df['Effort'].median(), 0.5)
+    plot_df['Quadrant'] = plot_df.apply(
+        lambda r: _classify_quadrant(r['Impact'], r['Effort'], impact_mid, effort_mid),
+        axis=1,
+    )
+
+    plot_df['Worst_Dim'] = plot_df[SCORE_DIMENSIONS].idxmin(axis=1)
+    plot_df['Worst_Score'] = plot_df[SCORE_DIMENSIONS].min(axis=1).astype(int)
+
+    # Only projects below target.
+    plot_df = plot_df[plot_df['Impact'] > 0].copy()
+
+    if plot_df.empty:
+        return (
+            '<div class="glass-card" style="padding:20px; text-align:center;">'
+            '<p style="color:#22c55e; font-size:1.1rem; font-weight:600;">'
+            'All projects are on or above target — no action needed.</p></div>'
+        )
+
+    plot_df = plot_df.sort_values(['Effort', 'Impact'], ascending=[True, False])
+
+    rows = []
+    for rank, (_, row) in enumerate(plot_df.iterrows(), 1):
+        qcolor = _QUAD_COLORS.get(row['Quadrant'], '#6D6E71')
+        dim_color = _dim_color(row['Worst_Score'])
+        pulse_color = get_pulse_color(row['Total Score'])
+        rows.append(
+            f'<tr>'
+            f'<td style="color:#64748b; text-align:center;">{rank}</td>'
+            f'<td style="font-weight:600; color:#e2e8f0;">{row["Project"]}</td>'
+            f'<td style="color:#94a3b8;">{row["Region"]} / {row["Area"]}</td>'
+            f'<td style="text-align:center;">'
+            f'  <span style="color:{pulse_color}; font-weight:600;">{row["Total Score"]}</span></td>'
+            f'<td style="text-align:center; color:#ef4444; font-weight:600;">'
+            f'  -{int(row["Impact"])}</td>'
+            f'<td style="text-align:center; font-weight:600;">{int(row["Effort"])}</td>'
+            f'<td>'
+            f'  <span style="display:inline-block; width:8px; height:8px;'
+            f'   border-radius:50%; background:{dim_color}; margin-right:6px;'
+            f'   vertical-align:middle;"></span>'
+            f'  {row["Worst_Dim"]} ({row["Worst_Score"]}/3)</td>'
+            f'<td>'
+            f'  <span style="display:inline-block; width:8px; height:8px;'
+            f'   border-radius:50%; background:{qcolor}; margin-right:6px;'
+            f'   vertical-align:middle;"></span>'
+            f'  {row["Quadrant"]}</td>'
+            f'</tr>'
+        )
+
+    return (
+        '<div class="matrix-container" style="max-height:600px; overflow-y:auto;">'
+        '<table class="matrix-table">'
+        '<thead><tr>'
+        '<th style="text-align:center;">#</th>'
+        '<th style="text-align:left;">Project</th>'
+        '<th style="text-align:left;">Region / Area</th>'
+        '<th>Score</th>'
+        '<th>Gap</th>'
+        '<th>Effort</th>'
+        '<th style="text-align:left;">Worst Dimension</th>'
+        '<th style="text-align:left;">Quadrant</th>'
+        '</tr></thead><tbody>'
+        + ''.join(rows)
+        + '</tbody></table></div>'
+    )
 
 
 # ============================================================================

@@ -74,7 +74,10 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 from utils.sidebar import render_sidebar
 from utils.styles import inject_css, SCORE_DIMENSIONS
-from utils.mckinsey_charts import chart_impact_effort_matrix, chart_pareto
+from utils.mckinsey_charts import (
+    chart_impact_effort_matrix, chart_pareto,
+    prioritization_action_table, _is_matrix_clustered,
+)
 
 # Inject the global dark-theme CSS into the Streamlit page
 inject_css()
@@ -96,19 +99,32 @@ target = st.session_state.get('pulse_target', 17.0)
 st.markdown('<p class="main-header">Prioritization</p>', unsafe_allow_html=True)
 
 # ============================================================================
-# 2x2 IMPACT-EFFORT MATRIX
+# 2x2 IMPACT-EFFORT MATRIX (with auto-detection)
 #
-# A scatter plot where each dot is a project:
-#   X-axis = Effort (number of dimensions needing improvement)
-#   Y-axis = Impact (gap between target and current Total Score)
-#
-# Quadrant lines are drawn at the median of each axis.  Projects in the
-# upper-left quadrant (high impact, low effort) are the "quick wins".
-# The chart_impact_effort_matrix function handles the quadrant labels,
-# coloring, and hover tooltips.
+# When data is well-spread: enhanced scatter with jitter, bubble sizing,
+# project labels, and quadrant corner annotations.
+# When data is clustered: ranked action table sorted easiest-to-fix-first.
+# A manual toggle lets users switch between views.
 # ============================================================================
-fig = chart_impact_effort_matrix(filtered_df, target)
-st.plotly_chart(fig, use_container_width=True)
+is_clustered = _is_matrix_clustered(filtered_df, target)
+view_mode = st.radio(
+    'View', ['Auto', 'Matrix', 'Table'],
+    index=0, horizontal=True, key='prioritization_view_mode',
+    label_visibility='collapsed',
+)
+
+show_matrix = (
+    view_mode == 'Matrix'
+    or (view_mode == 'Auto' and not is_clustered)
+)
+
+if show_matrix:
+    fig = chart_impact_effort_matrix(filtered_df, target)
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.markdown('**Prioritized Action List**')
+    table_html = prioritization_action_table(filtered_df, target)
+    st.markdown(table_html, unsafe_allow_html=True)
 
 # ============================================================================
 # QUICK WINS PANEL
