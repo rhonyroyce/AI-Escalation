@@ -326,23 +326,23 @@ with col_chart:
     if metric == 'Total Score':
         # Use the 4-tier Pulse status color mapping (red/yellow/green/dark-green).
         colors = [get_pulse_color(v) for v in values]
-        x_range = [0, 24]  # Total Score axis runs 0-24
+        max_val = max(values) if values else 24
+        x_range = [0, max(max_val + 2, 24)]  # Slight pad, show full scale
     else:
         # For individual dimensions (0-3), use the dimension color function
         # which maps severity similarly but on a 0-3 scale.
         from utils.mckinsey_charts import _dim_color
         colors = [_dim_color(v) for v in values]
-        x_range = [0, 3.2]  # Slight padding beyond max of 3
+        max_val = max(values) if values else 3
+        x_range = [0, max(max_val + 0.5, 3.2)]  # Slight pad
 
     # Build text labels shown outside each bar, including score and percentile.
     texts = []
     for v, c, p in zip(values, counts, percentiles):
         if level == 'Project':
-            # Projects don't need a project count (it's always 1).
-            texts.append(f"{v:.1f}  (P{p:.0f})")
+            texts.append(f"{v:.1f} (P{p:.0f})")
         else:
-            # Areas/Regions show how many projects contribute to the average.
-            texts.append(f"{v:.1f}  ({c} proj, P{p:.0f})")
+            texts.append(f"{v:.1f} ({c} proj, P{p:.0f})")
 
     # Build the Plotly horizontal bar chart.
     # Note: lists are reversed ([::-1]) because Plotly renders horizontal bars
@@ -353,33 +353,43 @@ with col_chart:
         orientation='h',
         marker_color=colors[::-1],
         text=texts[::-1],
-        textposition='outside',
-        textfont=dict(color='#cbd5e1', size=10),
+        textposition='inside',
+        insidetextanchor='end',
+        textfont=dict(color='#0f172a', size=11, family='Arial Black'),
+        cliponaxis=False,
     ))
     # Apply the shared McKinsey dark-theme styling to the figure.
     _apply_theme(fig)
-    # Dynamic height: at least 250px, growing by 32px per entity.
+    # Dynamic height: at least 250px, growing by 38px per entity.
     fig.update_layout(
-        height=max(250, len(entities) * 32 + 80),
-        margin=dict(l=140, r=100, t=10, b=30),
+        height=max(280, len(entities) * 38 + 100),
+        margin=dict(l=10, r=10, t=40, b=50),
+        yaxis=dict(automargin=True),
     )
     fig.update_xaxes(range=x_range, title_text=metric)
 
-    # Add a dashed vertical line at the portfolio average for reference.
+    # Add reference lines with a built-in legend annotation inside the chart.
     portfolio_avg = analysis_df[metric].mean()
     fig.add_vline(
         x=portfolio_avg, line_dash='dash', line_color='#60a5fa', line_width=1,
-        annotation_text=f'Avg ({portfolio_avg:.1f})',
-        annotation_font_color='#94a3b8',
-        annotation_position='top',
     )
-    # For Total Score, also add a dotted target line.
     if metric == 'Total Score':
         fig.add_vline(
             x=target, line_dash='dot', line_color='white', line_width=1,
-            annotation_text=f'Target ({target:.0f})',
-            annotation_font_color='#94a3b8',
         )
+        legend_str = f'┄ Avg ({portfolio_avg:.1f})    ┈ Target ({target:.0f})'
+    else:
+        legend_str = f'┄ Avg ({portfolio_avg:.2f})'
+
+    # Place legend as an annotation just below the x-axis title.
+    fig.add_annotation(
+        text=legend_str,
+        xref='paper', yref='paper',
+        x=0.5, y=-0.18,
+        showarrow=False,
+        font=dict(size=10, color='#94a3b8'),
+    )
+    fig.update_layout(margin=dict(l=10, r=10, t=40, b=70))
 
     st.plotly_chart(fig, use_container_width=True)
 
