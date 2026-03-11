@@ -1192,6 +1192,43 @@ URGENT: <urgent issue>"""
     print()
 
 
+def write_pipeline_metadata():
+    """Write pipeline metadata JSON for the dashboard freshness badge."""
+    import json
+    cache_dir = Path(__file__).parent / '.cache'
+    cache_dir.mkdir(exist_ok=True)
+    metadata = {
+        'timestamp': time.strftime('%Y-%m-%dT%H:%M:%S'),
+        'pipeline_version': '1.0',
+        'stages_completed': [],
+    }
+    # Count rows from output files if they exist
+    try:
+        import openpyxl
+        pulse_path = Path(__file__).parent / 'ProjectPulse.xlsx'
+        if pulse_path.exists():
+            wb = openpyxl.load_workbook(pulse_path, read_only=True)
+            ws = wb['Project Pulse']
+            metadata['pulse_rows'] = ws.max_row - 1  # exclude header
+            wb.close()
+    except Exception:
+        pass
+    try:
+        import openpyxl
+        esc_path = Path(__file__).parent / 'Strategic_Report.xlsx'
+        if esc_path.exists():
+            wb = openpyxl.load_workbook(esc_path, read_only=True)
+            ws = wb['Scored Data']
+            metadata['escalation_rows'] = ws.max_row - 1
+            wb.close()
+    except Exception:
+        pass
+    meta_file = cache_dir / 'pipeline_metadata.json'
+    with open(meta_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    print(f"  \U0001f4cb Pipeline metadata saved to {meta_file}")
+
+
 def launch_dashboard(port: int = 8501, open_browser: bool = True):
     """
     Launch the unified Streamlit dashboard as a managed subprocess (Stage 3).
@@ -1415,6 +1452,9 @@ def main():
             # Pre-generate AI insights regardless of pipeline success, because
             # the Pulse insights come from ProjectPulse.xlsx (a separate file).
             pre_generate_ai_cache()
+
+            # Write pipeline metadata for the dashboard freshness badge
+            write_pipeline_metadata()
 
             if success:
                 print("\u2705 Launching dashboard to view results...")

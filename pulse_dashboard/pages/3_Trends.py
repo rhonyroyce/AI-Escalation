@@ -74,6 +74,7 @@ import numpy as np
 from utils.sidebar import render_sidebar
 from utils.styles import inject_css, get_pulse_color, SCORE_DIMENSIONS
 from utils.mckinsey_charts import chart_trend_forecast, chart_sparklines
+from utils.wow_utils import generate_anomaly_narrative
 
 # Inject the global dark-theme CSS into the Streamlit page
 inject_css()
@@ -110,6 +111,18 @@ st.markdown('<p class="main-header">Trends & Forecasting</p>', unsafe_allow_html
 # ============================================================================
 fig = chart_trend_forecast(df, target)
 st.plotly_chart(fig, use_container_width=True)
+
+# ============================================================================
+# ANOMALY NARRATION
+# If the WoW delta exceeds a threshold, show a rule-based narrative explaining
+# the sharp change: top project movers, dimension drivers, regional breakdown.
+# ============================================================================
+if selected_week and selected_year:
+    narrative = generate_anomaly_narrative(
+        df, selected_year, selected_week, SCORE_DIMENSIONS, threshold=0.8,
+    )
+    if narrative:
+        st.markdown(narrative, unsafe_allow_html=True)
 
 # ============================================================================
 # SPARKLINES BY REGION

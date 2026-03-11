@@ -72,6 +72,11 @@ from utils.styles import inject_css, SCORE_DIMENSIONS, STATUS_CONFIG
 # chart_project_trend: creates a Plotly line chart of Total Score over weeks
 #   for a single project, with a horizontal target line.
 from utils.mckinsey_charts import chart_radar, chart_project_trend
+from utils.annotations import (
+    get_project_annotations, add_annotation, ANNOTATION_TYPES,
+)
+from utils.escalation_linker import load_escalation_data, get_project_escalations
+from utils.export_utils import download_csv_button
 
 # ---------------------------------------------------------------------------
 # Page initialisation
@@ -124,6 +129,14 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
     height=400,  # Fixed height with internal scroll
+)
+
+# Export button for the filtered table
+download_csv_button(
+    filtered_df[available_cols].sort_values('Total Score'),
+    filename="project_details.csv",
+    label="Download Table CSV",
+    key="export_details_csv",
 )
 
 # ============================================================================
@@ -248,3 +261,97 @@ if selected_project:
             use_container_width=True,
             hide_index=True,
         )
+
+        # ================================================================
+        # ESCALATION INTELLIGENCE (Cross-Dashboard)
+        # Show linked escalation tickets for this project's area/PM.
+        # ================================================================
+        esc_df = load_escalation_data()
+        if esc_df is not None:
+            area = latest_row.get('Area', '')
+            pm = latest_row.get('PM Name', '')
+            esc_data = get_project_escalations(area, pm, esc_df)
+            if esc_data:
+                st.markdown("#### Escalation Intelligence")
+                e1, e2, e3, e4 = st.columns(4)
+                with e1:
+                    st.markdown(f"""
+                    <div class="kpi-container">
+                        <p class="kpi-value">{esc_data.get('ticket_count', 0)}</p>
+                        <p class="kpi-label">Linked Tickets</p>
+                    </div>""", unsafe_allow_html=True)
+                with e2:
+                    fi = esc_data.get('financial_impact', 0)
+                    st.markdown(f"""
+                    <div class="kpi-container warning">
+                        <p class="kpi-value">${fi:,.0f}</p>
+                        <p class="kpi-label">Financial Impact</p>
+                    </div>""", unsafe_allow_html=True)
+                with e3:
+                    rp = esc_data.get('recurrence_probability', 0)
+                    css = "critical" if rp > 0.5 else ""
+                    st.markdown(f"""
+                    <div class="kpi-container {css}">
+                        <p class="kpi-value">{rp:.0%}</p>
+                        <p class="kpi-label">Recurrence Risk</p>
+                    </div>""", unsafe_allow_html=True)
+                with e4:
+                    fs = esc_data.get('friction_score', 0)
+                    st.markdown(f"""
+                    <div class="kpi-container">
+                        <p class="kpi-value">{fs:.1f}</p>
+                        <p class="kpi-label">Friction Score</p>
+                    </div>""", unsafe_allow_html=True)
+
+                # Cross-dashboard navigation button
+                if st.button("View in Escalation AI Dashboard →", key="cross_nav_esc"):
+                    st.session_state['cross_nav_context'] = {
+                        'area': area, 'pm': pm, 'project': selected_project,
+                    }
+                    st.switch_page(
+                        str(Path(__file__).parent.parent.parent
+                            / "escalation_ai" / "dashboard" / "pages"
+                            / "1_Executive_Dashboard.py")
+                    )
+
+        # ================================================================
+        # ANNOTATIONS / NOTES
+        # ================================================================
+        st.markdown("#### Notes & Annotations")
+        sel_week = st.session_state.get('selected_week')
+        sel_year = st.session_state.get('selected_year')
+
+        # Display existing annotations
+        annots = get_project_annotations(selected_project)
+        if annots:
+            for a in annots[:10]:
+                type_badge = a.get('annotation_type', 'Note')
+                ts = a.get('timestamp', '')[:16].replace('T', ' ')
+                st.markdown(f"""
+                <div class="notes-box" style="margin-bottom:6px;">
+                    <span class="badge badge-info" style="font-size:0.7rem;">{type_badge}</span>
+                    <span style="color:#94a3b8; font-size:0.8rem; margin-left:8px;">
+                        {a.get('author','')} | W{a.get('week','')} | {ts}
+                    </span>
+                    <p style="color:#e2e8f0; margin:4px 0 0 0;">{a.get('text','')}</p>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.caption("No annotations yet.")
+
+        # Add new annotation
+        with st.expander("Add Note"):
+            annot_type = st.selectbox(
+                "Type", ANNOTATION_TYPES, key="annot_type",
+            )
+            annot_text = st.text_area("Note", key="annot_text", height=80)
+            if st.button("Save Note", key="save_annot"):
+                if annot_text.strip():
+                    add_annotation(
+                        project=selected_project,
+                        week=sel_week or 0,
+                        year=sel_year or 0,
+                        text=annot_text.strip(),
+                        annotation_type=annot_type,
+                    )
+                    st.rerun()

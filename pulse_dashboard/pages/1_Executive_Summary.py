@@ -67,6 +67,8 @@ from utils.mckinsey_charts import (
     chart_variance_bullet, chart_trend_forecast,
     chart_waterfall_decomposition, chart_pareto,
 )
+from utils.export_utils import download_csv_button, download_chart_png
+from utils.pdf_export import generate_executive_pdf
 
 # Inject the global dark-theme CSS into the Streamlit page
 inject_css()
@@ -416,3 +418,40 @@ if green_pct < green_pct_target:
 # Render the recommendations as a Streamlit dataframe (sortable, full-width)
 rec_df = pd.DataFrame(recommendations)
 st.dataframe(rec_df, use_container_width=True, hide_index=True)
+
+# ============================================================================
+# EXPORT BUTTONS
+# ============================================================================
+st.markdown("### Export")
+exp1, exp2, exp3 = st.columns(3)
+with exp1:
+    download_csv_button(rec_df, "recommendations.csv", "Download Recommendations CSV", key="exp_rec_csv")
+with exp2:
+    download_chart_png(fig_trend, "trend_forecast.png", "Download Trend Chart", key="exp_trend_png")
+with exp3:
+    try:
+        chart_bytes = None
+        try:
+            chart_bytes = fig_trend.to_image(format="png", width=800, height=300)
+        except Exception:
+            pass
+        pdf_bytes = generate_executive_pdf(
+            avg_pulse=avg_pulse, target=target, variance=variance,
+            green_pct=green_pct, red_count=red_count, total_entries=total_entries,
+            week=selected_week or 0, year=selected_year or 0,
+            worst_dim=worst_dim, worst_dim_score=worst_dim_score,
+            recommendations=recommendations,
+            scr={'situation': situation_text,
+                 'complications': '; '.join(complications),
+                 'resolution': '; '.join(resolutions)},
+            chart_image_bytes=chart_bytes,
+        )
+        st.download_button(
+            "Download Executive PDF",
+            data=pdf_bytes,
+            file_name=f"pulse_executive_W{selected_week}_{selected_year}.pdf",
+            mime="application/pdf",
+            key="exp_pdf",
+        )
+    except Exception as e:
+        st.caption(f"PDF export unavailable: {e}")

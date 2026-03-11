@@ -252,27 +252,42 @@ def chart_variance_bullet(avg_score: float, target: float, stretch: float) -> go
     ))
 
     # --- Target marker ---
-    # A vertical white line spanning the y-axis at the target score.
-    # Implemented as a two-point Scatter trace (line from y=-0.4 to y=0.4).
-    fig.add_trace(go.Scatter(
-        x=[target, target], y=[-0.4, 0.4],
-        mode='lines', line=dict(color='white', width=3),
-        name=f'Target ({target:.0f})',
-    ))
+    # Vertical white line at the target score using add_shape (avoids
+    # mixing categorical bar y-axis with numeric scatter y-values, which
+    # causes the bars to disappear in Plotly).
+    fig.add_shape(
+        type='line',
+        x0=target, x1=target, y0=0, y1=1,
+        xref='x', yref='paper',
+        line=dict(color='white', width=3),
+    )
+    fig.add_annotation(
+        x=target, y=1.08, xref='x', yref='paper',
+        text=f'Target ({target:.0f})',
+        showarrow=False, font=dict(color='white', size=11),
+        xanchor='center',
+    )
 
     # --- Stretch marker ---
-    # A dashed amber vertical line indicating the aspirational goal.
-    fig.add_trace(go.Scatter(
-        x=[stretch, stretch], y=[-0.3, 0.3],
-        mode='lines', line=dict(color='#f59e0b', width=2, dash='dash'),
-        name=f'Stretch ({stretch:.0f})',
-    ))
+    # Dashed amber vertical line at the stretch goal.
+    fig.add_shape(
+        type='line',
+        x0=stretch, x1=stretch, y0=0, y1=1,
+        xref='x', yref='paper',
+        line=dict(color='#f59e0b', width=2, dash='dash'),
+    )
+    fig.add_annotation(
+        x=stretch, y=1.08, xref='x', yref='paper',
+        text=f'Stretch ({stretch:.0f})',
+        showarrow=False, font=dict(color='#f59e0b', size=11),
+        xanchor='center',
+    )
 
     # Apply global dark theme, then override specific layout properties.
     _apply_theme(fig)
     fig.update_layout(
         title='Portfolio Pulse vs Target',
-        height=200,                      # Compact vertical footprint
+        height=320,                      # Taller to avoid scrolling
         barmode='overlay',               # Stack background + actual bar on same axis
         legend=dict(orientation='h', y=-0.3),  # Horizontal legend below chart
     )

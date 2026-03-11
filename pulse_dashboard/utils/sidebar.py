@@ -70,6 +70,10 @@ Returns None if no data has been loaded yet (the page should show an upload
 prompt or error message in that case).
 """
 
+import json
+from pathlib import Path
+from datetime import datetime
+
 import streamlit as st
 import pandas as pd
 
@@ -77,6 +81,41 @@ import pandas as pd
 # STATUS_ORDER: canonical ordering ['Red', 'Yellow', 'Green', 'Dark Green']
 # inject_css: injects the shared dark-theme CSS into the page
 from utils.styles import STATUS_CONFIG, STATUS_ORDER, inject_css
+
+
+def _render_freshness_badge() -> None:
+    """Show a 'Data as of' badge from pipeline metadata."""
+    meta_path = Path(__file__).parent.parent.parent / '.cache' / 'pipeline_metadata.json'
+    if not meta_path.exists():
+        return
+    try:
+        with open(meta_path) as f:
+            meta = json.load(f)
+        ts = datetime.fromisoformat(meta['timestamp'])
+        ago = datetime.now() - ts
+        if ago.total_seconds() < 3600:
+            age_str = f"{int(ago.total_seconds() / 60)}m ago"
+        elif ago.total_seconds() < 86400:
+            age_str = f"{int(ago.total_seconds() / 3600)}h ago"
+        else:
+            age_str = f"{int(ago.days)}d ago"
+        # Build the badge text
+        wk = st.session_state.get('selected_week', '?')
+        pulse_rows = meta.get('pulse_rows', '')
+        esc_rows = meta.get('escalation_rows', '')
+        detail = ""
+        if pulse_rows or esc_rows:
+            parts = []
+            if pulse_rows:
+                parts.append(f"Pulse: {pulse_rows} rows")
+            if esc_rows:
+                parts.append(f"Esc: {esc_rows} rows")
+            detail = " | ".join(parts)
+        st.caption(f"Data as of W{wk} | {age_str}")
+        if detail:
+            st.caption(f"{detail}")
+    except Exception:
+        pass
 
 
 def render_sidebar() -> pd.DataFrame | None:
@@ -117,6 +156,7 @@ def render_sidebar() -> pd.DataFrame | None:
     with st.sidebar:
         # Sidebar header -- consistent branding across all pages.
         st.markdown("### Pulse Dashboard")
+        _render_freshness_badge()
         st.markdown("---")
 
         # ── Year / Week Filter ───────────────────────────────────────────

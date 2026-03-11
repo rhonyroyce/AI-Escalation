@@ -85,6 +85,7 @@ from utils.pulse_insights import (
     check_ollama, ollama_generate, build_embeddings_index,
     semantic_search, CHAT_MODEL, EMBED_MODEL,
 )
+from utils.ai_parsers import parse_risk_assessment, render_risk_card_html, parse_action_items
 
 # ---------------------------------------------------------------------------
 # Page initialisation
@@ -411,7 +412,15 @@ RECOMMENDATION: <one sentence recommendation>"""
 
                 if response:
                     st.markdown("---")
-                    st.markdown(response)
+                    parsed = parse_risk_assessment(response)
+                    if parsed:
+                        st.markdown(
+                            render_risk_card_html(parsed, selected_project),
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        # Fallback: show raw text if parsing fails
+                        st.markdown(response, unsafe_allow_html=True)
                 else:
                     st.error("Risk assessment failed.")
 
@@ -528,7 +537,14 @@ If no clear actions can be extracted, respond "NO_ACTIONS"."""
 
             if response and "NO_ACTIONS" not in response:
                 st.markdown("---")
-                st.markdown(response)
+                items = parse_action_items(response)
+                if items:
+                    action_df = pd.DataFrame(items)
+                    action_df.columns = ['Action', 'Owner', 'Status']
+                    st.dataframe(action_df, use_container_width=True, hide_index=True)
+                else:
+                    # Fallback: show raw text if parsing fails
+                    st.markdown(response)
             elif response:
                 st.info("No clear action items could be extracted from the resolution plans.")
             else:

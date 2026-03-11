@@ -149,11 +149,10 @@ yw_pairs = (
 week_labels = [f"{int(y)}-W{int(w):02d}" for y, w in yw_pairs]
 week_options = ['All Weeks (Average)'] + week_labels
 
-# Default the selectbox to whatever week the sidebar has selected
-sidebar_year = st.session_state.get('selected_year')
-sidebar_week = st.session_state.get('selected_week')
-sidebar_label = f"{int(sidebar_year)}-W{int(sidebar_week):02d}" if sidebar_year and sidebar_week else None
-default_idx = (week_labels.index(sidebar_label) + 1) if sidebar_label in week_labels else 0
+# Always default to "All Weeks (Average)" on first page load.
+# Streamlit preserves the user's selection via key='dd_week_scope' in
+# session_state on subsequent reruns, so this only fires on initial render.
+default_idx = 0
 
 # Render the scope selector in a narrow left column
 scope_col1, scope_col2 = st.columns([1, 3])
