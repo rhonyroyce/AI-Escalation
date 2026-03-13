@@ -14,7 +14,58 @@ __version__ = "2.2.0"
 __author__ = "Escalation AI Team"
 
 # Core imports
-from .core.config import *
+from .core.config import (
+    # AI model selection
+    EMBED_MODEL,
+    GEN_MODEL,
+    DETECTED_VRAM_GB,
+    OLLAMA_BASE_URL,
+    VISION_MODEL,
+    VISION_MODEL_TIMEOUT,
+    USE_GPU,
+    # Scoring weights & thresholds
+    WEIGHTS,
+    MIN_CLASSIFICATION_CONFIDENCE,
+    # Classification taxonomy
+    ANCHORS,
+    SUB_CATEGORIES,
+    CATEGORY_KEYWORDS,
+    ROOT_CAUSE_CATEGORIES,
+    # Column mappings
+    COL_CATEGORY,
+    COL_CLOSE_DATE,
+    COL_DATETIME,
+    COL_ENGINEER,
+    COL_IMPACT,
+    COL_LESSON_STATUS,
+    COL_LESSON_TITLE,
+    COL_LOB,
+    COL_ORIGIN,
+    COL_RECURRENCE_RISK,
+    COL_RESOLUTION_DATE,
+    COL_RESOLUTION_NOTES,
+    COL_ROOT_CAUSE,
+    COL_SEVERITY,
+    COL_SUMMARY,
+    COL_TYPE,
+    REQUIRED_COLUMNS,
+    # File paths & output
+    FEEDBACK_FILE,
+    FEEDBACK_WEIGHT,
+    PLOT_DIR,
+    PRICE_CATALOG_FILE,
+    RECURRENCE_ENCODERS_PATH,
+    RECURRENCE_MODEL_PATH,
+    RESOLUTION_MODEL_PATH,
+    SIMILARITY_FEEDBACK_PATH,
+    # Financial & reporting
+    DEFAULT_HOURLY_RATE,
+    MC_BLUE,
+    REPORT_TITLE,
+    REPORT_VERSION,
+    # Logging
+    logger,
+)
 from .core.ai_engine import OllamaBrain
 from .core.utils import clean_text, validate_columns
 from .core.gpu_utils import (
