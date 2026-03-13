@@ -11,9 +11,12 @@ import numpy as np
 from pathlib import Path
 import sys
 import os
+import logging
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+logger = logging.getLogger(__name__)
 
 
 def get_dashboard_path() -> Path:
@@ -263,8 +266,8 @@ def get_sample_data() -> pd.DataFrame:
         try:
             df = pd.read_excel(latest, sheet_name="Detailed Analysis")
             return df
-        except:
-            pass
+        except (KeyError, ValueError, TypeError) as e:
+            logger.debug(f"Failed to load Detailed Analysis sheet: {e}")
     
     # Generate sample data if no file found
     np.random.seed(42)

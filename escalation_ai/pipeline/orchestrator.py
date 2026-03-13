@@ -226,8 +226,8 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
                 connection_count = wb.api.Connections.Count
                 if connection_count > 0:
                     has_connections = True
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Handled: {e}")
 
             try:
                 # Power Query objects are exposed separately via Queries
@@ -235,8 +235,8 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
                 if query_count > 0:
                     has_connections = True
                     connection_count += query_count
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Handled: {e}")
 
             if not has_connections:
                 wb.close()
@@ -259,10 +259,10 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
                             if conn.OLEDBConnection.Refreshing:
                                 still_refreshing = True
                                 break
-                        except:
-                            pass
-                except:
-                    pass
+                        except Exception as e:
+                            logger.debug(f"Handled: {e}")
+                except Exception as e:
+                    logger.debug(f"Handled: {e}")
 
                 if not still_refreshing:
                     break
@@ -278,8 +278,8 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
         except Exception as e:
             try:
                 wb.close()
-            except:
-                pass
+            except Exception as e2:
+                logger.debug(f"Handled during cleanup: {e2}")
             app.quit()
             raise e
 
@@ -328,7 +328,8 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
                 try:
                     excel.CalculateUntilAsyncQueriesDone()
                     break
-                except:
+                except Exception as e:
+                    logger.debug(f"Async query not done yet: {e}")
                     time.sleep(2)
 
             # Save and close
@@ -342,8 +343,8 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
         except Exception as e:
             try:
                 wb.Close(SaveChanges=False)
-            except:
-                pass
+            except Exception as e2:
+                logger.debug(f"Handled during cleanup: {e2}")
             excel.Quit()
             pythoncom.CoUninitialize()
             return False, f"Error refreshing Excel: {str(e)}"
@@ -1321,8 +1322,8 @@ def main_pipeline():
         # Clean up the hidden tkinter root window
         try:
             root.destroy()
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Handled: {e}")
 
 
 if __name__ == "__main__":

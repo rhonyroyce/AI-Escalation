@@ -168,6 +168,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import sys
 import json
+import logging
 import time
 import base64
 import io
@@ -176,6 +177,8 @@ from streamlit_js_eval import streamlit_js_eval
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+logger = logging.getLogger(__name__)
 
 # Guard: skip top-level Streamlit calls when imported as a module
 _STANDALONE = __name__ == "__main__"
@@ -307,14 +310,14 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
             try:
                 if wb.api.Connections.Count > 0:
                     has_connections = True
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Handled: {e}")
 
             try:
                 if wb.api.Queries.Count > 0:
                     has_connections = True
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Handled: {e}")
 
             if not has_connections:
                 wb.close()
@@ -335,8 +338,8 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
                         if conn.OLEDBConnection.Refreshing:
                             still_refreshing = True
                             break
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Handled: {e}")
 
                 if not still_refreshing:
                     break
@@ -352,8 +355,8 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
         except Exception as e:
             try:
                 wb.close()
-            except:
-                pass
+            except Exception as e2:
+                logger.debug(f"Handled during cleanup: {e2}")
             app.quit()
             raise e
 
@@ -399,7 +402,8 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
                 try:
                     excel.CalculateUntilAsyncQueriesDone()
                     break
-                except:
+                except Exception as e:
+                    logger.debug(f"Async query not done yet: {e}")
                     time.sleep(2)
 
             # Save and close
@@ -413,8 +417,8 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
         except Exception as e:
             try:
                 wb.Close(SaveChanges=False)
-            except:
-                pass
+            except Exception as e2:
+                logger.debug(f"Handled during cleanup: {e2}")
             excel.Quit()
             pythoncom.CoUninitialize()
             return False, f"Error refreshing Excel: {str(e)}"
@@ -450,7 +454,8 @@ def load_excel_with_refresh(file_path: str, force_refresh: bool = True) -> tuple
     try:
         # Try Scored Data sheet first
         df = pd.read_excel(file_path, sheet_name="Scored Data")
-    except:
+    except (KeyError, ValueError, TypeError) as e:
+        logger.debug(f"Scored Data sheet not found, trying first sheet: {e}")
         try:
             # Try first sheet
             df = pd.read_excel(file_path, sheet_name=0)
@@ -1251,7 +1256,8 @@ def _load_excel_raw(file_path: str) -> pd.DataFrame:
     """Load raw Excel data (cached). Financial_Impact calculated separately."""
     try:
         return pd.read_excel(file_path, sheet_name="Scored Data")
-    except:
+    except (KeyError, ValueError, TypeError) as e:
+        logger.debug(f"Scored Data sheet not found, trying first sheet: {e}")
         return pd.read_excel(file_path, sheet_name=0)
 
 
@@ -5385,7 +5391,8 @@ def render_alerts_page(df):
     if date_col:
         try:
             df_temp['date'] = pd.to_datetime(df_temp[date_col], errors='coerce').dt.date
-        except:
+        except (ValueError, TypeError, KeyError) as e:
+            logger.debug(f"Date conversion failed: {e}")
             date_col = None
     
     # Build agg dict with available columns

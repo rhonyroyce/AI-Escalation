@@ -558,9 +558,10 @@ Be specific about numbers, categories, or values you can see in the chart. Keep 
                 # "llama3.2-vision:latest" or "llama3.2-vision:11b".
                 return any(self.model.split(":")[0] in name for name in model_names)
             return False
-        except:
-            # Bare except: any failure (connection refused, timeout, JSON error,
+        except Exception as e:
+            # Any failure (connection refused, timeout, JSON error,
             # missing requests library) means the model is not available.
+            logger.debug(f"Vision model check failed: {e}")
             return False
 
 
