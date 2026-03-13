@@ -1,3 +1,12 @@
+import warnings
+warnings.warn(
+    "EscalationAI0126.py is the legacy monolith. All classes have been "
+    "refactored into the escalation_ai/ package. This file will be removed "
+    "in a future release. Use 'python run.py' for the modular version.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 import pandas as pd
 import numpy as np
 import re

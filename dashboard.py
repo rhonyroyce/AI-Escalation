@@ -1,13 +1,21 @@
 """
-Unified Dashboard Launcher
+Unified Dashboard Launcher (LEGACY)
 
-Serves the Pulse Dashboard as a multi-page Streamlit app.
-Escalation AI can be run separately via run.py on a different port.
+WARNING: This entry point is DEPRECATED. Use one of:
+    streamlit run unified_app.py   # Unified dashboard (recommended)
+    python run.py --dashboard-only # Escalation AI dashboard only
 
-Usage:
-    streamlit run dashboard.py --server.port 8501   # Pulse Dashboard
-    python run.py --dashboard-only --port 8502      # Escalation AI (separate)
+This file is maintained only for backward compatibility and will be
+removed in a future release.
 """
+
+import warnings
+warnings.warn(
+    "dashboard.py is deprecated. Use 'streamlit run unified_app.py' or "
+    "'python run.py --dashboard-only' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import sys
 from pathlib import Path
