@@ -191,18 +191,25 @@ if st.session_state.get('esc_data_available') is None:
 # Guard: we use ``ollama_available is None`` as the sentinel.  If it is still
 # ``None``, it means neither the cache nor a previous rerun has set it yet,
 # so we need to attempt loading.  Once set to ``True`` or ``False``, we skip
-# this block on every subsequent rerun -- avoiding repeated disk I/O and
-# pickle deserialisation.
+# this block on every subsequent rerun -- avoiding repeated disk I/O.
 # ============================================================================
 if st.session_state.get('ollama_available') is None:
-    import pickle
+    import json as _json
 
-    cache_file = project_root / '.cache' / 'ai_insights.pkl'
+    # Security: JSON replaces pickle to prevent arbitrary code execution
+    cache_file = project_root / '.cache' / 'ai_insights.json'
 
     if cache_file.exists():
         try:
-            with open(cache_file, 'rb') as f:
-                _cache = pickle.load(f)
+            with open(cache_file, 'r') as f:
+                _cache = _json.load(f)
+
+            # Restore numpy arrays from JSON lists (embeddings index)
+            if 'embeddings_index' in _cache and isinstance(_cache['embeddings_index'], dict):
+                import numpy as np
+                emb = _cache['embeddings_index']
+                if 'embeddings' in emb and isinstance(emb['embeddings'], list):
+                    emb['embeddings'] = np.array(emb['embeddings'])
 
             # Selectively hydrate session state from the cache dict.
             # We only overwrite keys that are still ``None`` (i.e., not yet

@@ -13,7 +13,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, roc_auc_score
-import pickle
+import joblib  # Security: joblib replaces pickle to prevent arbitrary code execution
 import matplotlib.pyplot as plt
 import seaborn as sns
 from openpyxl import Workbook, load_workbook
@@ -2534,15 +2534,14 @@ class RecurrencePredictor:
         encoders_path = encoders_path or RECURRENCE_ENCODERS_PATH
         
         if self.is_trained:
-            with open(model_path, 'wb') as f:
-                pickle.dump({
-                    'model': self.model,
-                    'feature_columns': self.feature_columns,
-                    'metrics': self.model_metrics
-                }, f)
-            
-            with open(encoders_path, 'wb') as f:
-                pickle.dump(self.encoders, f)
+            # Security: joblib replaces pickle to prevent arbitrary code execution
+            joblib.dump({
+                'model': self.model,
+                'feature_columns': self.feature_columns,
+                'metrics': self.model_metrics
+            }, model_path)
+
+            joblib.dump(self.encoders, encoders_path)
             
             logger.info(f"[Recurrence Predictor] Model saved to {model_path}")
     
@@ -2553,14 +2552,13 @@ class RecurrencePredictor:
         
         try:
             if os.path.exists(model_path) and os.path.exists(encoders_path):
-                with open(model_path, 'rb') as f:
-                    data = pickle.load(f)
-                    self.model = data['model']
-                    self.feature_columns = data['feature_columns']
-                    self.model_metrics = data.get('metrics', {})
-                
-                with open(encoders_path, 'rb') as f:
-                    self.encoders = pickle.load(f)
+                # Security: joblib replaces pickle to prevent arbitrary code execution
+                data = joblib.load(model_path)
+                self.model = data['model']
+                self.feature_columns = data['feature_columns']
+                self.model_metrics = data.get('metrics', {})
+
+                self.encoders = joblib.load(encoders_path)
                 
                 self.is_trained = True
                 logger.info(f"[Recurrence Predictor] Model loaded from {model_path}")

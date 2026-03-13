@@ -64,7 +64,7 @@ GPU-accelerated with RAPIDS cuML when available.
 """
 
 import os
-import pickle
+import joblib  # Security: joblib replaces pickle to prevent arbitrary code execution
 import logging
 import numpy as np
 import pandas as pd
@@ -603,30 +603,29 @@ class RecurrencePredictor:
         Save trained model and encoders to disk.
 
         Persistence Format:
-            Two pickle files are written:
+            Two joblib files are written:
             1. **Model file** -- Contains the fitted model object, the ordered
                feature column list, and training metrics.
             2. **Encoders file** -- Contains the dict of fitted LabelEncoders.
 
         Args:
-            model_path (str, optional): Path for the model pickle file.
+            model_path (str, optional): Path for the model file.
                 Defaults to ``RECURRENCE_MODEL_PATH`` from config.
-            encoders_path (str, optional): Path for the encoders pickle file.
+            encoders_path (str, optional): Path for the encoders file.
                 Defaults to ``RECURRENCE_ENCODERS_PATH`` from config.
         """
         model_path = model_path or RECURRENCE_MODEL_PATH
         encoders_path = encoders_path or RECURRENCE_ENCODERS_PATH
 
         if self.is_trained:
-            with open(model_path, 'wb') as f:
-                pickle.dump({
-                    'model': self.model,
-                    'feature_columns': self.feature_columns,
-                    'metrics': self.model_metrics
-                }, f)
+            # Security: joblib replaces pickle to prevent arbitrary code execution
+            joblib.dump({
+                'model': self.model,
+                'feature_columns': self.feature_columns,
+                'metrics': self.model_metrics
+            }, model_path)
 
-            with open(encoders_path, 'wb') as f:
-                pickle.dump(self.encoders, f)
+            joblib.dump(self.encoders, encoders_path)
 
             logger.info(f"[Recurrence Predictor] Model saved to {model_path}")
 
@@ -634,13 +633,13 @@ class RecurrencePredictor:
         """
         Load trained model and encoders from disk.
 
-        If both the model and encoders files exist, they are unpickled and
+        If both the model and encoders files exist, they are loaded and
         the predictor is marked as trained.  This enables warm-start
         predictions without re-training.
 
         Args:
-            model_path (str, optional): Path to the model pickle file.
-            encoders_path (str, optional): Path to the encoders pickle file.
+            model_path (str, optional): Path to the model file.
+            encoders_path (str, optional): Path to the encoders file.
 
         Returns:
             bool: True if loading succeeded, False otherwise.
@@ -650,14 +649,13 @@ class RecurrencePredictor:
 
         try:
             if os.path.exists(model_path) and os.path.exists(encoders_path):
-                with open(model_path, 'rb') as f:
-                    data = pickle.load(f)
-                    self.model = data['model']
-                    self.feature_columns = data['feature_columns']
-                    self.model_metrics = data.get('metrics', {})
+                # Security: joblib replaces pickle to prevent arbitrary code execution
+                data = joblib.load(model_path)
+                self.model = data['model']
+                self.feature_columns = data['feature_columns']
+                self.model_metrics = data.get('metrics', {})
 
-                with open(encoders_path, 'rb') as f:
-                    self.encoders = pickle.load(f)
+                self.encoders = joblib.load(encoders_path)
 
                 self.is_trained = True
                 logger.info(f"[Recurrence Predictor] Model loaded from {model_path}")

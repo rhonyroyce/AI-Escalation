@@ -24,7 +24,7 @@ STAGE 2 -- AI Insight Pre-Generation  (pre_generate_ai_cache)
       - Executive Summary   -- LLM-written summary of top pain points
       - Issue Classification -- each pain point classified into 11 categories
       - Embeddings Index    -- vector index for semantic search in the dashboard
-    Results are serialised to .cache/ai_insights.pkl so the Streamlit dashboard
+    Results are serialised to .cache/ai_insights.json so the Streamlit dashboard
     can load them instantly at startup instead of re-generating on every page view.
 
 STAGE 3 -- Unified Streamlit Dashboard  (launch_dashboard)
@@ -1024,11 +1024,11 @@ def pre_generate_ai_cache():
     missing, this function prints a warning and returns without creating a cache.
     The dashboard will then fall back to non-AI mode.
     """
-    import pickle
+    import json
     project_root = Path(__file__).parent
     cache_dir = project_root / '.cache'
     cache_dir.mkdir(exist_ok=True)
-    cache_file = cache_dir / 'ai_insights.pkl'
+    cache_file = cache_dir / 'ai_insights.json'
 
     # Add the pulse_dashboard directory to sys.path so we can import its
     # utility module.  This is done at runtime (not at the top of the file)
@@ -1180,11 +1180,21 @@ URGENT: <urgent issue>"""
     sys.stdout.flush()
 
     # ---- Persist the cache to disk ----
-    # Using pickle for serialisation because the cache contains numpy arrays
-    # (embeddings) which pickle handles natively and efficiently.
+    # Security: JSON replaces pickle to prevent arbitrary code execution.
+    # Numpy arrays (embeddings) are converted to lists for JSON compatibility.
     try:
-        with open(cache_file, 'wb') as f:
-            pickle.dump(cache, f)
+        json_cache = {}
+        for k, v in cache.items():
+            if isinstance(v, dict) and 'embeddings' in v:
+                import numpy as np
+                v = dict(v)
+                if isinstance(v['embeddings'], np.ndarray):
+                    v['embeddings'] = v['embeddings'].tolist()
+                json_cache[k] = v
+            else:
+                json_cache[k] = v
+        with open(cache_file, 'w') as f:
+            json.dump(json_cache, f)
         print(f"\n  \U0001f4be Cache saved to {cache_file}")
     except Exception as e:
         print(f"  \u274c Failed to save cache: {e}")
