@@ -112,6 +112,7 @@ from ..core.config import (
     COL_ORIGIN, COL_SEVERITY,
     TIMEOUT_GPU_QUERY,                              # Timeout for model listing
 )
+from ..core.logging_config import PhaseTimer
 from ..core.ai_engine import OllamaBrain               # Embedding + generation wrapper
 from ..core.utils import clean_text                     # Text normalisation helper
 from ..classification import classify_rows              # Phase 1 classifier
@@ -364,25 +365,31 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
 # ============================================================================
 
 def print_banner(text: str, char: str = "=", width: int = 60) -> None:
-    """Print a formatted banner to console.
+    """Log a formatted banner for visual phase delimiting.
 
-    Used to visually delimit pipeline phases in the terminal output so the
-    operator can quickly identify where each phase begins.
+    In interactive mode (TTY), prints the banner to stdout for visual
+    feedback.  Always logs the banner text at INFO level.
     """
-    print()
-    print(char * width)
-    print(f"  {text}")
-    print(char * width)
+    if sys.stdout.isatty():
+        print()
+        print(char * width)
+        print(f"  {text}")
+        print(char * width)
+    else:
+        logger.info(text)
 
 
 def print_status(phase: str, message: str, icon: str = "→") -> None:
-    """Print a status message and immediately flush stdout.
+    """Log a status message with phase context.
 
-    Flushing ensures the message appears even when stdout is line-buffered
-    (e.g. when running inside a subprocess or redirected to a log file).
+    In interactive mode (TTY), prints to stdout with the icon for visual
+    feedback.  Always logs at INFO level with the phase as extra data.
     """
-    print(f"  {icon} {message}")
-    sys.stdout.flush()
+    if sys.stdout.isatty():
+        print(f"  {icon} {message}")
+        sys.stdout.flush()
+    else:
+        logger.info(message, extra={"phase": phase})
 
 
 # ============================================================================
@@ -1236,15 +1243,30 @@ class EscalationPipeline:
         total_phases = 6
 
         print_banner(f"RUNNING ANALYSIS PIPELINE ({len(self.df):,} tickets)", "═")
-        print()
+        logger.info(
+            "Starting analysis pipeline",
+            extra={"ticket_count": len(self.df)},
+        )
 
         self.prepare_text()
-        self.run_classification()       # Phase 1: Hybrid classification
-        self.run_scoring()              # Phase 2: Strategic friction scores
-        self.run_recidivism_analysis()  # Phase 3: FAISS nearest-neighbor similarity
-        self.run_recurrence_prediction() # Phase 4: RF classifier for recurrence
-        self.run_similar_ticket_analysis() # Phase 5: k-NN similar ticket search
-        self.run_resolution_time_prediction() # Phase 6: RF regressor for resolution time
+
+        with PhaseTimer("AI Classification", logger, phase=1):
+            self.run_classification()
+
+        with PhaseTimer("Strategic Friction Scoring", logger, phase=2):
+            self.run_scoring()
+
+        with PhaseTimer("Recidivism Analysis", logger, phase=3):
+            self.run_recidivism_analysis()
+
+        with PhaseTimer("Recurrence Prediction", logger, phase=4):
+            self.run_recurrence_prediction()
+
+        with PhaseTimer("Similar Ticket Analysis", logger, phase=5):
+            self.run_similar_ticket_analysis()
+
+        with PhaseTimer("Resolution Time Prediction", logger, phase=6):
+            self.run_resolution_time_prediction()
 
         # Persist the AI-assigned labels so a human can review and correct
         # them before the next pipeline run.  Corrections are loaded by
@@ -1252,6 +1274,7 @@ class EscalationPipeline:
         self._save_feedback_for_review()
 
         print_banner("ALL PHASES COMPLETE", "═")
+        logger.info("All %d phases complete", total_phases)
 
         return self.df
 
@@ -1369,8 +1392,7 @@ def main_pipeline() -> None:
         )
 
     except Exception as e:
-        logger.error(f"Pipeline failed: {e}", exc_info=True)
-        print(f"\n❌ ERROR: {e}")
+        logger.error("Pipeline failed: %s", e, exc_info=True)
         messagebox.showerror("Error", f"Analysis failed: {e}")
     finally:
         # Clean up the hidden tkinter root window

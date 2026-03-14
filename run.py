@@ -458,7 +458,7 @@ def display_gpu_info():
         print(f"\U0001f9e0 Embedding Model: {EMBED_MODEL}")
         print(f"\U0001f916 Generation Model: {GEN_MODEL}")
     except ImportError:
-        print("\u26a0\ufe0f  Could not load GPU config")
+        logging.getLogger(__name__).warning("Could not load GPU config")
 
 # Print GPU/model info immediately so the user sees it during the slow
 # import phase that follows.
@@ -474,77 +474,44 @@ sys.stdout.flush()  # Flush before heavy imports may block stdout
 # INFO with --verbose).  The log file is timestamped so successive runs
 # don't overwrite each other.
 
-def setup_logging(verbose: bool = False):
+def setup_logging(verbose: bool = False, log_level: str | None = None, log_file: str | None = None):
     """
-    Configure the root logger with file and console handlers.
+    Configure the root logger with file (JSON) and console (human) handlers.
 
-    Every run produces a dedicated log file under logs/ with a timestamp in
-    the filename.  The file handler always captures DEBUG-level messages for
-    full traceability, while the console handler shows only warnings (or info
-    in verbose mode) to keep terminal output clean.
+    Delegates to :func:`escalation_ai.core.logging_config.setup_logging` for
+    the actual handler setup.  This wrapper exists for backward-compatibility
+    with the ``--verbose`` flag.
 
     Args:
-        verbose: When True, lower the console handler to INFO level so the
-                 user sees detailed progress messages in the terminal.
+        verbose: When True, set console level to INFO (overridden by log_level).
+        log_level: Explicit log level string (DEBUG, INFO, WARNING, ERROR).
+        log_file: Explicit log file path.  If None, a timestamped file is created.
 
     Returns:
-        Path: Absolute path to the newly created log file.
+        Path: Absolute path to the log file.
     """
-    # Create the logs directory next to this script if it doesn't exist
-    log_dir = Path(__file__).parent / "logs"
-    log_dir.mkdir(exist_ok=True)
+    from escalation_ai.core.logging_config import setup_logging as _setup
 
-    # Timestamp-based filename prevents overwriting previous runs' logs
-    timestamp = time.strftime('%Y%m%d_%H%M%S')
-    log_file = log_dir / f"escalation_ai_{timestamp}.log"
-
-    # File formatter includes the logger name for tracing across submodules
-    file_formatter = logging.Formatter(
-        '%(asctime)s | %(name)s | %(levelname)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    # Console formatter is shorter because the user is watching in real time
-    console_formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)s | %(message)s',
-        datefmt='%H:%M:%S'
-    )
-
-    # File handler: always DEBUG so nothing is lost
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(file_formatter)
-
-    # Console handler: WARNING normally, INFO with --verbose
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO if verbose else logging.WARNING)
-    console_handler.setFormatter(console_formatter)
-
-    # Configure the root logger (all library loggers inherit from this)
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
-
-    # Remove any pre-existing handlers to avoid duplicate log lines
-    # (this function may be called twice: once at import, once in main()
-    # if the user passes --verbose).
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-
-    # Attach our handlers
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
-
-    if verbose:
-        print(f"\U0001f4dd Verbose logging enabled. Log file: {log_file}")
+    if log_level:
+        level = log_level.upper()
+    elif verbose:
+        level = "INFO"
     else:
-        print(f"\U0001f4dd Logging to: {log_file}")
+        level = "WARNING"
 
-    return log_file
+    log_dir = str(Path(__file__).parent / "logs")
+    result = _setup(log_dir=log_dir, level=level, log_file=log_file)
+
+    if verbose or log_level:
+        logger.info("Logging configured: level=%s, file=%s", level, result)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
 # Initialize logging immediately with default (non-verbose) settings.
-# If the user passes --verbose, main() will call setup_logging again to
-# reconfigure the console handler to INFO level.
+# If the user passes --verbose / --log-level, main() will call setup_logging
+# again to reconfigure the console handler.
 # ---------------------------------------------------------------------------
 _default_log_file = setup_logging(verbose=False)
 
@@ -577,7 +544,7 @@ def check_ollama_server():
         response = requests.get(f'{OLLAMA_BASE_URL}/api/version', timeout=TIMEOUT_QUICK_CHECK)
         return response.status_code == 200
     except ImportError:
-        print("\u26a0\ufe0f requests library not available for Ollama check")
+        logger.warning("requests library not available for Ollama check")
         return False
     except Exception:
         return False
@@ -785,6 +752,22 @@ Examples:
         help='Run system health check and exit'
     )
 
+    # Structured logging options
+    parser.add_argument(
+        '--log-level',
+        type=str,
+        choices=['DEBUG', 'INFO', 'WARNING'],
+        default=None,
+        help='Console log level (default: WARNING, overrides --verbose)'
+    )
+
+    parser.add_argument(
+        '--log-file',
+        type=str,
+        default=None,
+        help='Log file path (default: logs/escalation_ai_<timestamp>.log)'
+    )
+
     return parser.parse_args()
 
 
@@ -820,17 +803,19 @@ def run_pipeline(input_file=None, output_file=None):
               False on any error (import failure, data loading error, empty
               results, user cancellation, etc.).
     """
-    print()
-    print("=" * 60)
-    print("  \U0001f680 ESCALATION AI - Strategic Friction Analysis")
-    print("=" * 60)
-    print()
-    sys.stdout.flush()
+    if sys.stdout.isatty():
+        print()
+        print("=" * 60)
+        print("  \U0001f680 ESCALATION AI - Strategic Friction Analysis")
+        print("=" * 60)
+        print()
+        sys.stdout.flush()
+    logger.info("Starting Escalation AI pipeline")
 
     try:
         # Lazy-import heavy modules here (not at file top) so that startup
         # remains fast for --dashboard-only and --health-check modes.
-        print("\U0001f4e6 Loading analysis modules...")
+        logger.info("Loading analysis modules...")
         from escalation_ai.pipeline.orchestrator import EscalationPipeline
         from escalation_ai.reports import generate_report
 
@@ -845,14 +830,14 @@ def run_pipeline(input_file=None, output_file=None):
             try:
                 input_file = str(validate_file_path(input_file, must_exist=True))
             except ValueError as e:
-                print(f"\u274c Invalid input file: {e}")
+                logger.error("Invalid input file: %s", e)
                 return False
 
         if output_file:
             try:
                 output_file = str(validate_file_path(output_file, must_exist=False))
             except ValueError as e:
-                print(f"\u274c Invalid output file: {e}")
+                logger.error("Invalid output file: %s", e)
                 return False
 
         # Instantiate the pipeline orchestrator (does not load data yet)
@@ -969,33 +954,33 @@ def run_pipeline(input_file=None, output_file=None):
             pbar.update(1)
 
         # Pipeline complete -- print the final success banner
-        print()
-        print("=" * 60)
-        print("  \U0001f389 ANALYSIS COMPLETE!")
-        print("=" * 60)
-        print(f"  \u2705 Report saved to: {save_path}")
-        print("=" * 60)
-        print()
-        sys.stdout.flush()
+        if sys.stdout.isatty():
+            print()
+            print("=" * 60)
+            print("  \U0001f389 ANALYSIS COMPLETE!")
+            print("=" * 60)
+            print(f"  \u2705 Report saved to: {save_path}")
+            print("=" * 60)
+            print()
+            sys.stdout.flush()
+        logger.info("Analysis complete. Report saved to: %s", save_path)
 
         return True
 
     except ImportError as e:
         # This typically means the user is not in the right virtualenv or
         # hasn't run `pip install -e .` to install the escalation_ai package.
-        print(f"\u274c Error importing escalation_ai package: {e}")
-        print("\nMake sure you're running from the project directory.")
-        print("Try: pip install -e .")
-        logger.error("Import error", exc_info=True)
+        logger.error("Error importing escalation_ai package: %s", e)
+        logger.error("Import error — try: pip install -e .", exc_info=True)
         return False
     except KeyboardInterrupt:
-        print("\n\n\U0001f44b Pipeline interrupted by user")
+        logger.info("Pipeline interrupted by user")
         return False
     except Exception as e:
         # Catch-all for unexpected errors; full traceback goes to the log file
-        print(f"\n\u274c Pipeline error: {e}")
-        logger.error("Pipeline execution failed", exc_info=True)
-        print("\nFor detailed logs, run with --verbose flag")
+        logger.error("Pipeline error: %s", e, exc_info=True)
+        if sys.stdout.isatty():
+            print("\nFor detailed logs, run with --verbose or --log-level DEBUG")
         return False
 
 
@@ -1043,26 +1028,28 @@ def pre_generate_ai_cache():
             check_ollama, ollama_generate, build_embeddings_index,
         )
     except ImportError as e:
-        print(f"  \u26a0\ufe0f  Could not import pulse_insights: {e}")
+        logger.warning("Could not import pulse_insights: %s", e)
         return
 
     # Bail out early if Ollama is not reachable -- all three generation steps
     # require it, so there's nothing useful we can do without it.
     if not check_ollama():
-        print("  \u26a0\ufe0f  Ollama not running \u2014 skipping AI pre-generation")
+        logger.warning("Ollama not running — skipping AI pre-generation")
         return
 
-    print()
-    print("=" * 60)
-    print("  \U0001f9e0 Pre-generating AI Insights")
-    print("=" * 60)
-    print()
+    logger.info("Pre-generating AI insights")
+    if sys.stdout.isatty():
+        print()
+        print("=" * 60)
+        print("  \U0001f9e0 Pre-generating AI Insights")
+        print("=" * 60)
+        print()
 
     # Load the Project Pulse dataset directly with pandas (not via Streamlit's
     # caching, since we're running outside Streamlit here).
     pulse_file = project_root / 'ProjectPulse.xlsx'
     if not pulse_file.exists():
-        print("  \u26a0\ufe0f  ProjectPulse.xlsx not found \u2014 skipping AI pre-generation")
+        logger.warning("ProjectPulse.xlsx not found — skipping AI pre-generation")
         return
 
     import pandas as pd
@@ -1082,7 +1069,7 @@ def pre_generate_ai_cache():
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     except Exception as e:
-        print(f"  \u26a0\ufe0f  Failed to load Pulse data: {e}")
+        logger.warning("Failed to load Pulse data: %s", e)
         return
 
     # Initialize the cache dictionary.  The dashboard checks 'ollama_available'
@@ -1092,8 +1079,7 @@ def pre_generate_ai_cache():
     # ---- Step 1: Executive Summary ----
     # Feed the top 20 pain points (truncated to 300 chars each) to the LLM
     # and ask for a structured summary with themes and urgency assessment.
-    print("  \U0001f4dd Generating Executive Summary...")
-    sys.stdout.flush()
+    logger.info("Generating Executive Summary...")
     pain = df['Pain Points'].dropna()
     if not pain.empty:
         texts = pain.head(20).tolist()
@@ -1118,17 +1104,15 @@ URGENT: <urgent issue>"""
         result = ollama_generate(prompt)
         if result:
             cache['ai_exec_summary'] = result
-            print("     \u2705 Executive Summary generated")
+            logger.info("Executive Summary generated")
         else:
-            print("     \u274c Executive Summary failed")
-    sys.stdout.flush()
+            logger.warning("Executive Summary generation failed")
 
     # ---- Step 2: Issue Classification ----
     # Classify each pain point into one of 11 predefined categories using the
     # LLM with low temperature (0.1) for deterministic, consistent labelling.
     # We process up to 30 issues and print progress every 10 items.
-    print("  \U0001f3f7\ufe0f  Classifying issues...")
-    sys.stdout.flush()
+    logger.info("Classifying issues...")
     CATEGORIES = [
         "Resource/Staffing", "Timeline/Delays", "Technical/Engineering",
         "Vendor/Partner", "Communication", "Process/Workflow",
@@ -1154,22 +1138,19 @@ URGENT: <urgent issue>"""
                 categories_result.append('Other')
             # Progress feedback every 10 issues
             if (i + 1) % 10 == 0:
-                print(f"     ... classified {i + 1}/{len(texts)}")
-                sys.stdout.flush()
+                logger.info("Classified %d/%d issues", i + 1, len(texts))
         # Store both the category labels and the original texts so the
         # dashboard can display them side by side.
         cache['ai_issue_categories'] = categories_result
         cache['ai_issue_texts'] = texts
-        print(f"     \u2705 {len(categories_result)} issues classified")
-    sys.stdout.flush()
+        logger.info("%d issues classified", len(categories_result))
 
     # ---- Step 3: Embeddings Index ----
     # Build a vector index over the text columns (Comments, Pain Points,
     # Resolution Plan) using the embedding model (qwen2:1.5b via Ollama).
     # This index powers the semantic search feature in the dashboard -- users
     # can type a natural-language query and find the most relevant issues.
-    print("  \U0001f50d Building embeddings index...")
-    sys.stdout.flush()
+    logger.info("Building embeddings index...")
     try:
         # build_embeddings_index concatenates text from the specified columns,
         # generates embeddings via Ollama, and returns a dict with 'texts'
@@ -1177,12 +1158,11 @@ URGENT: <urgent issue>"""
         index = build_embeddings_index(df, columns=['Comments', 'Pain Points', 'Resolution Plan'])
         if index and len(index.get('texts', [])) > 0:
             cache['embeddings_index'] = index
-            print(f"     \u2705 Index built: {len(index['texts'])} documents embedded")
+            logger.info("Index built: %d documents embedded", len(index['texts']))
         else:
-            print("     \u26a0\ufe0f  No documents to embed")
+            logger.warning("No documents to embed")
     except Exception as e:
-        print(f"     \u274c Embeddings failed: {e}")
-    sys.stdout.flush()
+        logger.error("Embeddings failed: %s", e)
 
     # ---- Persist the cache to disk ----
     # Security: JSON replaces pickle to prevent arbitrary code execution.
@@ -1200,11 +1180,9 @@ URGENT: <urgent issue>"""
                 json_cache[k] = v
         with open(cache_file, 'w') as f:
             json.dump(json_cache, f)
-        print(f"\n  \U0001f4be Cache saved to {cache_file}")
+        logger.info("Cache saved to %s", cache_file)
     except Exception as e:
-        print(f"  \u274c Failed to save cache: {e}")
-
-    print()
+        logger.error("Failed to save cache: %s", e)
 
 
 def write_pipeline_metadata():
@@ -1241,7 +1219,7 @@ def write_pipeline_metadata():
     meta_file = cache_dir / 'pipeline_metadata.json'
     with open(meta_file, 'w') as f:
         json.dump(metadata, f, indent=2)
-    print(f"  \U0001f4cb Pipeline metadata saved to {meta_file}")
+    logger.info("Pipeline metadata saved to %s", meta_file)
 
 
 def launch_dashboard(port: int = None, open_browser: bool = True):
@@ -1274,18 +1252,20 @@ def launch_dashboard(port: int = None, open_browser: bool = True):
         bool: True if the dashboard ran and exited cleanly (including Ctrl+C
               shutdown), False on errors (missing files, port conflicts, etc.).
     """
-    print()
-    print("=" * 60)
-    print("  \U0001f310 Launching Interactive Dashboard")
-    print("=" * 60)
-    print()
+    logger.info("Launching interactive dashboard")
+    if sys.stdout.isatty():
+        print()
+        print("=" * 60)
+        print("  \U0001f310 Launching Interactive Dashboard")
+        print("=" * 60)
+        print()
 
     # The unified app serves both Project Pulse and Escalation AI dashboards
     # from a single Streamlit process with tabbed navigation.
     dashboard_path = Path(__file__).parent / "unified_app.py"
 
     if not dashboard_path.exists():
-        print(f"\u274c Error: Dashboard not found at {dashboard_path}")
+        logger.error("Dashboard not found at %s", dashboard_path)
         return False
 
     # --- Port conflict detection ---
@@ -1296,35 +1276,37 @@ def launch_dashboard(port: int = None, open_browser: bool = True):
         sock.close()
 
         if port_in_use:
-            print(f"\u26a0\ufe0f  Port {port} is already in use")
+            logger.warning("Port %d is already in use", port)
             try:
                 response = input("   Try to stop existing process? (y/N): ").strip().lower()
                 if response == 'y':
-                    print("   Attempting to stop existing Streamlit process...")
+                    logger.info("Attempting to stop existing Streamlit process...")
                     try:
                         # pkill sends SIGTERM to processes matching the pattern
                         subprocess.run(['pkill', '-f', f'streamlit.*{port}'], timeout=TIMEOUT_PROCESS_KILL)
                         time.sleep(RETRY_BACKOFF_SECONDS)  # Give the process time to release the port
-                        print("   \u2705 Process stopped")
+                        logger.info("Process stopped")
                     except subprocess.TimeoutExpired:
-                        print("   \u26a0\ufe0f  Timeout stopping process")
+                        logger.warning("Timeout stopping process")
                     except Exception as e:
-                        print(f"   \u26a0\ufe0f  Could not stop process: {e}")
+                        logger.warning("Could not stop process: %s", e)
                 else:
-                    print("   Please use a different port with --port flag")
+                    logger.info("User chose not to stop existing process")
                     return False
             except (KeyboardInterrupt, EOFError):
-                print("\n   Cancelled")
+                logger.info("Cancelled by user")
                 return False
     except Exception as e:
         logger.warning(f"Could not check port status: {e}")
 
-    print(f"  \U0001f4ca Starting Streamlit server on port {port}...")
-    print(f"  \U0001f517 URL: http://localhost:{port}")
-    print()
-    print("  Press Ctrl+C to stop the dashboard")
-    print("-" * 60)
-    sys.stdout.flush()
+    logger.info("Starting Streamlit server on port %d", port)
+    if sys.stdout.isatty():
+        print(f"  \U0001f4ca Starting Streamlit server on port {port}...")
+        print(f"  \U0001f517 URL: http://localhost:{port}")
+        print()
+        print("  Press Ctrl+C to stop the dashboard")
+        print("-" * 60)
+        sys.stdout.flush()
 
     # Build the Streamlit command with dark-theme configuration.
     # --server.headless true: prevents Streamlit from trying to open a browser
@@ -1356,12 +1338,12 @@ def launch_dashboard(port: int = None, open_browser: bool = True):
         """
         nonlocal streamlit_process
         if streamlit_process and streamlit_process.poll() is None:
-            print("\n\U0001f9f9 Cleaning up dashboard process...")
+            logger.info("Cleaning up dashboard process...")
             streamlit_process.terminate()
             try:
                 streamlit_process.wait(timeout=TIMEOUT_PROCESS_KILL)
             except subprocess.TimeoutExpired:
-                print("   Force killing process...")
+                logger.warning("Force killing dashboard process...")
                 streamlit_process.kill()
 
     # Register the cleanup function so it runs even if the script crashes
@@ -1401,16 +1383,15 @@ def launch_dashboard(port: int = None, open_browser: bool = True):
 
     except KeyboardInterrupt:
         # User pressed Ctrl+C -- this is the expected way to stop the dashboard
-        print("\n\n\u2705 Dashboard stopped by user.")
+        logger.info("Dashboard stopped by user")
         cleanup()
         return True
     except FileNotFoundError:
         # sys.executable or streamlit not found in PATH
-        print("\n\u274c Streamlit not found. Install with: pip install streamlit plotly")
+        logger.error("Streamlit not found. Install with: pip install streamlit plotly")
         return False
     except Exception as e:
-        print(f"\n\u274c Error launching dashboard: {e}")
-        logger.error("Dashboard launch failed", exc_info=True)
+        logger.error("Error launching dashboard: %s", e, exc_info=True)
         cleanup()
         return False
 
@@ -1431,10 +1412,13 @@ def main():
     """
     args = parse_args()
 
-    # Reconfigure logging if the user requested verbose output.
-    # This re-creates the console handler with INFO level (instead of WARNING).
-    if args.verbose:
-        setup_logging(verbose=True)
+    # Reconfigure logging if the user requested verbose output or a custom level.
+    if args.log_level or args.verbose:
+        setup_logging(
+            verbose=args.verbose,
+            log_level=args.log_level,
+            log_file=args.log_file,
+        )
 
     # Health check mode: run diagnostics and exit immediately
     if args.health_check:
@@ -1455,7 +1439,7 @@ def main():
             success = run_pipeline(input_file=args.file, output_file=args.output)
             if not success:
                 sys.exit(1)
-            print("\u2705 Pipeline complete. Run with --dashboard-only to view results.")
+            logger.info("Pipeline complete. Run with --dashboard-only to view results.")
 
         else:
             # Default full flow: pipeline -> AI cache pre-generation -> dashboard.
@@ -1463,8 +1447,7 @@ def main():
             # of the previous one (pipeline produces the report that the dashboard
             # reads, and AI cache pre-generation needs to happen before the
             # dashboard loads the cache).
-            print("\U0001f504 Running full analysis pipeline...")
-            sys.stdout.flush()
+            logger.info("Running full analysis pipeline...")
             success = run_pipeline(input_file=args.file, output_file=args.output)
 
             # Pre-generate AI insights regardless of pipeline success, because
@@ -1475,16 +1458,16 @@ def main():
             write_pipeline_metadata()
 
             if success:
-                print("\u2705 Launching dashboard to view results...")
+                logger.info("Launching dashboard to view results...")
                 launch_dashboard(port=args.port, open_browser=not args.no_browser)
             else:
                 # Launch dashboard even after pipeline errors so the user can
                 # inspect partial results and diagnose what went wrong.
-                print("\n\u26a0\ufe0f Pipeline had errors. Launching dashboard anyway...")
+                logger.warning("Pipeline had errors. Launching dashboard anyway...")
                 launch_dashboard(port=args.port, open_browser=not args.no_browser)
 
     except KeyboardInterrupt:
-        print("\n\n\U0001f44b Cancelled by user.")
+        logger.info("Cancelled by user")
         sys.exit(0)
 
 

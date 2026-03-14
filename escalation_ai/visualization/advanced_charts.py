@@ -70,6 +70,7 @@ New chart types that add incredible insights:
 - Recurrence Network Graph
 """
 
+import logging
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch, Circle
@@ -80,6 +81,8 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 from collections import Counter
 
 # PLOT_DIR: Base output directory for all chart PNG files (from config.py).
@@ -380,7 +383,7 @@ class AdvancedChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating SLA funnel: {e}")
+            logger.error("Error generating SLA funnel: %s", e)
             plt.close('all')
             return None
 
@@ -584,7 +587,7 @@ class AdvancedChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating engineer quadrant: {e}")
+            logger.error("Error generating engineer quadrant: %s", e)
             plt.close('all')
             return None
 
@@ -764,7 +767,7 @@ class AdvancedChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating cost waterfall: {e}")
+            logger.error("Error generating cost waterfall: %s", e)
             plt.close('all')
             return None
 
@@ -903,7 +906,7 @@ class AdvancedChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating time heatmap: {e}")
+            logger.error("Error generating time heatmap: %s", e)
             plt.close('all')
             return None
 
@@ -1032,7 +1035,7 @@ class AdvancedChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating executive scorecard: {e}")
+            logger.error("Error generating executive scorecard: %s", e)
             plt.close('all')
             return None
 
@@ -1267,7 +1270,7 @@ class AdvancedChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating aging burndown: {e}")
+            logger.error("Error generating aging burndown: %s", e)
             plt.close('all')
             return None
 
@@ -1343,6 +1346,6 @@ class AdvancedChartGenerator:
         except Exception as e:
             # Catch-all: if the orchestration itself fails, log and return
             # whatever charts were successfully generated before the error.
-            print(f"Error generating advanced charts: {e}")
+            logger.error("Error generating advanced charts: %s", e)
 
         return generated

@@ -55,6 +55,7 @@ Dependencies:
     - pandas for data aggregation and rolling averages
 """
 
+import logging
 import matplotlib.pyplot as plt          # Core plotting library for all static charts
 import matplotlib.patches as mpatches    # Custom legend patches (colored rectangles)
 import seaborn as sns                    # Statistical visualization (heatmaps)
@@ -63,6 +64,8 @@ import pandas as pd                      # Data manipulation (rolling averages, 
 from pathlib import Path                 # Cross-platform file path handling
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # PLOT_DIR: Base output directory for all chart images (from centralized config)
 from ..core.config import (
@@ -251,7 +254,7 @@ class ChartGenerator:
             generated['lessons'].append(self._chart_recommendations_summary(analysis_data))
 
         except Exception as e:
-            print(f"Chart generation error: {e}")
+            logger.error("Chart generation error: %s", e)
 
         # Filter None values
         for category in generated:
@@ -327,7 +330,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating friction pareto chart: {e}")
+            logger.error("Error generating friction pareto chart: %s", e)
             plt.close('all')
             return None
     
@@ -374,7 +377,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating risk origin chart: {e}")
+            logger.error("Error generating risk origin chart: %s", e)
             plt.close('all')
             return None
     
@@ -428,7 +431,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating risk trend chart: {e}")
+            logger.error("Error generating risk trend chart: %s", e)
             plt.close('all')
             return None
     
@@ -473,7 +476,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating severity heatmap: {e}")
+            logger.error("Error generating severity heatmap: %s", e)
             plt.close('all')
             return None
     
@@ -555,7 +558,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating engineer friction chart: {e}")
+            logger.error("Error generating engineer friction chart: %s", e)
             plt.close('all')
             return None
     
@@ -623,7 +626,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating engineer learning chart: {e}")
+            logger.error("Error generating engineer learning chart: %s", e)
             plt.close('all')
             return None
     
@@ -690,7 +693,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating LOB friction chart: {e}")
+            logger.error("Error generating LOB friction chart: %s", e)
             plt.close('all')
             return None
     
@@ -772,7 +775,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating LOB matrix chart: {e}")
+            logger.error("Error generating LOB matrix chart: %s", e)
             plt.close('all')
             return None
 
@@ -863,7 +866,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating LOB categories chart: {e}")
+            logger.error("Error generating LOB categories chart: %s", e)
             plt.close('all')
             return None
     
@@ -922,7 +925,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating root cause chart: {e}")
+            logger.error("Error generating root cause chart: %s", e)
             plt.close('all')
             return None
     
@@ -977,7 +980,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating learning integrity chart: {e}")
+            logger.error("Error generating learning integrity chart: %s", e)
             plt.close('all')
             return None
     
@@ -1032,7 +1035,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating PM accuracy chart: {e}")
+            logger.error("Error generating PM accuracy chart: %s", e)
             plt.close('all')
             return None
     
@@ -1109,7 +1112,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating AI recurrence chart: {e}")
+            logger.error("Error generating AI recurrence chart: %s", e)
             plt.close('all')
             return None
     
@@ -1169,7 +1172,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating resolution time chart: {e}")
+            logger.error("Error generating resolution time chart: %s", e)
             plt.close('all')
             return None
     
@@ -1249,7 +1252,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating financial impact chart: {e}")
+            logger.error("Error generating financial impact chart: %s", e)
             plt.close('all')
             return None
     
@@ -1344,7 +1347,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating similarity count chart: {e}")
+            logger.error("Error generating similarity count chart: %s", e)
             plt.close('all')
             return None
 
@@ -1431,7 +1434,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating resolution consistency chart: {e}")
+            logger.error("Error generating resolution consistency chart: %s", e)
             plt.close('all')
             return None
 
@@ -1508,7 +1511,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating similarity score chart: {e}")
+            logger.error("Error generating similarity score chart: %s", e)
             plt.close('all')
             return None
 
@@ -1576,7 +1579,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating resolution comparison chart: {e}")
+            logger.error("Error generating resolution comparison chart: %s", e)
             plt.close('all')
             return None
 
@@ -1645,7 +1648,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating similarity effectiveness chart: {e}")
+            logger.error("Error generating similarity effectiveness chart: %s", e)
             plt.close('all')
             return None
 
@@ -1724,7 +1727,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating learning grades chart: {e}")
+            logger.error("Error generating learning grades chart: %s", e)
             plt.close('all')
             return None
 
@@ -1790,7 +1793,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating lesson completion chart: {e}")
+            logger.error("Error generating lesson completion chart: %s", e)
             plt.close('all')
             return None
 
@@ -1863,7 +1866,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating recurrence vs lessons chart: {e}")
+            logger.error("Error generating recurrence vs lessons chart: %s", e)
             plt.close('all')
             return None
 
@@ -1932,7 +1935,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating learning heatmap: {e}")
+            logger.error("Error generating learning heatmap: %s", e)
             plt.close('all')
             return None
 
@@ -2019,7 +2022,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating recommendations chart: {e}")
+            logger.error("Error generating recommendations chart: %s", e)
             plt.close('all')
             return None
 
@@ -2113,7 +2116,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating category/subcategory breakdown chart: {e}")
+            logger.error("Error generating category/subcategory breakdown chart: %s", e)
             plt.close('all')
             return None
 
@@ -2187,7 +2190,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating sub-category financial impact chart: {e}")
+            logger.error("Error generating sub-category financial impact chart: %s", e)
             plt.close('all')
             return None
 
@@ -2258,7 +2261,7 @@ class ChartGenerator:
             return str(filepath)
 
         except Exception as e:
-            print(f"Error generating category heatmap: {e}")
+            logger.error("Error generating category heatmap: %s", e)
             plt.close('all')
             return None
 
@@ -2334,7 +2337,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating category drift chart: {e}")
+            logger.error("Error generating category drift chart: %s", e)
             plt.close('all')
             return None
     
@@ -2399,7 +2402,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating drift timeline chart: {e}")
+            logger.error("Error generating drift timeline chart: %s", e)
             plt.close('all')
             return None
     
@@ -2461,7 +2464,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating distribution comparison chart: {e}")
+            logger.error("Error generating distribution comparison chart: %s", e)
             plt.close('all')
             return None
 
@@ -2541,7 +2544,7 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating threshold status chart: {e}")
+            logger.error("Error generating threshold status chart: %s", e)
             plt.close('all')
             return None
     
@@ -2638,6 +2641,6 @@ class ChartGenerator:
             return str(filepath)
             
         except Exception as e:
-            print(f"Error generating metric threshold chart: {e}")
+            logger.error("Error generating metric threshold chart: %s", e)
             plt.close('all')
             return None

@@ -1248,17 +1248,16 @@ def _calculate_financial_impact_from_catalog(df: pd.DataFrame) -> pd.DataFrame:
         impact_results = df.apply(calc_impact, axis=1)
         df['Financial_Impact'] = impact_results.apply(lambda r: r['total_impact'])
         df['Financial_Impact_Source'] = impact_results.apply(lambda r: r['source'])
-        print(f"✓ Calculated Financial_Impact using price_catalog.xlsx: ${df['Financial_Impact'].sum():,.0f} total")
+        logger.info("Calculated Financial_Impact using price_catalog.xlsx: $%s total", f"{df['Financial_Impact'].sum():,.0f}")
 
     except Exception as e:
         import traceback
         error_msg = f"Could not load price_catalog.xlsx: {e}"
-        print(f"⚠ ERROR: {error_msg}")
-        print(f"⚠ Full traceback:\n{traceback.format_exc()}")
+        logger.error("Financial impact calculation error: %s\n%s", error_msg, traceback.format_exc())
         st.error(f"Financial Impact values may be inaccurate. {error_msg}")
         # Fallback: use the Financial_Impact values already in the dataframe if they exist
         if 'Financial_Impact' in df.columns and df['Financial_Impact'].sum() > 0:
-            print("Using existing Financial_Impact values from Excel file")
+            logger.info("Using existing Financial_Impact values from Excel file")
         else:
             # Last resort - mark as zero so it's obviously wrong, not silently fake
             df['Financial_Impact'] = 0
@@ -1320,7 +1319,7 @@ def load_data():
     try:
         df = pd.read_excel(file_path, sheet_name=sheet_name)
         df = process_dataframe(df)  # Recalculates Financial_Impact from price_catalog
-        print(f"✅ Loaded {len(df)} records from {file_path}")
+        logger.info("Loaded %d records from %s", len(df), file_path)
         return df, file_path
     except Exception as e:
         st.warning(f"Could not load {file_path}: {e}")

@@ -320,8 +320,7 @@ class SimilarTicketFinder:
         from tqdm import tqdm
 
         # Always build embeddings for caching, even if not using GPU for similarity search
-        logger.info("[Similar Ticket Finder] Building similarity index...")
-        print("  🧠 Pre-computing embeddings for similarity search...")
+        logger.info("Building similarity index...")
 
         embeddings = []
         ids = []
@@ -359,7 +358,7 @@ class SimilarTicketFinder:
                 except Exception as e:
                     logger.warning(f"Could not cache FAISS index: {e}")
 
-                print(f"  ✅ FAISS index built with {len(embeddings)} embeddings")
+                logger.info("FAISS index built with %d embeddings", len(embeddings))
             elif self.use_gpu:
                 # Build GPU search index (cuML NearestNeighbors with cosine metric)
                 self.gpu_search_index = GPUSimilaritySearch(
@@ -369,11 +368,9 @@ class SimilarTicketFinder:
                     n_neighbors=min(self.top_k * 2, len(embeddings))
                 )
                 self.gpu_search_index.fit(self.index_embeddings)
-                print(f"  ✅ GPU index built with {len(embeddings)} embeddings")
+                logger.info("GPU index built with %d embeddings", len(embeddings))
             else:
-                print(f"  ✅ CPU index built with {len(embeddings)} embeddings")
-
-            logger.info(f"[Similar Ticket Finder] Index built with {len(embeddings)} embeddings")
+                logger.info("CPU index built with %d embeddings", len(embeddings))
 
     # ------------------------------------------------------------------
     # Core similarity computation
