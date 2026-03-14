@@ -37,6 +37,18 @@ import json
 # Import advanced chart generator
 from escalation_ai.visualization.advanced_charts import AdvancedChartGenerator
 
+# Import centralized configuration constants
+from escalation_ai.core.config import (
+    OLLAMA_BASE_URL,
+    RECIDIVISM_PENALTY_HIGH, RECIDIVISM_PENALTY_MEDIUM,
+    SIMILARITY_THRESHOLD_HIGH, SIMILARITY_THRESHOLD_MEDIUM,
+    KEYWORD_OVERLAP_THRESHOLD, MIN_CLASSIFICATION_CONFIDENCE,
+    TIMEOUT_GPU_QUERY, TIMEOUT_OLLAMA_HEALTH, TIMEOUT_MODEL_TEST,
+    TIMEOUT_OLLAMA_EMBED, TIMEOUT_OLLAMA_BATCH,
+    LLM_NUM_PREDICT_DETAILED, LOW_CONFIDENCE_HIGHLIGHT,
+    CLASSIFICATION_MIN_EMBEDDING_SIMILARITY,
+)
+
 # Suppress warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -49,9 +61,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==========================================
-# CONFIGURATION
+# CONFIGURATION (imported from escalation_ai.core.config)
 # ==========================================
-OLLAMA_BASE_URL = "http://localhost:11434"
 
 # ==========================================
 # AUTOMATIC VRAM DETECTION & MODEL SELECTION
@@ -62,7 +73,7 @@ def get_vram_gb():
         import subprocess
         result = subprocess.run(
             ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=TIMEOUT_GPU_QUERY
         )
         if result.returncode == 0:
             # Get the first GPU's memory (in MB), convert to GB
@@ -117,18 +128,8 @@ WEIGHTS = {
     'IMPACT_MULTIPLIER': {'High': 2.0, 'Low': 1.1, 'None': 1.0}
 }
 
-# SIMILARITY THRESHOLD FOR RECIDIVISM DETECTION
-# Lowered thresholds based on observed max similarity scores (~0.62)
-SIMILARITY_THRESHOLD_HIGH = 0.60   # High confidence match (was 0.80)
-SIMILARITY_THRESHOLD_MEDIUM = 0.50  # Medium confidence - worth flagging (was 0.70)
-KEYWORD_OVERLAP_THRESHOLD = 0.35    # 35% keyword overlap = likely related (was 0.5)
-
-# CLASSIFICATION CONFIDENCE THRESHOLD
-MIN_CLASSIFICATION_CONFIDENCE = 0.25  # Below this = "Unclassified"
-
-# RECIDIVISM PENALTY MULTIPLIERS
-RECIDIVISM_PENALTY_HIGH = 1.5      # 50% score increase for confirmed repeats
-RECIDIVISM_PENALTY_MEDIUM = 1.25   # 25% score increase for possible repeats
+# SIMILARITY, CLASSIFICATION, and RECIDIVISM constants are now imported from
+# escalation_ai.core.config (single source of truth).
 
 # FEEDBACK/REINFORCEMENT LEARNING SETTINGS
 FEEDBACK_FILE = "classification_feedback.xlsx"
@@ -270,7 +271,7 @@ class OllamaBrain:
         try:
             res = requests.post(f"{OLLAMA_BASE_URL}/api/embed",
                               json={"model": self.embed_model, "input": str(text)},
-                              timeout=30)
+                              timeout=TIMEOUT_OLLAMA_EMBED)
             if res.status_code == 200:
                 vec = res.json().get('embedding') or res.json().get('embeddings', [[]])[0]
                 return np.array(vec)
@@ -301,7 +302,7 @@ class OllamaBrain:
         try:
             res = requests.post(f"{OLLAMA_BASE_URL}/api/embed",
                               json={"model": self.embed_model, "input": valid_texts},
-                              timeout=120)
+                              timeout=TIMEOUT_OLLAMA_BATCH)
             if res.status_code == 200:
                 embeddings = res.json().get('embeddings', [])
                 for idx, vec in zip(valid_indices, embeddings):
@@ -373,10 +374,10 @@ FORMATTING RULES:
                                   "prompt": prompt, 
                                   "stream": False,
                                   "options": {
-                                      "num_predict": 800  # Allow longer output for detailed analysis
+                                      "num_predict": LLM_NUM_PREDICT_DETAILED
                                   }
                               },
-                              timeout=120)
+                              timeout=TIMEOUT_OLLAMA_BATCH)
             if res.status_code == 200:
                 raw_response = res.json()['response'].strip()
                 # Clean up any thinking tags that may have leaked through
@@ -442,7 +443,7 @@ def check_models(ai):
         res = requests.post(
             f"{OLLAMA_BASE_URL}/api/generate",
             json={"model": GEN_MODEL, "prompt": "test", "stream": False},
-            timeout=10
+            timeout=TIMEOUT_MODEL_TEST
         )
         if res.status_code == 200:
             logger.info(f"✓ Generation model '{GEN_MODEL}' is active")
@@ -456,7 +457,7 @@ def check_models(ai):
 def check_ollama_server():
     """Check if Ollama server is running"""
     try:
-        res = requests.get(f"{OLLAMA_BASE_URL}/", timeout=3)
+        res = requests.get(f"{OLLAMA_BASE_URL}/", timeout=TIMEOUT_OLLAMA_HEALTH)
         return True
     except Exception as e:
         logger.error(f"Ollama server not reachable: {e}")
@@ -720,12 +721,12 @@ class FeedbackLearning:
                 cell.font = header_font
                 cell.fill = header_fill
             
-            # Highlight low confidence rows (< 0.5) in yellow
+            # Highlight low confidence rows in yellow
             yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
             for row_idx in range(2, len(df_feedback) + 2):
                 try:
                     confidence = float(ws.cell(row=row_idx, column=4).value or 0)
-                    if confidence < 0.5:
+                    if confidence < LOW_CONFIDENCE_HIGHLIGHT:
                         for col_idx in range(1, 13):  # Updated to 12 columns (A-L)
                             ws.cell(row=row_idx, column=col_idx).fill = yellow_fill
                 except (ValueError, TypeError):
@@ -1270,10 +1271,10 @@ def classify_rows(df, ai):
         # Step 1: Try keyword-based classification first
         keyword_cat = keyword_classify(text)
         if keyword_cat:
-            # Verify with embedding (must be at least 0.3 similar)
-            sim = cosine_similarity(vec.reshape(1, -1), 
+            # Verify with embedding similarity
+            sim = cosine_similarity(vec.reshape(1, -1),
                                    anchor_centroids[keyword_cat].reshape(1, -1))[0][0]
-            if sim >= 0.3:
+            if sim >= CLASSIFICATION_MIN_EMBEDDING_SIMILARITY:
                 cats.append(keyword_cat)
                 scores.append(sim)
                 continue

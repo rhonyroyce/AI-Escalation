@@ -67,6 +67,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timedelta
 import warnings
+from escalation_ai.core.config import IQR_MULTIPLIER
 
 try:
     from ..core.gpu_utils import is_gpu_available
@@ -121,7 +122,7 @@ class ThresholdConfig:
             same metric, to prevent alert fatigue.
     """
     # Statistical method parameters
-    iqr_multiplier: float = 1.5  # Standard IQR multiplier for outliers
+    iqr_multiplier: float = IQR_MULTIPLIER  # Standard IQR multiplier for outliers
     z_score_warning: float = 2.0  # Z-score for warning level
     z_score_critical: float = 3.0  # Z-score for critical level
     z_score_emergency: float = 4.0  # Z-score for emergency level

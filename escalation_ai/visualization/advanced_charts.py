@@ -84,7 +84,7 @@ from collections import Counter
 
 # PLOT_DIR: Base output directory for all chart PNG files (from config.py).
 # Advanced charts create subdirectories under this path.
-from ..core.config import PLOT_DIR
+from ..core.config import PLOT_DIR, PLOT_LINEWIDTH_DEFAULT
 
 
 class AdvancedChartGenerator:
@@ -501,8 +501,8 @@ class AdvancedChartGenerator:
             # Step 4: Draw quadrant backgrounds and boundaries.
             # -------------------------------------------------------------------
             # Quadrant divider lines at median values
-            ax.axhline(y=y_median, color='#CCCCCC', linestyle='-', linewidth=1.5, zorder=1)
-            ax.axvline(x=x_median, color='#CCCCCC', linestyle='-', linewidth=1.5, zorder=1)
+            ax.axhline(y=y_median, color='#CCCCCC', linestyle='-', linewidth=PLOT_LINEWIDTH_DEFAULT, zorder=1)
+            ax.axvline(x=x_median, color='#CCCCCC', linestyle='-', linewidth=PLOT_LINEWIDTH_DEFAULT, zorder=1)
 
             # Set axis limits with padding
             xlim = (0, max(x) * 1.2)
@@ -726,7 +726,7 @@ class AdvancedChartGenerator:
                 if i > 0 and i < len(bars_data) - 1:
                     prev_top = bars_data[i-1][1] + bars_data[i-1][2]
                     ax.plot([i-0.5, i-0.3], [prev_top, prev_top],
-                           color='#666666', linewidth=1.5, linestyle='--')
+                           color='#666666', linewidth=PLOT_LINEWIDTH_DEFAULT, linestyle='--')
 
             ax.set_xticks(x_positions)
             ax.set_xticklabels([b[0] for b in bars_data], fontsize=10)

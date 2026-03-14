@@ -66,15 +66,19 @@ Every function wraps its HTTP call in a try/except block:
   AI-generated content or a "AI unavailable" placeholder.
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import re
 import requests
 import numpy as np
 from typing import List, Optional
-
-# ── Ollama Server Configuration ──────────────────────────────────────────────
-# Base URL for the local Ollama REST API.  Ollama's default port is 11434.
-# All endpoints are relative to this base: /api/generate, /api/embed, /api/tags.
-OLLAMA_BASE_URL = 'http://localhost:11434'
+from escalation_ai.core.config import (
+    OLLAMA_BASE_URL,
+    LLM_TEMPERATURE_DEFAULT, LLM_NUM_PREDICT_SUMMARY,
+    TIMEOUT_GPU_QUERY,
+)
 
 # CHAT_MODEL: the large language model used for text generation (narrative
 # insights, summaries, recommendations).  qwen3:14b provides good quality
@@ -101,7 +105,7 @@ def check_ollama() -> bool:
         True if Ollama is reachable and responding, False otherwise.
     """
     try:
-        r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=TIMEOUT_GPU_QUERY)
         return r.status_code == 200
     except Exception:
         # Any exception (ConnectionError, Timeout, etc.) means Ollama is down.
@@ -126,7 +130,7 @@ def strip_thinking_tags(text: str) -> str:
     return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
 
-def ollama_generate(prompt: str, temperature: float = 0.3, timeout: int = 120) -> Optional[str]:
+def ollama_generate(prompt: str, temperature: float = LLM_TEMPERATURE_DEFAULT, timeout: int = 120) -> Optional[str]:
     """Generate text using the Ollama chat model.
 
     Sends a prompt to the /api/generate endpoint with streaming disabled
@@ -162,7 +166,7 @@ def ollama_generate(prompt: str, temperature: float = 0.3, timeout: int = 120) -
                 "prompt": prompt,
                 "stream": False,          # Wait for complete response
                 "options": {
-                    "num_predict": 4096,  # Max tokens to generate
+                    "num_predict": LLM_NUM_PREDICT_SUMMARY,  # Max tokens to generate
                     "temperature": temperature,
                 },
             },

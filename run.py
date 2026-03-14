@@ -335,7 +335,7 @@ def check_gpu_available():
 
     We query nvidia-smi rather than importing a CUDA library because nvidia-smi
     is always available when NVIDIA drivers are installed, even if no Python GPU
-    packages are present.  The 2-second timeout keeps startup fast on machines
+    packages are present.  The timeout keeps startup fast on machines
     without a GPU (where nvidia-smi may hang or be absent).
 
     Returns:
@@ -343,12 +343,13 @@ def check_gpu_available():
         gpu_name is the human-readable name of the first detected GPU,
         e.g. "NVIDIA GeForce RTX 5090".
     """
+    from escalation_ai.core.config import TIMEOUT_QUICK_CHECK
     try:
         result = subprocess.run(
             ['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
             capture_output=True,
             text=True,
-            timeout=2  # Short timeout: nvidia-smi responds instantly if drivers are loaded
+            timeout=TIMEOUT_QUICK_CHECK
         )
         if result.returncode == 0 and result.stdout.strip():
             gpus = result.stdout.strip().split('\n')
@@ -572,7 +573,8 @@ def check_ollama_server():
     """
     try:
         import requests
-        response = requests.get('http://localhost:11434/api/version', timeout=2)
+        from escalation_ai.core.config import OLLAMA_BASE_URL, TIMEOUT_QUICK_CHECK
+        response = requests.get(f'{OLLAMA_BASE_URL}/api/version', timeout=TIMEOUT_QUICK_CHECK)
         return response.status_code == 200
     except ImportError:
         print("\u26a0\ufe0f requests library not available for Ollama check")
@@ -715,6 +717,7 @@ def parse_args():
     Returns:
         argparse.Namespace with the parsed flags.
     """
+    from escalation_ai.core.config import DASHBOARD_PORT
     parser = argparse.ArgumentParser(
         description='Escalation AI - Strategic Friction Analysis',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -759,8 +762,8 @@ Examples:
     parser.add_argument(
         '--port',
         type=int,
-        default=8501,
-        help='Port for Streamlit dashboard (default: 8501)'
+        default=DASHBOARD_PORT,
+        help=f'Port for Streamlit dashboard (default: {DASHBOARD_PORT})'
     )
 
     parser.add_argument(
@@ -872,10 +875,11 @@ def run_pipeline(input_file=None, output_file=None):
                   bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]') as pbar:
 
             # ---- Phase 1: Initialize AI models (Ollama connection, embedding model) ----
-            # Retry up to 3 times because the Ollama server may need time to
-            # load the model into GPU memory on the first request.
+            # Retry because the Ollama server may need time to load the model
+            # into GPU memory on the first request.
+            from escalation_ai.core.config import MAX_RETRIES_INITIALIZATION, RETRY_BACKOFF_SECONDS
             pbar.set_description(phases[0]["desc"])
-            max_retries = 3
+            max_retries = MAX_RETRIES_INITIALIZATION
             initialized = False
 
             for attempt in range(max_retries):
@@ -886,14 +890,14 @@ def run_pipeline(input_file=None, output_file=None):
                     # initialize() returned False (non-exception failure)
                     if attempt < max_retries - 1:
                         tqdm.write(f"\u26a0\ufe0f  Initialization failed, retrying ({attempt + 1}/{max_retries})...")
-                        time.sleep(2)
+                        time.sleep(RETRY_BACKOFF_SECONDS)
                 except Exception as e:
                     if attempt == max_retries - 1:
                         tqdm.write(f"\u274c Failed to initialize after {max_retries} attempts: {e}")
                         logger.error("Pipeline initialization failed", exc_info=True)
                         return False
                     tqdm.write(f"\u26a0\ufe0f  Attempt {attempt + 1} failed: {e}")
-                    time.sleep(2)
+                    time.sleep(RETRY_BACKOFF_SECONDS)
 
             if not initialized:
                 tqdm.write("\u274c Pipeline initialization failed")
@@ -1132,13 +1136,14 @@ URGENT: <urgent issue>"""
         "Scope Change", "Other"
     ]
     if not pain.empty:
+        from escalation_ai.core.config import LLM_TEMPERATURE_DETERMINISTIC, TIMEOUT_OLLAMA_EMBED
         texts = pain.head(30).tolist()
         categories_result = []
         for i, text in enumerate(texts):
             # Prompt the LLM to return ONLY the category name -- this makes
             # parsing trivial and keeps token usage low.
             p = f"Categorize this telecom project issue into ONE of: {', '.join(CATEGORIES)}\nIssue: {text[:300]}\nRespond with ONLY the category name, nothing else."
-            r = ollama_generate(p, temperature=0.1, timeout=30)
+            r = ollama_generate(p, temperature=LLM_TEMPERATURE_DETERMINISTIC, timeout=TIMEOUT_OLLAMA_EMBED)
             if r:
                 # Fuzzy-match the LLM response to a known category.
                 # If the LLM returns "timeline/delays issues", we still match
@@ -1239,7 +1244,10 @@ def write_pipeline_metadata():
     print(f"  \U0001f4cb Pipeline metadata saved to {meta_file}")
 
 
-def launch_dashboard(port: int = 8501, open_browser: bool = True):
+def launch_dashboard(port: int = None, open_browser: bool = True):
+    from escalation_ai.core.config import DASHBOARD_PORT, TIMEOUT_PROCESS_KILL, RETRY_BACKOFF_SECONDS
+    if port is None:
+        port = DASHBOARD_PORT
     """
     Launch the unified Streamlit dashboard as a managed subprocess (Stage 3).
 
@@ -1295,8 +1303,8 @@ def launch_dashboard(port: int = 8501, open_browser: bool = True):
                     print("   Attempting to stop existing Streamlit process...")
                     try:
                         # pkill sends SIGTERM to processes matching the pattern
-                        subprocess.run(['pkill', '-f', f'streamlit.*{port}'], timeout=5)
-                        time.sleep(2)  # Give the process time to release the port
+                        subprocess.run(['pkill', '-f', f'streamlit.*{port}'], timeout=TIMEOUT_PROCESS_KILL)
+                        time.sleep(RETRY_BACKOFF_SECONDS)  # Give the process time to release the port
                         print("   \u2705 Process stopped")
                     except subprocess.TimeoutExpired:
                         print("   \u26a0\ufe0f  Timeout stopping process")
@@ -1351,7 +1359,7 @@ def launch_dashboard(port: int = 8501, open_browser: bool = True):
             print("\n\U0001f9f9 Cleaning up dashboard process...")
             streamlit_process.terminate()
             try:
-                streamlit_process.wait(timeout=5)
+                streamlit_process.wait(timeout=TIMEOUT_PROCESS_KILL)
             except subprocess.TimeoutExpired:
                 print("   Force killing process...")
                 streamlit_process.kill()

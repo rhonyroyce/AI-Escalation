@@ -59,7 +59,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # VISION_MODEL: model name string (e.g., "llama3.2-vision:latest")
 # VISION_MODEL_TIMEOUT: max seconds to wait for Ollama response (default: 120)
 # OLLAMA_BASE_URL: Ollama server URL (default: "http://localhost:11434")
-from ..core.config import VISION_MODEL, VISION_MODEL_TIMEOUT, OLLAMA_BASE_URL
+from ..core.config import VISION_MODEL, VISION_MODEL_TIMEOUT, OLLAMA_BASE_URL, TIMEOUT_GPU_QUERY
 
 logger = logging.getLogger(__name__)
 
@@ -549,7 +549,7 @@ Be specific about numbers, categories, or values you can see in the chart. Keep 
         try:
             import requests
             # Query Ollama's model listing endpoint
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response = requests.get(f"{self.base_url}/api/tags", timeout=TIMEOUT_GPU_QUERY)
             if response.status_code == 200:
                 models = response.json().get("models", [])
                 model_names = [m.get("name", "") for m in models]

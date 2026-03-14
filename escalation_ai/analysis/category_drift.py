@@ -67,6 +67,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timedelta
 from collections import Counter
 import warnings
+from escalation_ai.core.config import SIGNIFICANCE_LEVEL
 
 try:
     from scipy import stats as scipy_stats
@@ -183,7 +184,7 @@ class CategoryDriftDetector:
     """
 
     def __init__(self,
-                 significance_level: float = 0.05,
+                 significance_level: float = SIGNIFICANCE_LEVEL,
                  min_samples_per_period: int = 30,
                  drift_threshold: float = 0.2):
         """

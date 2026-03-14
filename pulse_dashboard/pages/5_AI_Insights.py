@@ -64,10 +64,12 @@ Risk Scoring tab when contextualising the LLM prompt.
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
 import pandas as pd
 import numpy as np
+from escalation_ai.core.config import LLM_TEMPERATURE_DETERMINISTIC, TIMEOUT_OLLAMA_EMBED
 
 # Sidebar renders the global Region / Area / Year / Week filters and returns
 # the filtered DataFrame.  ``inject_css`` pushes the dark-theme stylesheet
@@ -303,7 +305,7 @@ with tab2:
                     # Each issue is sent individually so the LLM can focus on
                     # a single classification.  Temperature 0.1 for determinism.
                     p = f"Categorize this telecom project issue into ONE of: {', '.join(CATEGORIES)}\nIssue: {text[:300]}\nRespond with ONLY the category name, nothing else."
-                    result = ollama_generate(p, temperature=0.1, timeout=30)
+                    result = ollama_generate(p, temperature=LLM_TEMPERATURE_DETERMINISTIC, timeout=TIMEOUT_OLLAMA_EMBED)
                     if result:
                         # Fuzzy matching: find the first predefined category
                         # whose name appears (case-insensitive) in the LLM's
@@ -335,7 +337,7 @@ with tab2:
                 texts = pain_points_cat.head(30).tolist()
                 for i, text in enumerate(texts):
                     prompt = f"Categorize this telecom project issue into ONE of: {', '.join(CATEGORIES)}\nIssue: {text[:300]}\nRespond with ONLY the category name, nothing else."
-                    result = ollama_generate(prompt, temperature=0.1, timeout=30)
+                    result = ollama_generate(prompt, temperature=LLM_TEMPERATURE_DETERMINISTIC, timeout=TIMEOUT_OLLAMA_EMBED)
                     if result:
                         matched = next((c for c in CATEGORIES if c.lower() in result.strip().lower()), 'Other')
                         categories_result.append(matched)

@@ -65,7 +65,10 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 # PLOT_DIR: Base output directory for all chart images (from centralized config)
-from ..core.config import PLOT_DIR
+from ..core.config import (
+    PLOT_DIR, PLOT_LINEWIDTH_DEFAULT,
+    PLOT_PIE_EXPLODE_DEFAULT, PLOT_PIE_EXPLODE_PRIMARY,
+)
 
 
 class ChartGenerator:
@@ -297,7 +300,7 @@ class ChartGenerator:
             ax2.plot(x_pos, cumulative, color=self.COLORS['accent'], 
                     marker='o', linewidth=2.5, markersize=8, label='Cumulative %')
             ax2.axhline(y=80, color=self.COLORS['danger'], linestyle='--', 
-                       linewidth=1.5, alpha=0.7, label='80% Threshold')
+                       linewidth=PLOT_LINEWIDTH_DEFAULT, alpha=0.7, label='80% Threshold')
             
             # Styling - rotate x-axis labels
             ax.set_xlabel('Category')
@@ -345,8 +348,8 @@ class ChartGenerator:
             colors = [self.COLORS['primary'], self.COLORS['secondary'], 
                      self.COLORS['accent'], self.COLORS['success']][:len(labels)]
             
-            explode = [0.05] * len(labels)
-            explode[0] = 0.1  # Explode largest slice
+            explode = [PLOT_PIE_EXPLODE_DEFAULT] * len(labels)
+            explode[0] = PLOT_PIE_EXPLODE_PRIMARY  # Explode largest slice
             
             wedges, texts, autotexts = ax.pie(
                 sizes, labels=labels, colors=colors, explode=explode,
@@ -656,7 +659,7 @@ class ChartGenerator:
             
             colors = plt.cm.Blues(np.linspace(0.3, 0.9, len(lobs)))
             
-            bars = ax.bar(lobs, friction, color=colors, edgecolor='white', linewidth=1.5)
+            bars = ax.bar(lobs, friction, color=colors, edgecolor='white', linewidth=PLOT_LINEWIDTH_DEFAULT)
             
             # Value labels
             for bar, val in zip(bars, friction):
@@ -1015,7 +1018,7 @@ class ChartGenerator:
             
             # Target line
             ax.axhline(y=85, color=self.COLORS['success'], linestyle='--',
-                      linewidth=1.5, alpha=0.7, label='Target (85%)')
+                      linewidth=PLOT_LINEWIDTH_DEFAULT, alpha=0.7, label='Target (85%)')
             
             plt.title('Predictive Model Performance\nAccuracy Trend Analysis', 
                      fontsize=14, fontweight='bold', pad=20)
@@ -1297,7 +1300,7 @@ class ChartGenerator:
             bins = np.arange(0, max(counts) + 2) - 0.5
 
             n, bins_out, patches = ax.hist(counts, bins=bins, color=self.COLORS['primary'],
-                                           alpha=0.7, edgecolor='white', linewidth=1.5)
+                                           alpha=0.7, edgecolor='white', linewidth=PLOT_LINEWIDTH_DEFAULT)
 
             # Color bars by count level
             for i, patch in enumerate(patches):
@@ -1688,7 +1691,7 @@ class ChartGenerator:
             }
             colors = [grade_colors.get(g, '#6C757D') for g in grades]
 
-            bars = ax.barh(cat_labels, scores, color=colors, edgecolor='white', linewidth=1.5)
+            bars = ax.barh(cat_labels, scores, color=colors, edgecolor='white', linewidth=PLOT_LINEWIDTH_DEFAULT)
 
             # Add grade labels
             for bar, score, grade in zip(bars, scores, grades):
@@ -1828,8 +1831,8 @@ class ChartGenerator:
                            textcoords='offset points', fontsize=8, alpha=0.8)
 
             # Draw quadrant lines
-            ax.axhline(y=30, color='#CCCCCC', linestyle='--', linewidth=1.5)
-            ax.axvline(x=50, color='#CCCCCC', linestyle='--', linewidth=1.5)
+            ax.axhline(y=30, color='#CCCCCC', linestyle='--', linewidth=PLOT_LINEWIDTH_DEFAULT)
+            ax.axvline(x=50, color='#CCCCCC', linestyle='--', linewidth=PLOT_LINEWIDTH_DEFAULT)
 
             # Quadrant labels
             ax.text(75, 50, 'High Completion\nHigh Recurrence\n(Process Issue)',
@@ -2057,7 +2060,7 @@ class ChartGenerator:
 
             colors = plt.cm.Set2(np.linspace(0, 1, len(categories)))
 
-            bars = ax1.barh(categories, counts, color=colors, edgecolor='white', linewidth=1.5)
+            bars = ax1.barh(categories, counts, color=colors, edgecolor='white', linewidth=PLOT_LINEWIDTH_DEFAULT)
 
             for bar, count in zip(bars, counts):
                 ax1.text(count + 1, bar.get_y() + bar.get_height()/2,
@@ -2150,7 +2153,7 @@ class ChartGenerator:
             norm_costs = np.array(costs) / max(costs)
             colors = plt.cm.RdYlGn_r(norm_costs)
 
-            bars = ax.barh(subcats, costs, color=colors, edgecolor='white', linewidth=1.5)
+            bars = ax.barh(subcats, costs, color=colors, edgecolor='white', linewidth=PLOT_LINEWIDTH_DEFAULT)
 
             # Value labels
             for bar, cost in zip(bars, costs):
@@ -2363,9 +2366,9 @@ class ChartGenerator:
                     color=self.COLORS['warning'], linewidth=2, marker='o', markersize=4)
             
             ax1.axhline(y=0.5, color=self.COLORS['danger'], linestyle='--', 
-                       linewidth=1.5, label='High Drift Threshold')
+                       linewidth=PLOT_LINEWIDTH_DEFAULT, label='High Drift Threshold')
             ax1.axhline(y=0.2, color=self.COLORS['warning'], linestyle='--', 
-                       linewidth=1.5, alpha=0.7, label='Moderate Drift Threshold')
+                       linewidth=PLOT_LINEWIDTH_DEFAULT, alpha=0.7, label='Moderate Drift Threshold')
             
             ax1.set_ylabel('Max Drift Severity')
             ax1.set_ylim(0, 1.1)
@@ -2605,11 +2608,11 @@ class ChartGenerator:
             
             # Add threshold lines
             ax.axhline(y=thresholds['warning'], color=self.COLORS['warning'], 
-                      linestyle='--', linewidth=1.5, alpha=0.7)
+                      linestyle='--', linewidth=PLOT_LINEWIDTH_DEFAULT, alpha=0.7)
             ax.axhline(y=thresholds['critical'], color='#FF5722', 
-                      linestyle='--', linewidth=1.5, alpha=0.7)
+                      linestyle='--', linewidth=PLOT_LINEWIDTH_DEFAULT, alpha=0.7)
             ax.axhline(y=thresholds['emergency'], color=self.COLORS['danger'], 
-                      linestyle='--', linewidth=1.5, alpha=0.7)
+                      linestyle='--', linewidth=PLOT_LINEWIDTH_DEFAULT, alpha=0.7)
             
             ax.set_xlabel('Date')
             ax.set_ylabel(metric_column)

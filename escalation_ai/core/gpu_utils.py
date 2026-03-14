@@ -63,6 +63,7 @@ import logging
 import os
 from typing import Optional, Union, Any
 from functools import wraps
+from escalation_ai.core.config import TIMEOUT_GPU_QUERY
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ def _check_gpu():
     if _GPU_AVAILABLE is None:
         try:
             import subprocess
-            result = subprocess.run(['nvidia-smi'], capture_output=True, timeout=5)
+            result = subprocess.run(['nvidia-smi'], capture_output=True, timeout=TIMEOUT_GPU_QUERY)
             _GPU_AVAILABLE = result.returncode == 0
         except Exception:
             _GPU_AVAILABLE = False
@@ -174,7 +175,7 @@ def get_gpu_info() -> dict:
             # Query GPU name and memory stats in CSV format
             result = subprocess.run(
                 ['nvidia-smi', '--query-gpu=name,memory.total,memory.free', '--format=csv,noheader'],
-                capture_output=True, text=True, timeout=5
+                capture_output=True, text=True, timeout=TIMEOUT_GPU_QUERY
             )
             if result.returncode == 0:
                 parts = result.stdout.strip().split(', ')
@@ -214,7 +215,7 @@ def get_optimal_embedding_batch_size() -> int:
         # Query total VRAM in MiB (no units, no header)
         result = subprocess.run(
             ['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=TIMEOUT_GPU_QUERY
         )
         if result.returncode == 0:
             vram_mb = int(result.stdout.strip().split('\n')[0])

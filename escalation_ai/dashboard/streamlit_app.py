@@ -3210,7 +3210,11 @@ def generate_ai_lesson_recommendations(df, use_ollama: bool = True) -> List[Dict
     if use_ollama:
         try:
             import requests
-            from escalation_ai.core.config import OLLAMA_BASE_URL, GEN_MODEL
+            from escalation_ai.core.config import (
+                OLLAMA_BASE_URL, GEN_MODEL,
+                LLM_TEMPERATURE_CREATIVE, LLM_NUM_PREDICT_RECOMMENDATIONS,
+                TIMEOUT_OLLAMA_GENERATE,
+            )
 
             # Build context for AI
             context_lines = [
@@ -3251,9 +3255,9 @@ Be specific and actionable. Focus on the worst performing categories first."""
                     "model": GEN_MODEL,
                     "prompt": prompt,
                     "stream": False,
-                    "options": {"temperature": 0.7, "num_predict": 1000}
+                    "options": {"temperature": LLM_TEMPERATURE_CREATIVE, "num_predict": LLM_NUM_PREDICT_RECOMMENDATIONS}
                 },
-                timeout=60
+                timeout=TIMEOUT_OLLAMA_GENERATE
             )
 
             if response.status_code == 200:

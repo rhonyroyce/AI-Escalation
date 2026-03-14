@@ -109,7 +109,8 @@ from tqdm import tqdm
 from ..core.config import (
     OLLAMA_BASE_URL, EMBED_MODEL, GEN_MODEL,       # Ollama server & model names
     COL_SUMMARY, COL_CATEGORY, COL_DATETIME, COL_TYPE,  # Column name constants
-    COL_ORIGIN, COL_SEVERITY
+    COL_ORIGIN, COL_SEVERITY,
+    TIMEOUT_GPU_QUERY,                              # Timeout for model listing
 )
 from ..core.ai_engine import OllamaBrain               # Embedding + generation wrapper
 from ..core.utils import clean_text                     # Text normalisation helper
@@ -445,7 +446,7 @@ def check_ollama_server() -> bool:
         ``True`` if the server responds with HTTP 200, ``False`` otherwise.
     """
     try:
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=TIMEOUT_GPU_QUERY)
         if response.status_code == 200:
             print_status("init", "Ollama server is running", "✅")
             return True

@@ -273,6 +273,70 @@ VISION_MODEL_TIMEOUT = int(os.environ.get("VISION_MODEL_TIMEOUT", "120"))
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # ==========================================
+# DASHBOARD CONFIGURATION
+# ==========================================
+# Default TCP port for the Streamlit dashboard server.
+DASHBOARD_PORT = 8501
+
+# ==========================================
+# LLM INFERENCE PARAMETERS
+# ==========================================
+# Temperature settings control randomness in LLM outputs.
+# Lower values = more deterministic, higher = more creative.
+LLM_TEMPERATURE_DETERMINISTIC = 0.1   # For factual classification tasks
+LLM_TEMPERATURE_DEFAULT = 0.3         # Balanced default for general generation
+LLM_TEMPERATURE_CREATIVE = 0.7        # For recommendations and creative synthesis
+
+# Maximum tokens the LLM should generate per request.
+LLM_NUM_PREDICT_DETAILED = 800        # Detailed analysis / lessons learned
+LLM_NUM_PREDICT_RECOMMENDATIONS = 1000  # Dashboard AI recommendations
+LLM_NUM_PREDICT_SUMMARY = 4096        # Long-form summaries (Pulse insights)
+
+# ==========================================
+# TIMEOUT CONSTANTS (seconds)
+# ==========================================
+# Short timeouts for quick health-check calls (nvidia-smi, Ollama ping).
+TIMEOUT_QUICK_CHECK = 2               # nvidia-smi name query, Ollama version ping
+TIMEOUT_OLLAMA_HEALTH = 3             # Ollama server reachability check
+TIMEOUT_GPU_QUERY = 5                 # nvidia-smi VRAM/info queries, model listing
+TIMEOUT_MODEL_TEST = 10               # LLM generation test (short prompt)
+TIMEOUT_OLLAMA_EMBED = 30             # Single embedding API call
+TIMEOUT_OLLAMA_GENERATE = 60          # LLM text generation (lessons, recommendations)
+TIMEOUT_OLLAMA_BATCH = 120            # Batch embedding / long generation calls
+TIMEOUT_PROCESS_KILL = 5              # Subprocess termination grace period
+
+# ==========================================
+# RETRY CONFIGURATION
+# ==========================================
+MAX_RETRIES_INITIALIZATION = 3        # Ollama model loading retries
+RETRY_BACKOFF_SECONDS = 2             # Sleep between retries
+
+# ==========================================
+# STATISTICAL THRESHOLDS
+# ==========================================
+# P-value threshold for chi-squared drift detection tests.
+SIGNIFICANCE_LEVEL = 0.05             # 95% confidence level
+# Interquartile range multiplier for Tukey-style outlier detection.
+IQR_MULTIPLIER = 1.5                  # Standard box-plot whisker multiplier
+
+# ==========================================
+# VISUALIZATION DEFAULTS
+# ==========================================
+# Default line widths for Matplotlib chart elements.
+PLOT_LINEWIDTH_DEFAULT = 1.5          # Standard lines, bar edges, dividers
+# Subplot spacing for multi-panel Plotly charts.
+CHART_HORIZONTAL_SPACING = 0.05       # Tight horizontal gap between subplots
+# Pie chart explode distances.
+PLOT_PIE_EXPLODE_DEFAULT = 0.05       # Standard slice offset
+PLOT_PIE_EXPLODE_PRIMARY = 0.1        # Largest slice offset
+
+# Excel highlighting threshold for low-confidence classifications.
+LOW_CONFIDENCE_HIGHLIGHT = 0.5        # Rows below this get yellow fill
+
+# Minimum embedding similarity for keyword-verified classification matches.
+CLASSIFICATION_MIN_EMBEDDING_SIMILARITY = 0.3
+
+# ==========================================
 # OUTPUT DIRECTORIES
 # ==========================================
 from pathlib import Path

@@ -76,11 +76,16 @@ Imports from utils/styles.py
 ``REGION_LINE_COLORS``    Region name -> hex color for multi-region trend lines.
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import pandas as pd
 import numpy as np
 import plotly.express as px                 # High-level Plotly API (scatter, treemap, icicle)
 import plotly.graph_objects as go           # Low-level Plotly API (Figure, traces)
 from plotly.subplots import make_subplots   # Subplot grid factory (used for dual-axis & small-multiples)
+from escalation_ai.core.config import CHART_HORIZONTAL_SPACING
 
 # Import the centralized style/theme constants from the companion styles module.
 # See the module docstring above for a summary of what each import provides.
@@ -937,7 +942,7 @@ def chart_sparklines(df: pd.DataFrame) -> go.Figure:
     fig = make_subplots(
         rows=1, cols=n_regions,
         subplot_titles=regions,            # Region names as subplot headers
-        horizontal_spacing=0.05,           # Tight horizontal gaps
+        horizontal_spacing=CHART_HORIZONTAL_SPACING,  # Tight horizontal gaps
     )
 
     for i, region in enumerate(regions, 1):    # enumerate from 1 for Plotly's 1-indexed subplots

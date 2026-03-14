@@ -56,7 +56,7 @@ import pandas as pd
 from typing import List
 import tkinter.messagebox as messagebox
 
-from escalation_ai.core.config import OLLAMA_BASE_URL, EMBED_MODEL, GEN_MODEL
+from escalation_ai.core.config import OLLAMA_BASE_URL, EMBED_MODEL, GEN_MODEL, TIMEOUT_OLLAMA_EMBED
 from escalation_ai.core.gpu_utils import get_optimal_embedding_batch_size
 
 logger = logging.getLogger(__name__)
@@ -117,7 +117,7 @@ class OllamaBrain:
             res = requests.post(
                 f"{OLLAMA_BASE_URL}/api/embed",
                 json={"model": self.embed_model, "input": str(text)},
-                timeout=30
+                timeout=TIMEOUT_OLLAMA_EMBED
             )
             if res.status_code == 200:
                 # Handle both old ("embedding") and new ("embeddings") response schemas

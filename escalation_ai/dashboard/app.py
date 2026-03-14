@@ -24,14 +24,17 @@ def get_dashboard_path() -> Path:
     return Path(__file__).parent / "streamlit_app.py"
 
 
-def run_dashboard(data_path: str = None, port: int = 8501):
+def run_dashboard(data_path: str = None, port: int = None):
     """
     Launch the Streamlit dashboard.
-    
+
     Args:
         data_path: Path to processed data file (optional)
-        port: Port to run on (default 8501)
+        port: Port to run on (default from config.DASHBOARD_PORT)
     """
+    from escalation_ai.core.config import DASHBOARD_PORT
+    if port is None:
+        port = DASHBOARD_PORT
     import subprocess
     
     app_path = get_dashboard_path()

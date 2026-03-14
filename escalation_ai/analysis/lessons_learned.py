@@ -66,7 +66,9 @@ from enum import Enum
 # OLLAMA_BASE_URL / GEN_MODEL: For optional AI-powered recommendation generation
 from ..core.config import (
     COL_LESSON_TITLE, COL_LESSON_STATUS, COL_ENGINEER, COL_LOB,
-    OLLAMA_BASE_URL, GEN_MODEL
+    OLLAMA_BASE_URL, GEN_MODEL,
+    LLM_TEMPERATURE_CREATIVE, LLM_NUM_PREDICT_DETAILED,
+    TIMEOUT_OLLAMA_GENERATE,
 )
 
 logger = logging.getLogger(__name__)
@@ -782,11 +784,11 @@ Be specific and actionable. Reference actual category names and numbers from the
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": 0.7,
-                        "num_predict": 800
+                        "temperature": LLM_TEMPERATURE_CREATIVE,
+                        "num_predict": LLM_NUM_PREDICT_DETAILED
                     }
                 },
-                timeout=60
+                timeout=TIMEOUT_OLLAMA_GENERATE
             )
 
             if response.status_code == 200:
@@ -2136,9 +2138,9 @@ Be specific and actionable. Use business language."""
                     "model": GEN_MODEL,
                     "prompt": prompt,
                     "stream": False,
-                    "options": {"temperature": 0.7, "num_predict": 800}
+                    "options": {"temperature": LLM_TEMPERATURE_CREATIVE, "num_predict": LLM_NUM_PREDICT_DETAILED}
                 },
-                timeout=60
+                timeout=TIMEOUT_OLLAMA_GENERATE
             )
 
             if response.status_code == 200:
