@@ -80,6 +80,7 @@ from ..core.gpu_utils import (
     batch_cosine_similarity_gpu,
     is_gpu_available
 )
+from .vector_store import FAISS_AVAILABLE, TicketVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,9 @@ class SimilarTicketFinder:
         self.gpu_search_index = None       # NearestNeighbors model (GPU or None)
         self.index_embeddings = None       # stacked embedding matrix
         self.index_ids = None              # corresponding DataFrame row indices
+
+        # FAISS vector store (preferred over GPU/CPU brute-force when available)
+        self.faiss_store: Optional[TicketVectorStore] = None
 
         # Load existing feedback if available
         self._load_feedback()
@@ -297,18 +301,17 @@ class SimilarTicketFinder:
 
     def build_gpu_index(self, historical_df: pd.DataFrame) -> None:
         """
-        Build GPU-accelerated similarity search index from historical data.
+        Build similarity search index from historical data.
 
         This pre-computes embeddings for every ticket in ``historical_df`` and
-        assembles them into a float32 matrix.  When GPU is available, a RAPIDS
-        cuML NearestNeighbors model is fitted on this matrix for fast
-        approximate nearest neighbour retrieval.  On CPU, the matrix is stored
-        for brute-force cosine similarity scanning.
+        assembles them into a float32 matrix.  The preferred backend is FAISS
+        (O(n log n) search).  Falls back to RAPIDS cuML NearestNeighbors on
+        GPU or brute-force cosine similarity on CPU.
 
         Complexity:
             - Embedding computation: O(n) API calls (cached).
-            - GPU index fitting: O(n * d) where d is the embedding dimension.
-            - Each query then takes O(log n) on GPU vs O(n * d) on CPU.
+            - FAISS index build: O(n * d) where d is the embedding dimension.
+            - Each query then takes O(log n) with FAISS/GPU vs O(n * d) on CPU.
 
         Args:
             historical_df (pd.DataFrame): The full ticket DataFrame.  Each
@@ -340,7 +343,24 @@ class SimilarTicketFinder:
             self.index_embeddings = np.array(embeddings, dtype=np.float32)
             self.index_ids = ids
 
-            if self.use_gpu:
+            # Prefer FAISS for similarity search
+            if FAISS_AVAILABLE:
+                dimension = self.index_embeddings.shape[1]
+                self.faiss_store = TicketVectorStore(dimension=dimension)
+                self.faiss_store.add_embeddings(
+                    self.index_embeddings,
+                    [str(tid) for tid in ids],
+                )
+
+                # Cache the index for reuse across runs
+                cache_path = ".cache/ticket_vectors.faiss"
+                try:
+                    self.faiss_store.save(cache_path)
+                except Exception as e:
+                    logger.warning(f"Could not cache FAISS index: {e}")
+
+                print(f"  ✅ FAISS index built with {len(embeddings)} embeddings")
+            elif self.use_gpu:
                 # Build GPU search index (cuML NearestNeighbors with cosine metric)
                 self.gpu_search_index = GPUSimilaritySearch(
                     use_gpu=self.use_gpu,
@@ -668,16 +688,14 @@ class SimilarTicketFinder:
 
     def find_similar(self, query_row: pd.Series, historical_df: pd.DataFrame, exclude_self: bool = True) -> list[dict[str, Any]]:
         """
-        Find tickets similar to the query ticket (GPU-accelerated when available).
+        Find tickets similar to the query ticket.
 
-        Search Strategy:
-            1. If a GPU index has been built (``build_gpu_index`` was called),
-               perform a fast nearest-neighbour search returning 2*top_k
-               candidates, then filter and sort.
-            2. Otherwise, fall back to a brute-force row-by-row cosine
-               similarity scan over the historical DataFrame.
+        Search Strategy (in order of preference):
+            1. FAISS index — O(log n) approximate nearest-neighbor search.
+            2. GPU index (cuML NearestNeighbors) — fast brute-force on GPU.
+            3. CPU brute-force — row-by-row cosine similarity scan.
 
-        In both paths, similarity scores are adjusted by human feedback before
+        In all paths, similarity scores are adjusted by human feedback before
         the threshold is applied.
 
         Args:
@@ -703,7 +721,50 @@ class SimilarTicketFinder:
 
         similar_tickets = []
 
-        # ---- Path A: GPU-accelerated nearest-neighbour search ----
+        # ---- Path A: FAISS nearest-neighbour search ----
+        if self.faiss_store is not None and self.index_ids is not None:
+            # Determine IDs to exclude (self-matching prevention)
+            exclude_ids: set[str] = set()
+            if exclude_self:
+                for i, tid in enumerate(self.index_ids):
+                    if tid in historical_df.index:
+                        hist_row = historical_df.loc[tid]
+                        hist_id = hist_row.get(COL_SUMMARY, hist_row.get('ID', ''))
+                        if hist_id == query_id:
+                            exclude_ids.add(str(tid))
+
+            results = self.faiss_store.search(
+                query_embedding, k=self.top_k * 2, exclude_ids=exclude_ids
+            )
+
+            for str_idx, sim_score in results:
+                idx = self.index_ids[0].__class__(str_idx)  # preserve index type (int/str)
+                try:
+                    idx = type(self.index_ids[0])(str_idx)
+                except (ValueError, TypeError):
+                    idx = str_idx
+
+                if idx not in historical_df.index:
+                    continue
+
+                hist_row = historical_df.loc[idx]
+                base_similarity = float(sim_score)
+                hist_ticket_id = hist_row.get('ID', str(idx))
+
+                adjusted_similarity = self.get_feedback_adjusted_similarity(
+                    str(query_id), str(hist_ticket_id), base_similarity
+                )
+
+                if adjusted_similarity >= self.similarity_threshold:
+                    similar_tickets.append(
+                        self._build_similar_ticket_result(idx, hist_row, query_id,
+                                                          adjusted_similarity, base_similarity)
+                    )
+
+            similar_tickets.sort(key=lambda x: x['similarity'], reverse=True)
+            return similar_tickets[:self.top_k]
+
+        # ---- Path B: GPU-accelerated nearest-neighbour search ----
         if self.gpu_search_index is not None and self.index_ids is not None:
             # Fast GPU-based nearest neighbor search; returns 2x top_k to allow
             # for post-filtering (self-exclusion, threshold, feedback adjustment)
@@ -743,7 +804,7 @@ class SimilarTicketFinder:
             similar_tickets.sort(key=lambda x: x['similarity'], reverse=True)
             return similar_tickets[:self.top_k]
 
-        # ---- Path B: CPU brute-force row-by-row search ----
+        # ---- Path C: CPU brute-force row-by-row search ----
         for idx, hist_row in historical_df.iterrows():
             # Exclude self-matches
             if exclude_self:

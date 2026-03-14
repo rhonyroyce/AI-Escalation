@@ -17,8 +17,8 @@ with additional columns:
               and ``AI_Sub_Category`` via the hybrid keyword + embedding classifier.
   Phase 2  : Strategic Friction Scoring -- computes a composite
               ``Strategic_Friction_Score`` per ticket.
-  Phase 3  : Recidivism / Learning Analysis -- embeds every ticket and builds an
-              O(n^2) cosine-similarity matrix to flag repeat / similar issues.
+  Phase 3  : Recidivism / Learning Analysis -- embeds every ticket and uses
+              FAISS nearest-neighbor search to flag repeat / similar issues.
   Phase 4  : Recurrence Prediction   -- trains a Random Forest on engineered
               features to predict the probability that a ticket will recur.
   Phase 5  : Similar Ticket Analysis -- finds the closest resolved tickets to
@@ -547,10 +547,11 @@ def audit_learning(df: pd.DataFrame, ai: OllamaBrain, show_progress: bool = True
     ---------
     1. For every ticket, request an embedding vector from the Ollama embedding
        model (via ``ai.get_embedding``).
-    2. Build a brute-force **O(n^2) pairwise cosine-similarity matrix** over
-       all valid embeddings.
-    3. For each ticket, record the *maximum* similarity to any other ticket
-       and label it with a recidivism status:
+    2. Build a FAISS index of all valid embeddings for O(n log n) nearest
+       neighbor search (falls back to O(n^2) pairwise scan if FAISS is
+       unavailable).
+    3. For each ticket, find its nearest neighbor and label it with a
+       recidivism status:
 
        - >= 0.85  :  ``REPEAT OFFENSE``  -- near-duplicate, very likely the
          same root cause.
@@ -558,15 +559,6 @@ def audit_learning(df: pd.DataFrame, ai: OllamaBrain, show_progress: bool = True
          investigation.
        - >= 0.65  :  ``Monitored``       -- on the radar but not alarming.
        - <  0.65  :  ``New Issue``        -- no strong similarity detected.
-
-    Cosine similarity formula
-    -------------------------
-    ::
-
-        sim(A, B) = (A . B) / (||A|| * ||B||)
-
-    Where ``A`` and ``B`` are dense embedding vectors (typically 768 or 1024
-    dimensions depending on the Ollama embedding model).
 
     Columns added to ``df``
     -----------------------
@@ -586,6 +578,8 @@ def audit_learning(df: pd.DataFrame, ai: OllamaBrain, show_progress: bool = True
     Returns:
         The same DataFrame with the four new columns described above.
     """
+    from ..predictors.vector_store import FAISS_AVAILABLE, TicketVectorStore
+
     print_status("Phase 3", "Calculating embeddings for similarity analysis...", "🧠")
 
     # Initialise output columns with safe defaults
@@ -619,58 +613,113 @@ def audit_learning(df: pd.DataFrame, ai: OllamaBrain, show_progress: bool = True
     df['embedding'] = embeddings
 
     # ------------------------------------------------------------------
-    # Step 2: Brute-force pairwise cosine similarity.
-    # Only tickets with a valid (non-None) embedding participate.
-    # Time complexity: O(n^2) where n = number of valid embeddings.
+    # Step 2: Find nearest neighbor for each ticket.
+    # Uses FAISS index for O(n log n) search when available, otherwise
+    # falls back to brute-force O(n^2) pairwise cosine similarity.
     # ------------------------------------------------------------------
-    print_status("Phase 3", "Computing similarity matrix...", "🔍")
-    valid_embeddings = [(i, e) for i, e in enumerate(embeddings) if e is not None]
+    valid_indices = [i for i, e in enumerate(embeddings) if e is not None]
 
-    iterator = tqdm(valid_embeddings, desc="  Finding similar tickets", unit="ticket",
-                   disable=not show_progress, ncols=80,
-                   bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]')
+    if FAISS_AVAILABLE and len(valid_indices) >= 2:
+        print_status("Phase 3", "Building FAISS index for similarity search...", "🔍")
 
-    for i, emb_i in iterator:
-        max_similarity = 0.0
-        most_similar_idx = -1
+        valid_matrix = np.array(
+            [embeddings[i] for i in valid_indices], dtype=np.float32
+        )
+        dimension = valid_matrix.shape[1]
+        valid_ids = [str(i) for i in valid_indices]
 
-        # Compare ticket i against every other valid ticket j
-        for j, emb_j in valid_embeddings:
-            if i == j:
-                continue  # Skip self-comparison
+        store = TicketVectorStore(dimension=dimension)
+        store.add_embeddings(valid_matrix, valid_ids)
 
-            # Cosine similarity: dot(A,B) / (||A|| * ||B||)
-            dot = np.dot(emb_i, emb_j)
-            norm_i = np.linalg.norm(emb_i)
-            norm_j = np.linalg.norm(emb_j)
+        # Cache the index for reuse
+        cache_path = ".cache/ticket_vectors.faiss"
+        try:
+            store.save(cache_path)
+        except Exception as e:
+            logger.warning(f"Could not cache FAISS index: {e}")
 
-            if norm_i > 0 and norm_j > 0:
-                similarity = dot / (norm_i * norm_j)
+        print_status("Phase 3", f"Searching {len(valid_indices)} tickets via FAISS...", "🔍")
 
-                # Track the highest similarity and the index of the best match
-                if similarity > max_similarity:
-                    max_similarity = similarity
-                    most_similar_idx = j
+        # Build a reverse map: str(index) -> position in valid_indices
+        id_to_pos = {str(i): pos for pos, i in enumerate(valid_indices)}
 
-        # Write the max similarity score for this ticket
-        df.at[df.index[i], 'Recidivism_Score'] = max_similarity
+        iterator = tqdm(range(len(valid_indices)), desc="  Finding similar tickets",
+                       unit="ticket", disable=not show_progress, ncols=80,
+                       bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]')
 
-        # ------------------------------------------------------------------
-        # Step 3: Label based on similarity thresholds.
-        # These thresholds were empirically tuned on telecom escalation data.
-        # ------------------------------------------------------------------
-        if max_similarity >= 0.85:
-            df.at[df.index[i], 'Learning_Status'] = '🔴 REPEAT OFFENSE'
-            if most_similar_idx >= 0:
-                # Store a snippet of the most-similar ticket for quick review
-                similar_text = str(df.iloc[most_similar_idx].get(COL_SUMMARY, ''))[:100]
-                df.at[df.index[i], 'Similar_Historical_Issue'] = similar_text
-        elif max_similarity >= 0.75:
-            df.at[df.index[i], 'Learning_Status'] = '🟡 POSSIBLE REPEAT'
-        elif max_similarity >= 0.65:
-            df.at[df.index[i], 'Learning_Status'] = '🟢 Monitored'
-        else:
-            df.at[df.index[i], 'Learning_Status'] = '🆕 New Issue'
+        for pos in iterator:
+            i = valid_indices[pos]
+            neighbor_id, max_similarity = store.find_nearest_neighbor(pos)
+
+            if neighbor_id is not None:
+                most_similar_idx = int(neighbor_id)
+            else:
+                most_similar_idx = -1
+
+            # Write the max similarity score for this ticket
+            df.at[df.index[i], 'Recidivism_Score'] = max_similarity
+
+            # Label based on similarity thresholds
+            if max_similarity >= 0.85:
+                df.at[df.index[i], 'Learning_Status'] = '🔴 REPEAT OFFENSE'
+                if most_similar_idx >= 0:
+                    similar_text = str(df.iloc[most_similar_idx].get(COL_SUMMARY, ''))[:100]
+                    df.at[df.index[i], 'Similar_Historical_Issue'] = similar_text
+            elif max_similarity >= 0.75:
+                df.at[df.index[i], 'Learning_Status'] = '🟡 POSSIBLE REPEAT'
+            elif max_similarity >= 0.65:
+                df.at[df.index[i], 'Learning_Status'] = '🟢 Monitored'
+            else:
+                df.at[df.index[i], 'Learning_Status'] = '🆕 New Issue'
+
+    else:
+        # Fallback: O(n^2) brute-force pairwise cosine similarity
+        if not FAISS_AVAILABLE:
+            import warnings
+            warnings.warn(
+                "FAISS not installed — using O(n^2) pairwise similarity. "
+                "Install faiss-cpu for better performance.",
+                stacklevel=2,
+            )
+
+        print_status("Phase 3", "Computing similarity matrix (brute-force)...", "🔍")
+        valid_embeddings = [(i, embeddings[i]) for i in valid_indices]
+
+        iterator = tqdm(valid_embeddings, desc="  Finding similar tickets", unit="ticket",
+                       disable=not show_progress, ncols=80,
+                       bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]')
+
+        for i, emb_i in iterator:
+            max_similarity = 0.0
+            most_similar_idx = -1
+
+            for j, emb_j in valid_embeddings:
+                if i == j:
+                    continue
+
+                dot = np.dot(emb_i, emb_j)
+                norm_i = np.linalg.norm(emb_i)
+                norm_j = np.linalg.norm(emb_j)
+
+                if norm_i > 0 and norm_j > 0:
+                    similarity = dot / (norm_i * norm_j)
+                    if similarity > max_similarity:
+                        max_similarity = similarity
+                        most_similar_idx = j
+
+            df.at[df.index[i], 'Recidivism_Score'] = max_similarity
+
+            if max_similarity >= 0.85:
+                df.at[df.index[i], 'Learning_Status'] = '🔴 REPEAT OFFENSE'
+                if most_similar_idx >= 0:
+                    similar_text = str(df.iloc[most_similar_idx].get(COL_SUMMARY, ''))[:100]
+                    df.at[df.index[i], 'Similar_Historical_Issue'] = similar_text
+            elif max_similarity >= 0.75:
+                df.at[df.index[i], 'Learning_Status'] = '🟡 POSSIBLE REPEAT'
+            elif max_similarity >= 0.65:
+                df.at[df.index[i], 'Learning_Status'] = '🟢 Monitored'
+            else:
+                df.at[df.index[i], 'Learning_Status'] = '🆕 New Issue'
 
     # Log a concise summary of recidivism findings
     repeat_count = (df['Learning_Status'].str.contains('REPEAT', na=False)).sum()
@@ -921,8 +970,9 @@ class EscalationPipeline:
         """Phase 3: Recidivism & Learning Analysis.
 
         Delegates to :func:`audit_learning` (defined above) which embeds
-        every ticket and computes O(n^2) pairwise cosine similarity to detect
-        repeat offenses.  Adds ``Learning_Status``, ``Recidivism_Score``,
+        every ticket and uses FAISS nearest-neighbor search (or O(n^2)
+        pairwise fallback) to detect repeat offenses.  Adds
+        ``Learning_Status``, ``Recidivism_Score``,
         ``Similar_Historical_Issue``, and ``embedding`` columns.
         """
         print_banner("PHASE 3: RECIDIVISM ANALYSIS", "─")
@@ -1191,7 +1241,7 @@ class EscalationPipeline:
         self.prepare_text()
         self.run_classification()       # Phase 1: Hybrid classification
         self.run_scoring()              # Phase 2: Strategic friction scores
-        self.run_recidivism_analysis()  # Phase 3: Embedding similarity matrix
+        self.run_recidivism_analysis()  # Phase 3: FAISS nearest-neighbor similarity
         self.run_recurrence_prediction() # Phase 4: RF classifier for recurrence
         self.run_similar_ticket_analysis() # Phase 5: k-NN similar ticket search
         self.run_resolution_time_prediction() # Phase 6: RF regressor for resolution time
