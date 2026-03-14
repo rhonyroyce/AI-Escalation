@@ -50,9 +50,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.2.0",
+    "pytest-mock>=3.10.0",
     "black>=23.0.0",
     "flake8>=6.0.0",
     "mypy>=1.0.0",
+    "types-requests>=2.31.0",
 ]
 
 [project.urls]
@@ -68,7 +72,7 @@ where = ["."]
 include = ["escalation_ai*"]
 
 [tool.black]
-line-length = 100
+line-length = 120
 target-version = ['py39', 'py310', 'py311', 'py312']
 
 [tool.mypy]
@@ -76,3 +80,8 @@ python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+no_strict_optional = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 120

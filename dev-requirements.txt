@@ -1,0 +1,15 @@
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-timeout>=2.2.0
+pytest-mock>=3.10.0
+
+# Code formatting
+black>=23.0.0
+
+# Linting
+flake8>=6.0.0
+
+# Type checking
+mypy>=1.0.0
+types-requests>=2.31.0
