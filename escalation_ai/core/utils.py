@@ -1,15 +1,17 @@
 """
 Utility functions for text processing and data validation.
 """
+from __future__ import annotations
 
 import re
 import logging
 import pandas as pd
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-def clean_text(text):
+def clean_text(text: str) -> str:
     """Clean and normalize text for processing"""
     if pd.isna(text):
         return ""
@@ -17,7 +19,7 @@ def clean_text(text):
     return re.sub(r'\s+', ' ', text).strip()
 
 
-def validate_columns(df, required_cols):
+def validate_columns(df: pd.DataFrame, required_cols: list[str]) -> bool:
     """Validate that required columns exist in dataframe"""
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
@@ -26,7 +28,7 @@ def validate_columns(df, required_cols):
     return True
 
 
-def extract_keywords(text):
+def extract_keywords(text: str) -> set[str]:
     """Extract meaningful keywords from text for overlap comparison"""
     if pd.isna(text) or not text:
         return set()
@@ -51,7 +53,7 @@ def extract_keywords(text):
     return keywords
 
 
-def calculate_keyword_overlap(text1, text2):
+def calculate_keyword_overlap(text1: str, text2: str) -> float:
     """Calculate Jaccard similarity of keywords between two texts"""
     kw1 = extract_keywords(text1)
     kw2 = extract_keywords(text2)
@@ -65,7 +67,7 @@ def calculate_keyword_overlap(text1, text2):
     return intersection / union if union > 0 else 0.0
 
 
-def enrich_text_for_embedding(text, category=None):
+def enrich_text_for_embedding(text: str, category: Optional[str] = None) -> str:
     """Expand text with contextual information for better embedding"""
     if pd.isna(text) or not text:
         return ""

@@ -55,6 +55,7 @@ Columns Added to DataFrame:
 
 GPU-accelerated with RAPIDS cuML when available.
 """
+from __future__ import annotations
 
 import os
 import json
@@ -65,6 +66,7 @@ from datetime import datetime
 from collections import Counter
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
+from typing import Any, Optional
 
 from ..core.config import (
     COL_SUMMARY, COL_SEVERITY, COL_DATETIME, COL_CLOSE_DATE,
@@ -116,7 +118,7 @@ class SimilarTicketFinder:
             resolution text from ticket rows.
     """
 
-    def __init__(self, ai_engine=None, top_k=5, similarity_threshold=0.75):
+    def __init__(self, ai_engine: Any = None, top_k: int = 5, similarity_threshold: float = 0.75) -> None:
         """
         Initialize the Similar Ticket Finder.
 
@@ -157,7 +159,7 @@ class SimilarTicketFinder:
     # Feedback persistence
     # ------------------------------------------------------------------
 
-    def _load_feedback(self):
+    def _load_feedback(self) -> None:
         """
         Load human feedback on similarity matches from a JSON file.
 
@@ -175,7 +177,7 @@ class SimilarTicketFinder:
             logger.warning(f"[Similar Ticket Finder] Could not load feedback: {e}")
             self.feedback_data = {}
 
-    def _save_feedback(self):
+    def _save_feedback(self) -> None:
         """Save human feedback to JSON file for future runs."""
         try:
             with open(SIMILARITY_FEEDBACK_PATH, 'w') as f:
@@ -184,7 +186,7 @@ class SimilarTicketFinder:
         except Exception as e:
             logger.warning(f"[Similar Ticket Finder] Could not save feedback: {e}")
 
-    def record_feedback(self, ticket_id, similar_ticket_id, is_similar, notes=""):
+    def record_feedback(self, ticket_id: str, similar_ticket_id: str, is_similar: bool, notes: str = "") -> None:
         """
         Record human feedback on whether two tickets are actually similar.
 
@@ -207,7 +209,7 @@ class SimilarTicketFinder:
         }
         self._save_feedback()
 
-    def get_feedback_adjusted_similarity(self, ticket_id, similar_ticket_id, base_similarity):
+    def get_feedback_adjusted_similarity(self, ticket_id: str, similar_ticket_id: str, base_similarity: float) -> float:
         """
         Adjust similarity score based on human feedback.
 
@@ -244,7 +246,7 @@ class SimilarTicketFinder:
     # Resolution time calculation
     # ------------------------------------------------------------------
 
-    def _calculate_days_to_resolution(self, row):
+    def _calculate_days_to_resolution(self, row: pd.Series) -> Optional[int]:
         """
         Calculate days from issue open to resolution.
 
@@ -293,7 +295,7 @@ class SimilarTicketFinder:
     # GPU index construction
     # ------------------------------------------------------------------
 
-    def build_gpu_index(self, historical_df):
+    def build_gpu_index(self, historical_df: pd.DataFrame) -> None:
         """
         Build GPU-accelerated similarity search index from historical data.
 
@@ -357,7 +359,7 @@ class SimilarTicketFinder:
     # Core similarity computation
     # ------------------------------------------------------------------
 
-    def _cosine_similarity(self, vec1, vec2):
+    def _cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         """
         Calculate cosine similarity between two vectors (GPU-accelerated).
 
@@ -379,7 +381,7 @@ class SimilarTicketFinder:
         use_gpu = USE_GPU and is_gpu_available()
         return cosine_similarity_gpu(vec1, vec2, use_gpu=use_gpu)
 
-    def _get_embedding(self, text, ticket_id=None):
+    def _get_embedding(self, text: str, ticket_id: Optional[str] = None) -> Optional[np.ndarray]:
         """
         Get embedding for text, with caching.
 
@@ -421,7 +423,7 @@ class SimilarTicketFinder:
     # Resolution text extraction
     # ------------------------------------------------------------------
 
-    def _get_resolution_text(self, row):
+    def _get_resolution_text(self, row: pd.Series) -> str:
         """
         Extract resolution/action text from a ticket row.
 
@@ -465,7 +467,7 @@ class SimilarTicketFinder:
     # Resolution consistency analysis
     # ------------------------------------------------------------------
 
-    def _analyze_resolution_consistency(self, similar_tickets):
+    def _analyze_resolution_consistency(self, similar_tickets: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Analyze if similar tickets had consistent resolutions.
 
@@ -605,7 +607,7 @@ class SimilarTicketFinder:
             'resolution_time': resolution_time_analysis
         }
 
-    def _build_similar_ticket_result(self, idx, hist_row, query_id, adjusted_similarity, base_similarity):
+    def _build_similar_ticket_result(self, idx: Any, hist_row: pd.Series, query_id: str, adjusted_similarity: float, base_similarity: float) -> dict[str, Any]:
         """
         Build a similar ticket result dictionary.
 
@@ -664,7 +666,7 @@ class SimilarTicketFinder:
     # Primary search method
     # ------------------------------------------------------------------
 
-    def find_similar(self, query_row, historical_df, exclude_self=True):
+    def find_similar(self, query_row: pd.Series, historical_df: pd.DataFrame, exclude_self: bool = True) -> list[dict[str, Any]]:
         """
         Find tickets similar to the query ticket (GPU-accelerated when available).
 
@@ -811,7 +813,7 @@ class SimilarTicketFinder:
     # Full ticket analysis (similarity + resolution comparison)
     # ------------------------------------------------------------------
 
-    def analyze_ticket(self, query_row, historical_df):
+    def analyze_ticket(self, query_row: pd.Series, historical_df: pd.DataFrame) -> dict[str, Any]:
         """
         Full analysis of a ticket: find similar and compare resolutions.
 
@@ -901,7 +903,7 @@ class SimilarTicketFinder:
     # Batch processing
     # ------------------------------------------------------------------
 
-    def process_all_tickets(self, df, progress_callback=None):
+    def process_all_tickets(self, df: pd.DataFrame, progress_callback: Optional[Any] = None) -> pd.DataFrame:
         """
         Find similar tickets for all tickets in the dataset.
 
@@ -1008,7 +1010,7 @@ class SimilarTicketFinder:
     # Excel export for human feedback
     # ------------------------------------------------------------------
 
-    def export_for_feedback(self, df, output_path):
+    def export_for_feedback(self, df: pd.DataFrame, output_path: str) -> str:
         """
         Export similar ticket matches for human review with dropdowns.
 
@@ -1118,7 +1120,7 @@ class SimilarTicketFinder:
         logger.info(f"[Similar Ticket Finder] Feedback file exported to {output_path}")
         return output_path
 
-    def load_feedback_from_excel(self, excel_path):
+    def load_feedback_from_excel(self, excel_path: str) -> tuple[int, dict[str, float]]:
         """
         Load human feedback from the Similar Tickets feedback Excel file.
 
@@ -1198,7 +1200,7 @@ class SimilarTicketFinder:
 similar_ticket_finder = None
 
 
-def apply_similar_ticket_analysis(df, ai_engine=None):
+def apply_similar_ticket_analysis(df: pd.DataFrame, ai_engine: Any = None) -> pd.DataFrame:
     """
     Apply similar ticket analysis to the dataframe.
 

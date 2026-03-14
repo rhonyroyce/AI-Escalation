@@ -88,6 +88,8 @@ Coordinates all 7 phases of the analysis pipeline:
 6. Resolution Time Prediction
 7. Report Generation
 """
+from __future__ import annotations
+
 
 import os
 import sys
@@ -98,6 +100,7 @@ from tkinter import filedialog, messagebox
 from datetime import datetime
 import pandas as pd
 import numpy as np
+from typing import Optional
 from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
@@ -150,7 +153,7 @@ price_catalog = None
 # operates on the freshest data.
 # ============================================================================
 
-def is_excel_available():
+def is_excel_available() -> bool:
     """Check if Microsoft Excel is available on this system.
 
     Returns ``True`` only on Windows when either **xlwings** or **pywin32**
@@ -170,7 +173,7 @@ def is_excel_available():
             return False
 
 
-def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tuple:
+def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tuple[bool, str]:
     """
     Refresh all data connections (APIs, Power Query) in an Excel file.
 
@@ -359,7 +362,7 @@ def refresh_excel_connections(file_path: str, timeout_seconds: int = 120) -> tup
 # CONSOLE OUTPUT HELPERS
 # ============================================================================
 
-def print_banner(text, char="=", width=60):
+def print_banner(text: str, char: str = "=", width: int = 60) -> None:
     """Print a formatted banner to console.
 
     Used to visually delimit pipeline phases in the terminal output so the
@@ -371,7 +374,7 @@ def print_banner(text, char="=", width=60):
     print(char * width)
 
 
-def print_status(phase, message, icon="→"):
+def print_status(phase: str, message: str, icon: str = "→") -> None:
     """Print a status message and immediately flush stdout.
 
     Flushing ensures the message appears even when stdout is line-buffered
@@ -388,7 +391,7 @@ def print_status(phase, message, icon="→"):
 # instantiated on first access and then reused for the rest of the process.
 # ============================================================================
 
-def get_feedback_learner():
+def get_feedback_learner() -> FeedbackLearning:
     """Get or create the global feedback learner instance.
 
     The ``FeedbackLearning`` object loads a human-curated Excel file of
@@ -402,7 +405,7 @@ def get_feedback_learner():
     return feedback_learner
 
 
-def get_resolution_feedback_learner():
+def get_resolution_feedback_learner() -> ResolutionFeedbackLearning:
     """Get or create the global resolution feedback learner instance.
 
     The ``ResolutionFeedbackLearning`` object stores human-provided estimates
@@ -415,7 +418,7 @@ def get_resolution_feedback_learner():
     return resolution_feedback_learner
 
 
-def get_price_catalog():
+def get_price_catalog() -> PriceCatalog:
     """Get or create the global price catalog instance.
 
     The ``PriceCatalog`` maps ticket categories and severities to dollar-cost
@@ -432,7 +435,7 @@ def get_price_catalog():
 # OLLAMA SERVER & MODEL HEALTH CHECKS
 # ============================================================================
 
-def check_ollama_server():
+def check_ollama_server() -> bool:
     """Check if Ollama server is running.
 
     Sends a lightweight GET to the ``/api/tags`` endpoint.  If the server is
@@ -459,7 +462,7 @@ def check_ollama_server():
     return False
 
 
-def check_models(ai):
+def check_models(ai: OllamaBrain) -> bool:
     """Verify that required AI models are available.
 
     Performs a quick round-trip embedding of the word ``"test"`` to confirm
@@ -498,7 +501,7 @@ def check_models(ai):
 # DATA QUALITY GATE
 # ============================================================================
 
-def validate_data_quality(df):
+def validate_data_quality(df: pd.DataFrame) -> bool:
     """
     Validate that the dataframe has enough usable data.
 
@@ -530,7 +533,7 @@ def validate_data_quality(df):
 # PHASE 3: RECIDIVISM / LEARNING ANALYSIS
 # ============================================================================
 
-def audit_learning(df, ai, show_progress=True):
+def audit_learning(df: pd.DataFrame, ai: OllamaBrain, show_progress: bool = True) -> pd.DataFrame:
     """
     Enhanced recidivism analysis using embedding-based similarity.
 
@@ -710,7 +713,7 @@ class EscalationPipeline:
         summary = pipe.generate_executive_summary()  # Phase 7
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialise all instance attributes to ``None`` / safe defaults.
 
         No expensive work happens here -- actual initialisation is deferred
@@ -727,7 +730,7 @@ class EscalationPipeline:
         self.price_catalog = None               # Category -> cost lookup
         self.show_progress = True               # Controls tqdm progress bars
 
-    def initialize(self):
+    def initialize(self) -> bool:
         """Initialize the pipeline components.
 
         Performs four sequential checks / setup steps:
@@ -777,7 +780,7 @@ class EscalationPipeline:
 
         return True
 
-    def load_data(self, file_path=None):
+    def load_data(self, file_path: Optional[str] = None) -> bool:
         """Load data from file, refreshing API connections if available.
 
         If ``file_path`` is ``None`` a tkinter file-picker dialog is shown.
@@ -845,7 +848,7 @@ class EscalationPipeline:
         print_status("load", f"Loaded {len(self.df):,} tickets with {len(self.df.columns)} columns", "✅")
         return True
 
-    def prepare_text(self):
+    def prepare_text(self) -> None:
         """Prepare the ``Combined_Text`` column used by all downstream phases.
 
         Concatenates the summary and category columns (if present) with a
@@ -880,7 +883,7 @@ class EscalationPipeline:
     # output so the operator can see progress in real time.
     # ======================================================================
 
-    def run_classification(self):
+    def run_classification(self) -> None:
         """Phase 1: AI Classification.
 
         Delegates to :func:`classify_rows` which runs the three-tier
@@ -896,7 +899,7 @@ class EscalationPipeline:
             n_categories = self.df['AI_Category'].nunique()
             print_status("Phase 1", f"Classified into {n_categories} categories", "✅")
 
-    def run_scoring(self):
+    def run_scoring(self) -> None:
         """Phase 2: Strategic Friction Scoring.
 
         Delegates to :func:`calculate_strategic_friction` which computes a
@@ -913,7 +916,7 @@ class EscalationPipeline:
             avg_friction = self.df['Strategic_Friction_Score'].mean()
             print_status("Phase 2", f"Total friction: {total_friction:,.0f} | Avg: {avg_friction:.1f}", "✅")
 
-    def run_recidivism_analysis(self):
+    def run_recidivism_analysis(self) -> None:
         """Phase 3: Recidivism & Learning Analysis.
 
         Delegates to :func:`audit_learning` (defined above) which embeds
@@ -924,7 +927,7 @@ class EscalationPipeline:
         print_banner("PHASE 3: RECIDIVISM ANALYSIS", "─")
         self.df = audit_learning(self.df, self.ai, show_progress=self.show_progress)
 
-    def run_recurrence_prediction(self):
+    def run_recurrence_prediction(self) -> None:
         """Phase 4: ML-based Recurrence Prediction.
 
         Delegates to :func:`apply_recurrence_predictions` which engineers
@@ -943,7 +946,7 @@ class EscalationPipeline:
             high_risk = (self.df['AI_Recurrence_Probability'] > 0.7).sum()
             print_status("Phase 4", f"Identified {high_risk} high-risk tickets (>70% recurrence)", "✅")
 
-    def run_similar_ticket_analysis(self):
+    def run_similar_ticket_analysis(self) -> None:
         """Phase 5: Similar Ticket Analysis.
 
         Delegates to :func:`apply_similar_ticket_analysis` which uses the
@@ -957,7 +960,7 @@ class EscalationPipeline:
         self.df = apply_similar_ticket_analysis(self.df, self.ai)
         print_status("Phase 5", "Similar ticket analysis complete", "✅")
 
-    def run_resolution_time_prediction(self):
+    def run_resolution_time_prediction(self) -> None:
         """Phase 6: Resolution Time Prediction.
 
         Delegates to :func:`apply_resolution_time_prediction` which trains a
@@ -975,7 +978,7 @@ class EscalationPipeline:
             avg_pred = self.df['AI_Predicted_Resolution_Hours'].mean()
             print_status("Phase 6", f"Average predicted resolution: {avg_pred:.1f} hours", "✅")
 
-    def generate_executive_summary(self):
+    def generate_executive_summary(self) -> str:
         """Phase 7: Generate an AI-written executive summary.
 
         This is the final analytical phase.  It:
@@ -1168,7 +1171,7 @@ class EscalationPipeline:
     # FULL PIPELINE EXECUTION
     # ======================================================================
 
-    def run_all_phases(self):
+    def run_all_phases(self) -> pd.DataFrame:
         """Run all pipeline phases in sequence.
 
         This is the main entry point after :meth:`initialize` and
@@ -1201,7 +1204,7 @@ class EscalationPipeline:
 
         return self.df
 
-    def _save_feedback_for_review(self):
+    def _save_feedback_for_review(self) -> None:
         """Save current classifications and resolution predictions to feedback files for human review.
 
         Two separate feedback files are written:
@@ -1238,7 +1241,7 @@ class EscalationPipeline:
             logger.warning(f"Could not save feedback file: {e}")
             print_status("feedback", f"Warning: Could not save feedback file: {e}", "⚠️")
 
-    def get_results(self):
+    def get_results(self) -> pd.DataFrame:
         """Get the processed dataframe.
 
         Returns:
@@ -1252,7 +1255,7 @@ class EscalationPipeline:
 # STANDALONE ENTRY POINT
 # ============================================================================
 
-def main_pipeline():
+def main_pipeline() -> None:
     """
     Main entry point for the Escalation AI pipeline.
 

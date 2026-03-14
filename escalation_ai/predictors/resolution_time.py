@@ -53,10 +53,12 @@ Human-in-the-Loop:
 
 GPU-accelerated with RAPIDS cuML when available.
 """
+from __future__ import annotations
 
 import logging
 import numpy as np
 import pandas as pd
+from typing import Any, Optional
 
 from ..core.config import COL_SUMMARY, COL_SEVERITY, COL_DATETIME, COL_RESOLUTION_DATE, USE_GPU
 from ..core.gpu_utils import GPURandomForestRegressor, is_gpu_available
@@ -94,7 +96,7 @@ class ResolutionTimePredictor:
             successfully fitted on historical data.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the predictor with empty state; no model is trained yet."""
         self.model = None
         self.feature_columns = []
@@ -105,7 +107,7 @@ class ResolutionTimePredictor:
 
         logger.info("[Resolution Predictor] Initialized")
 
-    def _extract_features(self, row):
+    def _extract_features(self, row: pd.Series) -> dict[str, float]:
         """
         Extract a flat feature dictionary from a single ticket row.
 
@@ -188,7 +190,7 @@ class ResolutionTimePredictor:
 
         return features
 
-    def train(self, df):
+    def train(self, df: pd.DataFrame) -> bool:
         """
         Train the resolution time predictor on historical data.
 
@@ -296,7 +298,7 @@ class ResolutionTimePredictor:
             self.is_trained = False
             return False
 
-    def _calculate_resolution_days(self, row):
+    def _calculate_resolution_days(self, row: pd.Series) -> Optional[int]:
         """
         Calculate actual resolution days from ticket data.
 
@@ -335,7 +337,7 @@ class ResolutionTimePredictor:
         except Exception:
             return None
 
-    def predict(self, row):
+    def predict(self, row: pd.Series) -> dict[str, Any]:
         """
         Predict resolution time for a single ticket.
 
@@ -423,7 +425,7 @@ class ResolutionTimePredictor:
         # ---- Priority 4: Calibrated heuristic prediction ----
         return self._predict_heuristic(row, category)
 
-    def _predict_heuristic(self, row, category):
+    def _predict_heuristic(self, row: pd.Series, category: str) -> dict[str, Any]:
         """
         Heuristic-based resolution time prediction when ML model isn't trained.
 
@@ -527,7 +529,7 @@ class ResolutionTimePredictor:
             'method': 'heuristic'
         }
 
-    def set_human_expectations(self, expectations_dict):
+    def set_human_expectations(self, expectations_dict: dict[str, float]) -> None:
         """
         Set human-provided expected resolution times by category.
 
@@ -542,7 +544,7 @@ class ResolutionTimePredictor:
         self.human_expectations = expectations_dict
         logger.info(f"[Resolution Predictor] Loaded {len(expectations_dict)} human expectations")
 
-    def process_all_tickets(self, df):
+    def process_all_tickets(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Process all tickets and add resolution time columns.
 
@@ -605,7 +607,7 @@ class ResolutionTimePredictor:
 
         return df
 
-    def get_accuracy_metrics(self, df):
+    def get_accuracy_metrics(self, df: pd.DataFrame) -> Optional[dict[str, Any]]:
         """
         Calculate accuracy metrics comparing actual vs predicted resolution times.
 
@@ -683,7 +685,7 @@ class ResolutionTimePredictor:
 resolution_time_predictor = None
 
 
-def apply_resolution_time_prediction(df, human_expectations=None):
+def apply_resolution_time_prediction(df: pd.DataFrame, human_expectations: Optional[dict[str, float]] = None) -> pd.DataFrame:
     """
     Apply ML-based resolution time prediction to the dataframe.
 

@@ -4,6 +4,7 @@ Excel Report Generator for Escalation AI.
 Generates comprehensive Excel reports with McKinsey-style formatting,
 including dashboards, charts, and detailed analysis sheets.
 """
+from __future__ import annotations
 
 import os
 import logging
@@ -17,6 +18,7 @@ from openpyxl.chart import BarChart, PieChart, DoughnutChart, Reference
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.series import DataPoint
 import pandas as pd
+from typing import Any, Optional
 
 from ..core.config import (
     REPORT_TITLE, REPORT_VERSION, GEN_MODEL, MC_BLUE,
@@ -41,7 +43,7 @@ class ExcelReportWriter:
     - Raw Data backup
     """
     
-    def __init__(self, output_path):
+    def __init__(self, output_path: str) -> None:
         self.output_path = output_path
         self.output_dir = os.path.dirname(output_path)
         self.wb = Workbook()
@@ -72,7 +74,7 @@ class ExcelReportWriter:
         self.kpi_fill_amber = PatternFill(start_color="FFF8E1", end_color="FFF8E1", fill_type="solid")
         self.section_font = Font(bold=True, size=13, color="004C97")
         
-    def _style_header_row(self, ws, row=1, start_col=1, end_col=None):
+    def _style_header_row(self, ws: Any, row: int = 1, start_col: int = 1, end_col: Optional[int] = None) -> None:
         """Apply header styling to a row."""
         if end_col is None:
             end_col = ws.max_column
@@ -83,7 +85,7 @@ class ExcelReportWriter:
             cell.fill = self.header_fill
             cell.alignment = Alignment(horizontal='center', wrap_text=True)
     
-    def write_executive_summary(self, df, exec_summary_text):
+    def write_executive_summary(self, df: pd.DataFrame, exec_summary_text: str) -> None:
         """Write the Detailed Analysis sheet with metrics and insights."""
         ws = self.wb.create_sheet("Detailed Analysis", 1)  # Position 1 (after Summary)
         ws.sheet_view.showGridLines = False
@@ -861,7 +863,7 @@ class ExcelReportWriter:
         ws.cell(row=current_row, column=2).alignment = Alignment(horizontal='center')
         ws.merge_cells(f'B{current_row}:J{current_row}')
 
-    def write_summary_page(self, df, exec_summary_text, chart_paths):
+    def write_summary_page(self, df: pd.DataFrame, exec_summary_text: str, chart_paths: dict[str, list[str]]) -> None:
         """
         MCKINSEY-GRADE DASHBOARD - Professional Excel dashboard with native charts.
         Features: Executive KPIs, native Excel charts (donut, bar), innovative metrics.
@@ -1356,7 +1358,7 @@ class ExcelReportWriter:
 
         logger.info("McKinsey-grade Summary page created successfully")
 
-    def write_dashboard(self, df, chart_paths):
+    def write_dashboard(self, df: pd.DataFrame, chart_paths: dict[str, list[str]]) -> None:
         """Write the Visual Analytics sheet with embedded chart images in a grid layout."""
         ws = self.wb.create_sheet("Visual Analytics", 2)  # Position 2 (after Summary and Detailed Analysis)
         ws.sheet_view.showGridLines = False
@@ -1600,7 +1602,7 @@ class ExcelReportWriter:
         else:
             logger.info(f"Embedded {images_embedded} chart images in Dashboard sheet")
     
-    def write_scored_data(self, df, df_raw=None):
+    def write_scored_data(self, df: pd.DataFrame, df_raw: Optional[pd.DataFrame] = None) -> None:
         """
         Write the Scored Data sheet with all raw data columns + AI-generated columns.
         This is now the main data sheet combining input data and AI results.
@@ -1658,7 +1660,7 @@ class ExcelReportWriter:
             col_letter = self._get_column_letter(col_idx)
             ws.column_dimensions[col_letter].width = 18
     
-    def _get_column_letter(self, col_idx):
+    def _get_column_letter(self, col_idx: int) -> str:
         """Convert column index to Excel column letter (1=A, 27=AA, etc.)."""
         result = ""
         while col_idx > 0:
@@ -1666,7 +1668,7 @@ class ExcelReportWriter:
             result = chr(65 + remainder) + result
         return result
     
-    def write_raw_data(self, df_raw):
+    def write_raw_data(self, df_raw: pd.DataFrame) -> None:
         """Write Raw Data backup sheet with Identity as primary key."""
         ws = self.wb.create_sheet("Raw Data", -1)
         
@@ -1690,7 +1692,7 @@ class ExcelReportWriter:
                 else:
                     cell.value = str(value)[:1000]
     
-    def generate_charts(self, df):
+    def generate_charts(self, df: pd.DataFrame) -> dict[str, list[str]]:
         """Generate all visualization charts organized by category."""
         # Use default PLOT_DIR for charts (not output_dir which is report location)
         self.chart_generator = ChartGenerator()
@@ -1716,7 +1718,7 @@ class ExcelReportWriter:
         logger.info(f"Generated {len(all_paths)} charts across {len(chart_paths)} categories")
         return chart_paths
     
-    def _generate_advanced_charts(self, df, chart_paths):
+    def _generate_advanced_charts(self, df: pd.DataFrame, chart_paths: dict[str, list[str]]) -> None:
         """Generate advanced executive insight charts."""
         try:
             advanced_gen = AdvancedChartGenerator(self.output_dir)
@@ -1731,7 +1733,7 @@ class ExcelReportWriter:
         except Exception as e:
             logger.warning(f"Advanced charts skipped: {e}")
     
-    def _generate_drift_charts(self, df, chart_paths):
+    def _generate_drift_charts(self, df: pd.DataFrame, chart_paths: dict[str, list[str]]) -> None:
         """Generate category drift detection charts."""
         try:
             from ..analysis import CategoryDriftDetector, DriftType
@@ -1785,7 +1787,7 @@ class ExcelReportWriter:
         except Exception as e:
             logger.warning(f"Error generating drift charts: {e}")
     
-    def _generate_threshold_charts(self, df, chart_paths):
+    def _generate_threshold_charts(self, df: pd.DataFrame, chart_paths: dict[str, list[str]]) -> None:
         """Generate smart alert threshold charts."""
         try:
             from ..alerting import SmartThresholdCalculator
@@ -1846,7 +1848,7 @@ class ExcelReportWriter:
         except Exception as e:
             logger.warning(f"Error generating threshold charts: {e}")
     
-    def _build_analysis_data(self, df):
+    def _build_analysis_data(self, df: pd.DataFrame) -> dict[str, Any]:
         """Build analysis data dictionary from DataFrame for chart generation."""
         analysis_data = {}
         
@@ -2165,7 +2167,7 @@ class ExcelReportWriter:
 
         return analysis_data
     
-    def save(self):
+    def save(self) -> None:
         """Save the workbook."""
         # Remove default sheet if it exists
         if 'Sheet' in self.wb.sheetnames:
@@ -2175,7 +2177,7 @@ class ExcelReportWriter:
         logger.info(f"Report saved to {self.output_path}")
 
 
-def generate_report(df, output_path, exec_summary_text, df_raw=None):
+def generate_report(df: pd.DataFrame, output_path: str, exec_summary_text: str, df_raw: Optional[pd.DataFrame] = None) -> dict[str, list[str]]:
     """
     Generate comprehensive Excel report.
     

@@ -62,12 +62,14 @@ Heuristic Fallback:
 
 GPU-accelerated with RAPIDS cuML when available.
 """
+from __future__ import annotations
 
 import os
 import joblib  # Security: joblib replaces pickle to prevent arbitrary code execution
 import logging
 import numpy as np
 import pandas as pd
+from typing import Any, Optional
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import roc_auc_score
@@ -116,7 +118,7 @@ class RecurrencePredictor:
             train/test sample counts, recurrence rate, top features).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialise the predictor with empty state; no model is trained yet."""
         self.model = None
         self.encoders = {}
@@ -124,7 +126,7 @@ class RecurrencePredictor:
         self.is_trained = False
         self.model_metrics = {}
 
-    def _prepare_features(self, df, fit_encoders=False):
+    def _prepare_features(self, df: pd.DataFrame, fit_encoders: bool = False) -> tuple[np.ndarray, list[str]]:
         """
         Prepare feature matrix for training/prediction.
 
@@ -236,7 +238,7 @@ class RecurrencePredictor:
         self.feature_columns = list(feature_df.columns)
         return feature_df.values, self.feature_columns
 
-    def train(self, df, min_samples=50):
+    def train(self, df: pd.DataFrame, min_samples: int = 50) -> dict[str, Any]:
         """
         Train the recurrence prediction model on historical data.
 
@@ -375,7 +377,7 @@ class RecurrencePredictor:
 
         return self.model_metrics
 
-    def predict(self, df):
+    def predict(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Predict recurrence probability for tickets.
 
@@ -473,7 +475,7 @@ class RecurrencePredictor:
 
         return df
 
-    def _predict_heuristic(self, df):
+    def _predict_heuristic(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Heuristic-based recurrence prediction when ML model isn't trained.
 
@@ -598,7 +600,7 @@ class RecurrencePredictor:
 
         return df
 
-    def save(self, model_path=None, encoders_path=None):
+    def save(self, model_path: Optional[str] = None, encoders_path: Optional[str] = None) -> None:
         """
         Save trained model and encoders to disk.
 
@@ -629,7 +631,7 @@ class RecurrencePredictor:
 
             logger.info(f"[Recurrence Predictor] Model saved to {model_path}")
 
-    def load(self, model_path=None, encoders_path=None):
+    def load(self, model_path: Optional[str] = None, encoders_path: Optional[str] = None) -> bool:
         """
         Load trained model and encoders from disk.
 
@@ -665,7 +667,7 @@ class RecurrencePredictor:
 
         return False
 
-    def get_risk_factors(self, row):
+    def get_risk_factors(self, row: pd.Series) -> list[str]:
         """
         Explain why a specific ticket is flagged as high risk.
 
@@ -720,7 +722,7 @@ class RecurrencePredictor:
 recurrence_predictor = RecurrencePredictor()
 
 
-def apply_recurrence_predictions(df, train_if_possible=True):
+def apply_recurrence_predictions(df: pd.DataFrame, train_if_possible: bool = True) -> pd.DataFrame:
     """
     Apply recurrence predictions to the dataframe.
 
@@ -778,7 +780,7 @@ def apply_recurrence_predictions(df, train_if_possible=True):
     return df
 
 
-def _derive_recurrence_labels(df):
+def _derive_recurrence_labels(df: pd.DataFrame) -> pd.DataFrame:
     """
     Derive Recurrence_Actual labels from recidivism analysis results.
 

@@ -36,6 +36,7 @@ re-tune without scattered code changes.
 
 Contains all constants, weights, thresholds, and column mappings.
 """
+from __future__ import annotations
 
 import os
 import subprocess
@@ -59,7 +60,7 @@ GPU_MEMORY_LIMIT = 0.8  # Max fraction of GPU memory to use (0.0-1.0)
 # ==========================================
 # VRAM DETECTION & MODEL SELECTION
 # ==========================================
-def get_gpu_vram_gb():
+def get_gpu_vram_gb() -> float:
     """Detect GPU VRAM in GB. Returns 0 if no NVIDIA GPU found.
 
     Shells out to ``nvidia-smi`` with a 5-second timeout.  If the binary
@@ -87,7 +88,7 @@ def get_gpu_vram_gb():
         pass
     return 0
 
-def select_models():
+def select_models() -> tuple[str, str, float]:
     """Select AI models based on available VRAM.
 
     The system uses a three-tier model strategy to maximise quality while
