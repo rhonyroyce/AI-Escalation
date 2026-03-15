@@ -206,7 +206,17 @@ def load_pulse_data(file) -> pd.DataFrame:
     # later with an opaque KeyError when a page tries to access a column.
     missing = [c for c in REQUIRED_COLS if c not in df.columns]
     if missing:
-        raise ValueError(f"Missing required columns: {missing}")
+        raise ValueError(
+            f"ProjectPulse.xlsx missing required columns: {missing}. "
+            f"Check column names match expected schema."
+        )
+
+    # Check for dimension columns used by scoring charts
+    PULSE_DIMENSIONS = ['Design', 'IX', 'PAG', 'RF Opt', 'Field', 'CSAT', 'PM Performance', 'Potential']
+    missing_dims = [c for c in PULSE_DIMENSIONS if c not in df.columns]
+    if missing_dims:
+        import logging
+        logging.warning(f"Missing dimension columns (some charts disabled): {missing_dims}")
 
     # ── Step 5: Coerce score columns to integers ─────────────────────────
     # Score columns in the Excel file can contain:
