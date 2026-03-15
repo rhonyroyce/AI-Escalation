@@ -103,6 +103,10 @@ from escalation_ai.dashboard.esc_bridge import inject_escalation_css
 
 inject_escalation_css()  # Escalation AI-specific styles (charts, KPI cards)
 
+from shared_theme import inject_shared_css
+
+inject_shared_css()  # Shared platform CSS (font normalization, KPI cards, badges)
+
 # ============================================================================
 # AUTO-LOAD PULSE DATA
 # ============================================================================

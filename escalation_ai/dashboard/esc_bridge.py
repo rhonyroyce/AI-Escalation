@@ -401,7 +401,7 @@ _ESCALATION_CSS = """
 
 /* --- Global font override for the Streamlit app shell --- */
 .stApp {
-    font-family: 'Inter', sans-serif;
+    font-family: 'DM Sans', 'Inter', 'Segoe UI', sans-serif;
 }
 
 /* --- Plotly chart minimum height to prevent collapsed / overlapping charts --- */
