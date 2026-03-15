@@ -349,12 +349,20 @@ button[data-testid="stSidebarCollapseButton"],
 # ============================================================================
 
 # -- Group 1: Project Pulse pages ------------------------------------------
+platform_pages = [
+    st.Page(
+        str(project_root / "pulse_dashboard" / "pages" / "0_Landing.py"),
+        title="Home",
+        icon="🏠",
+        default=True,
+    ),
+]
+
 pulse_pages = [
     st.Page(
         str(project_root / "pulse_dashboard" / "app.py"),
         title="Pulse Home",
-        icon="🏠",
-        default=True,
+        icon="📊",
     ),
     st.Page(
         str(project_root / "pulse_dashboard" / "pages" / "1_Executive_Summary.py"),
@@ -434,7 +442,7 @@ esc_pages = [
 
 # Register all pages with Streamlit but hide the default navigation.
 # We build our own sidebar nav below with collapsible HTML sections.
-all_pages = pulse_pages + esc_pages
+all_pages = platform_pages + pulse_pages + esc_pages
 pg = st.navigation(all_pages, position="hidden")
 
 # ── Custom sidebar navigation ─────────────────────────────────────────────
@@ -447,6 +455,9 @@ with st.sidebar:
         <p>Unified Dashboard</p>
     </div>
     """, unsafe_allow_html=True)
+
+    for page in platform_pages:
+        st.page_link(page, label=page.title, icon=page.icon)
 
     with st.expander("**+ Project Pulse**", expanded=True):
         for page in pulse_pages:
