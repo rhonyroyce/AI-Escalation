@@ -176,7 +176,17 @@ for key, default in PULSE_DEFAULTS.items():
 if st.session_state.df is None:
     default_path = get_default_file_path()  # -> Path or None
     if default_path:
-        st.session_state.df = load_pulse_data(str(default_path))
+        try:
+            st.session_state.df = load_pulse_data(str(default_path))
+        except FileNotFoundError:
+            st.error("📁 **ProjectPulse.xlsx not found.** Place the file in the project root directory.")
+        except Exception as e:
+            st.error(f"📁 **Error loading ProjectPulse.xlsx:** {type(e).__name__}: {e}")
+    else:
+        st.warning(
+            "📁 **No Pulse data file found.** "
+            "Place `ProjectPulse.xlsx` in the project root to enable the Pulse dashboard."
+        )
 
 # Show Pulse data freshness badge in the sidebar
 render_pulse_freshness(st.session_state.df)
@@ -205,6 +215,13 @@ if st.session_state.get('ollama_available') is None:
 
     # Security: JSON replaces pickle to prevent arbitrary code execution
     cache_file = project_root / '.cache' / 'ai_insights.json'
+
+    if not cache_file.exists():
+        import logging as _logging
+        _logging.getLogger(__name__).info(
+            "AI insights cache not found at %s. AI features will use live inference or be disabled.",
+            cache_file
+        )
 
     if cache_file.exists():
         try:

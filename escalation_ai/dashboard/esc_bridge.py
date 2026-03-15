@@ -200,7 +200,11 @@ def esc_load_and_filter(page_name: str = "Executive Dashboard") -> pd.DataFrame:
     # If no data is available, show a user-friendly error and bail out.
     # Page shims check for None and skip rendering accordingly.
     if df is None:
-        st.error("No escalation data found. Run the pipeline first: `python run.py`")
+        st.error(
+            "📁 **No escalation data found.** Run the ML pipeline to generate results:\n\n"
+            "```bash\npython run.py --no-gui\n```\n\n"
+            "This will process your input data and create `Strategic_Report.xlsx`."
+        )
         return None
 
     # ---- Step 1b: Validate column schema ---------------------------------
