@@ -110,7 +110,7 @@ inject_escalation_css()  # Escalation AI-specific styles (charts, KPI cards)
 # derives columns (Pulse_Status, Year_Week, Effort), and returns a DataFrame.
 # ``get_default_file_path`` resolves the Excel file at the repo root.
 # ============================================================================
-from pulse_dashboard.utils.data_loader import load_pulse_data, get_default_file_path
+from pulse_dashboard.utils.data_loader import load_pulse_data, get_default_file_path, render_pulse_freshness
 
 # ---------------------------------------------------------------------------
 # Initialise every Pulse-related session-state key with a safe default.
@@ -173,6 +173,9 @@ if st.session_state.df is None:
     default_path = get_default_file_path()  # -> Path or None
     if default_path:
         st.session_state.df = load_pulse_data(str(default_path))
+
+# Show Pulse data freshness badge in the sidebar
+render_pulse_freshness(st.session_state.df)
 
 # Check if escalation data is available for cross-dashboard features
 if st.session_state.get('esc_data_available') is None:

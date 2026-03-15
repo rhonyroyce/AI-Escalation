@@ -265,3 +265,21 @@ def load_pulse_data(file) -> pd.DataFrame:
     df['Effort'] = (df[SCORE_COLS] < 2).sum(axis=1)
 
     return df
+
+
+def render_pulse_freshness(df):
+    """Show Pulse data freshness in sidebar."""
+    if df is not None and 'Week_Ending' in df.columns:
+        try:
+            latest = pd.to_datetime(df['Week_Ending']).max()
+            st.sidebar.markdown(
+                f'<div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);'
+                f'border-radius:8px;padding:8px 12px;margin:8px 0;text-align:center;">'
+                f'<span style="color:#94a3b8;font-size:0.7rem;text-transform:uppercase;letter-spacing:1px;">'
+                f'Pulse Data as of</span><br>'
+                f'<span style="color:#e2e8f0;font-weight:600;">{latest.strftime("Week of %B %d, %Y")}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        except Exception:
+            pass

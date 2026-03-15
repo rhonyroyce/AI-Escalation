@@ -336,8 +336,29 @@ def esc_load_and_filter(page_name: str = "Executive Dashboard") -> pd.DataFrame:
                 # entire dashboard.
                 pass
 
-    # ---- Step 3: Return the filtered DataFrame to the page shim ----------
+    # ---- Step 3: Show data freshness badge ---------------------------------
+    render_data_freshness(df)
+
+    # ---- Step 4: Return the filtered DataFrame to the page shim ----------
     return df
+
+
+def render_data_freshness(df: pd.DataFrame, date_col: str = 'tickets_data_issue_datetime'):
+    """Show data freshness badge in the sidebar."""
+    if df is not None and date_col in df.columns:
+        try:
+            latest = pd.to_datetime(df[date_col]).max()
+            st.sidebar.markdown(
+                f'<div style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);'
+                f'border-radius:8px;padding:8px 12px;margin:8px 0;text-align:center;">'
+                f'<span style="color:#94a3b8;font-size:0.7rem;text-transform:uppercase;letter-spacing:1px;">'
+                f'Data as of</span><br>'
+                f'<span style="color:#e2e8f0;font-weight:600;">{latest.strftime("%B %d, %Y")}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+        except Exception:
+            pass
 
 
 # ============================================================================
