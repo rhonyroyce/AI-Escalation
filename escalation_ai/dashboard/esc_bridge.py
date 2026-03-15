@@ -73,6 +73,7 @@ import logging
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from escalation_ai.dashboard.ollama_health import render_ollama_status
 
 logger = logging.getLogger(__name__)
 
@@ -341,6 +342,9 @@ def esc_load_and_filter(page_name: str = "Executive Dashboard") -> pd.DataFrame:
         if st.button("Refresh Data", key="esc_refresh"):
             st.cache_data.clear()
             st.rerun()
+
+        # -- Ollama AI engine status indicator -----------------------------
+        render_ollama_status()
 
         # ---- Settings section: Date-range filter (all pages) -------------
         st.markdown("---")

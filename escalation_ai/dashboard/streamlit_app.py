@@ -3210,6 +3210,11 @@ def generate_ai_lesson_recommendations(df, use_ollama: bool = True) -> List[Dict
 
     if use_ollama:
         try:
+            from escalation_ai.dashboard.ollama_health import ai_feature_guard
+            if not ai_feature_guard("AI Lesson Recommendations"):
+                use_ollama = False
+                raise RuntimeError("Ollama unavailable — falling back to rule-based")
+
             import requests
             from escalation_ai.core.config import (
                 OLLAMA_BASE_URL, GEN_MODEL,
