@@ -69,9 +69,12 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+import logging
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -330,11 +333,9 @@ def esc_load_and_filter(page_name: str = "Executive Dashboard") -> pd.DataFrame:
                         (pd.to_datetime(df['tickets_data_issue_datetime']).dt.date >= date_range[0])
                         & (pd.to_datetime(df['tickets_data_issue_datetime']).dt.date <= date_range[1])
                     ]
-            except Exception:
-                # Silently ignore date parsing errors (e.g. if the column
-                # contains non-datetime values) rather than crashing the
-                # entire dashboard.
-                pass
+            except Exception as e:
+                st.warning(f"Date filter error: {type(e).__name__}: {e}")
+
 
     # ---- Step 3: Show data freshness badge ---------------------------------
     render_data_freshness(df)
@@ -357,8 +358,8 @@ def render_data_freshness(df: pd.DataFrame, date_col: str = 'tickets_data_issue_
                 f'</div>',
                 unsafe_allow_html=True
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Data freshness badge error: {e}")
 
 
 # ============================================================================

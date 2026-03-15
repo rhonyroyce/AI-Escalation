@@ -1282,6 +1282,7 @@ def load_excel_file(file_path: str) -> tuple:
         df = process_dataframe(df)  # This recalculates Financial_Impact from price_catalog
         return df, file_path
     except Exception as e:
+        st.error(f"Data loading error: {type(e).__name__}: {e}")
         return None, str(e)
 
 
@@ -2538,6 +2539,7 @@ def get_comprehensive_scorecard(df) -> Optional[Any]:
         try:
             _scorecard_cache[cache_key] = create_scorecard(df)
         except Exception as e:
+            logger.warning(f"Scorecard creation failed: {e}")
             return None
 
     return _scorecard_cache[cache_key]
@@ -3270,7 +3272,7 @@ Be specific and actionable. Focus on the worst performing categories first."""
                     return recommendations
 
         except Exception as e:
-            pass  # Fall back to rule-based
+            logger.warning(f"AI lesson recommendations failed, using rule-based fallback: {e}")
 
     # Rule-based recommendations
     for cat, data in at_risk[:5]:
@@ -5147,6 +5149,7 @@ def render_alerts_page(df):
             df_temp['date'] = pd.to_datetime(df_temp[date_col], errors='coerce').dt.date
         except (ValueError, TypeError, KeyError) as e:
             logger.debug(f"Date conversion failed: {e}")
+            st.warning(f"Alert date parsing error: {type(e).__name__}: {e}")
             date_col = None
     
     # Build agg dict with available columns

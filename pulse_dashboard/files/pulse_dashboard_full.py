@@ -391,7 +391,8 @@ COLORS = {
 DATA_PATH = "Pulse_Tracker.xlsx"
 try:
     df = load_data(DATA_PATH)
-except:
+except Exception as e:
+    st.warning(f"Data loading error: {type(e).__name__}: {e}")
     DATA_PATH = "/mnt/user-data/uploads/Pulse_Tracker.xlsx"
     df = load_data(DATA_PATH)
 

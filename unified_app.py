@@ -222,10 +222,9 @@ if st.session_state.get('ollama_available') is None:
                         'ai_issue_texts', 'embeddings_index'):
                 if key in _cache and st.session_state.get(key) is None:
                     st.session_state[key] = _cache[key]
-        except Exception:
-            # Silently swallow corrupt / incompatible cache files.  The
-            # dashboard will fall back to "no AI insights available" mode.
-            pass
+        except Exception as e:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(f"Cache load failed: {e}")
 
     # If no cache file was found (e.g. ``streamlit run unified_app.py``
     # launched directly without ``run.py``), we still need to know whether
