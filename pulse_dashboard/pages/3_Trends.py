@@ -110,7 +110,8 @@ st.markdown('<p class="main-header">Trends & Forecasting</p>', unsafe_allow_html
 # Uses the full (unfiltered) dataset so the trend is always complete.
 # ============================================================================
 fig = chart_trend_forecast(df, target)
-st.plotly_chart(fig, use_container_width=True)
+with st.spinner("Generating visualization..."):
+    st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================================
 # ANOMALY NARRATION
@@ -133,7 +134,8 @@ if selected_week and selected_year:
 # Also uses the full dataset for completeness.
 # ============================================================================
 fig_spark = chart_sparklines(df)
-st.plotly_chart(fig_spark, use_container_width=True)
+with st.spinner("Generating visualization..."):
+    st.plotly_chart(fig_spark, use_container_width=True)
 
 # ============================================================================
 # WEEK-OVER-WEEK CHANGES TABLE

@@ -282,7 +282,8 @@ with tab2:
             color_continuous_scale='Blues',  # Darker bars = higher count
         )
         fig.update_layout(**get_plotly_theme())
-        st.plotly_chart(fig, use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(fig, use_container_width=True)
 
         # Show a detail table mapping each (truncated) issue text to its
         # assigned category.

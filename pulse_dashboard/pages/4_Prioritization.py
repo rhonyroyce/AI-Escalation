@@ -120,7 +120,8 @@ show_matrix = (
 
 if show_matrix:
     fig = chart_impact_effort_matrix(filtered_df, target)
-    st.plotly_chart(fig, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig, use_container_width=True)
 else:
     st.markdown('**Prioritized Action List**')
     table_html = prioritization_action_table(filtered_df, target)
@@ -190,7 +191,8 @@ else:
 # ============================================================================
 st.markdown("### Pareto: Below-Target by Area")
 fig_pareto = chart_pareto(filtered_df, target, groupby_col='Area')
-st.plotly_chart(fig_pareto, use_container_width=True)
+with st.spinner("Generating visualization..."):
+    st.plotly_chart(fig_pareto, use_container_width=True)
 
 # ============================================================================
 # PARETO BY PM
@@ -201,4 +203,5 @@ st.plotly_chart(fig_pareto, use_container_width=True)
 # ============================================================================
 st.markdown("### Pareto: Below-Target by PM")
 fig_pareto_pm = chart_pareto(filtered_df, target, groupby_col='PM Name')
-st.plotly_chart(fig_pareto_pm, use_container_width=True)
+with st.spinner("Generating visualization..."):
+    st.plotly_chart(fig_pareto_pm, use_container_width=True)

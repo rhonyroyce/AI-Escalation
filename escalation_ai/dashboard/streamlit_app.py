@@ -3750,7 +3750,8 @@ def render_executive_summary(df):
 
     with col2:
         forecast_fig, slope = chart_forecast_projection(df)
-        st.plotly_chart(forecast_fig, use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(forecast_fig, use_container_width=True)
         
         trend_direction = "increasing" if slope > 0 else "decreasing"
         trend_color = "#DC3545" if slope > 0 else "#28A745"
@@ -3883,7 +3884,8 @@ def render_financial_analysis(df):
                     'sla_penalty_exposure': financial_metrics.sla_penalty_exposure
                 }
                 fig = create_financial_waterfall(waterfall_data)
-                st.plotly_chart(fig, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error(f"Error creating waterfall chart: {e}")
 
@@ -3891,7 +3893,8 @@ def render_financial_analysis(df):
             # Efficiency scorecard
             try:
                 fig = create_efficiency_scorecard(efficiency_metrics, financial_metrics)
-                st.plotly_chart(fig, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error(f"Error creating efficiency scorecard: {e}")
 
@@ -3899,7 +3902,8 @@ def render_financial_analysis(df):
         st.markdown("### Cost Analysis by Category")
         try:
             fig = create_category_cost_comparison(df)
-            st.plotly_chart(fig, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.error(f"Error creating category comparison: {e}")
 
@@ -3908,7 +3912,8 @@ def render_financial_analysis(df):
         from escalation_ai.financial.visualizations import create_cost_concentration_chart
         try:
             fig = create_cost_concentration_chart(df)
-            st.plotly_chart(fig, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.error(f"Error creating concentration chart: {e}")
 
@@ -3924,7 +3929,8 @@ def render_financial_analysis(df):
             # ROI opportunity chart
             try:
                 fig = create_roi_opportunity_chart(roi_metrics)
-                st.plotly_chart(fig, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error(f"Error creating ROI chart: {e}")
 
@@ -3963,7 +3969,8 @@ def render_financial_analysis(df):
             # Cost avoidance breakdown
             try:
                 fig = create_cost_avoidance_breakdown(cost_avoidance)
-                st.plotly_chart(fig, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error(f"Error creating cost avoidance chart: {e}")
 
@@ -4020,7 +4027,8 @@ def render_financial_analysis(df):
             # Forecast chart
             try:
                 fig = create_cost_trend_forecast(df, forecasts)
-                st.plotly_chart(fig, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error(f"Error creating trend forecast: {e}")
                 st.info("Try regenerating the report with the latest pipeline.")
@@ -4113,7 +4121,8 @@ def render_financial_analysis(df):
             st.markdown("### 👥 Engineer Cost Efficiency Analysis")
             try:
                 fig = create_engineer_cost_efficiency_matrix(df)
-                st.plotly_chart(fig, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error(f"Error creating engineer efficiency matrix: {e}")
 
@@ -4214,7 +4223,8 @@ def render_benchmarking(df):
         col = [col1, col2, col3][i % 3]
         with col:
             fig = chart_benchmark_gauge(name, value, INDUSTRY_BENCHMARKS[key], unit)
-            st.plotly_chart(fig, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("---")
     
@@ -4312,7 +4322,8 @@ def render_root_cause(df):
         render_chart_with_insight('pareto_analysis', chart_pareto_analysis(df), df)
 
     with col2:
-        st.plotly_chart(chart_driver_tree(df), use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(chart_driver_tree(df), use_container_width=True)
     
     st.markdown("---")
     
@@ -4357,7 +4368,8 @@ def render_root_cause(df):
             showlegend=False
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(fig, use_container_width=True)
 
     # Risk heatmap
     render_chart_with_insight('risk_heatmap', chart_risk_heatmap(df), df)
@@ -4698,7 +4710,8 @@ def render_presentation_mode(df):
         with col3:
             st.metric("Escalations", f"{len(df):,}")
         
-        st.plotly_chart(chart_pareto_analysis(df), use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(chart_pareto_analysis(df), use_container_width=True)
     
     elif current == "financial_impact":
         col1, col2 = st.columns(2)
@@ -4711,9 +4724,11 @@ def render_presentation_mode(df):
                 marker=dict(colors=px.colors.sequential.Reds_r)
             ))
             fig.update_layout(**create_plotly_theme(), title='Cost Distribution', height=400)
-            st.plotly_chart(fig, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig, use_container_width=True)
         with col2:
-            st.plotly_chart(chart_driver_tree(df), use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(chart_driver_tree(df), use_container_width=True)
     
     elif current == "benchmarking":
         # Get safe values
@@ -4731,7 +4746,8 @@ def render_presentation_mode(df):
             unit = ' days' if 'days' in key else '%' if 'rate' in key else '$'
             with [col1, col2, col3][i]:
                 fig = chart_benchmark_gauge(title, current_metrics[key], INDUSTRY_BENCHMARKS[key], unit)
-                st.plotly_chart(fig, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig, use_container_width=True)
     
     elif current == "recommendations":
         recommendations = generate_strategic_recommendations(df)
@@ -4747,7 +4763,8 @@ def render_presentation_mode(df):
     
     elif current == "forecast":
         forecast_fig, slope = chart_forecast_projection(df)
-        st.plotly_chart(forecast_fig, use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(forecast_fig, use_container_width=True)
         
         trend = "📈 Escalations trending UP" if slope > 0 else "📉 Escalations trending DOWN"
         color = "#DC3545" if slope > 0 else "#28A745"
@@ -5059,7 +5076,8 @@ def render_drift_page(df):
         legend=dict(orientation='h', y=1.1)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig, use_container_width=True)
     
     # Change analysis
     col1, col2 = st.columns(2)
@@ -5236,7 +5254,8 @@ def render_alerts_page(df):
         yaxis_title=selected_metric
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================================
 # PDF EXPORT FUNCTIONALITY
@@ -6021,7 +6040,8 @@ def render_excel_dashboard(df):
                 ),
                 showlegend=False
             )
-            st.plotly_chart(fig_friction, use_container_width=True, key="main_friction")
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_friction, use_container_width=True, key="main_friction")
 
     with col2:
         st.markdown("""
@@ -6059,7 +6079,8 @@ def render_excel_dashboard(df):
                            font=dict(color='#94a3b8', size=10)),
                 hovermode='x unified'
             )
-            st.plotly_chart(fig_area, use_container_width=True, key="area_trend")
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_area, use_container_width=True, key="area_trend")
 
     st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
 
@@ -6118,7 +6139,8 @@ def render_excel_dashboard(df):
                     texttemplate='%{label}<br>$%{value:,.0f}',
                     hovertemplate='<b>%{label}</b><br>Cost: $%{value:,.0f}<br>Records: %{customdata[0]}<extra></extra>'
                 )
-                st.plotly_chart(fig_tree, use_container_width=True, key="eng_treemap")
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig_tree, use_container_width=True, key="eng_treemap")
             else:
                 st.info("No engineer data available for treemap")
         else:
@@ -6177,7 +6199,8 @@ def render_excel_dashboard(df):
                         x=0.5, y=0.5, font_size=16, font_color='white', showarrow=False
                     )]
                 )
-                st.plotly_chart(fig_sev, use_container_width=True, key="sev_donut")
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig_sev, use_container_width=True, key="sev_donut")
             else:
                 st.info("No severity data available")
         else:
@@ -6236,7 +6259,8 @@ def render_excel_dashboard(df):
                                   tickfont=dict(size=10, color='#64748b'), tickformat='$,.0f'),
                         showlegend=False
                     )
-                    st.plotly_chart(fig_qtr, use_container_width=True, key="qtr_bar")
+                    with st.spinner("Generating visualization..."):
+                        st.plotly_chart(fig_qtr, use_container_width=True, key="qtr_bar")
                 else:
                     st.info("No quarterly cost data available")
             except Exception as e:
@@ -6329,7 +6353,8 @@ def render_excel_dashboard(df):
                 showlegend=False,
                 bargap=0.3
             )
-            st.plotly_chart(fig_orig, use_container_width=True, key="orig_bar")
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_orig, use_container_width=True, key="orig_bar")
 
             # Show drill-down only when an origin is selected
             if selected_option != "📊 Chart view (click to select)":
@@ -6528,7 +6553,8 @@ def render_excel_dashboard(df):
             font=dict(color='#e2e8f0', size=11)
         )
 
-        st.plotly_chart(fig_sankey, use_container_width=True, key="issue_flow_sankey")
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(fig_sankey, use_container_width=True, key="issue_flow_sankey")
 
         # Legend
         st.markdown("""
@@ -6700,7 +6726,8 @@ def render_deep_analysis(df):
                 yaxis=dict(showgrid=False, tickfont=dict(size=10, color='#e2e8f0')),
                 showlegend=False
             )
-            st.plotly_chart(fig_all_sub, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_all_sub, use_container_width=True)
 
         st.markdown("---")
 
@@ -6708,7 +6735,8 @@ def render_deep_analysis(df):
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("#### 🎯 Category & Sub-Category Drill-Down")
-            st.plotly_chart(chart_category_sunburst(df), use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(chart_category_sunburst(df), use_container_width=True)
         with col2:
             st.markdown("#### 📊 Severity Breakdown by Category")
             # Severity Distribution by Category - Stacked Bar
@@ -6739,7 +6767,8 @@ def render_deep_analysis(df):
                     yaxis=dict(tickfont=dict(size=10, color='#94a3b8'), gridcolor='rgba(255,255,255,0.1)', title='Count'),
                     legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5, font=dict(color='#94a3b8'))
                 )
-                st.plotly_chart(fig_sev_cat, use_container_width=True, key="sev_by_cat_deep")
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig_sev_cat, use_container_width=True, key="sev_by_cat_deep")
 
         st.markdown("---")
 
@@ -6795,13 +6824,15 @@ def render_deep_analysis(df):
                     yaxis=dict(showgrid=False, tickfont=dict(size=11, color='#e2e8f0')),
                     showlegend=False
                 )
-                st.plotly_chart(fig_sub, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig_sub, use_container_width=True)
 
     # ===== TAB 2: ENGINEERS =====
     with tabs[1]:
         col1, col2 = st.columns(2)
         with col1:
-            st.plotly_chart(chart_engineer_performance(df), use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(chart_engineer_performance(df), use_container_width=True)
         with col2:
             # Engineer Resolution Speed vs Volume Scatter
             eng_col = 'tickets_data_engineer_name' if 'tickets_data_engineer_name' in df.columns else 'tickets_data_issue_resolved_by'
@@ -6860,7 +6891,8 @@ def render_deep_analysis(df):
                     yaxis=dict(title='Recurrence Risk (%)', gridcolor='rgba(255,255,255,0.1)', tickfont=dict(color='#94a3b8')),
                     legend=dict(orientation='h', yanchor='bottom', y=1.02, font=dict(color='#94a3b8', size=10))
                 )
-                st.plotly_chart(fig_quad, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig_quad, use_container_width=True)
 
                 st.markdown("""
                 <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 12px; margin-top: 10px;">
@@ -6881,7 +6913,8 @@ def render_deep_analysis(df):
         with col1:
             render_chart_with_insight('pareto_analysis', chart_pareto_analysis(df), df)
         with col2:
-            st.plotly_chart(chart_driver_tree(df), use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(chart_driver_tree(df), use_container_width=True)
 
         st.markdown("#### 📊 Root Cause Impact Quantification")
         col3, col4 = st.columns(2)
@@ -6906,7 +6939,8 @@ def render_deep_analysis(df):
                     xaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', tickformat='$,.0f'),
                     yaxis=dict(showgrid=False)
                 )
-                st.plotly_chart(fig_impact, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig_impact, use_container_width=True)
         with col4:
             render_chart_with_insight('risk_heatmap', chart_risk_heatmap(df), df)
 
@@ -6921,22 +6955,28 @@ def render_deep_analysis(df):
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("##### 📊 SLA Compliance Funnel")
-                st.plotly_chart(chart_sla_funnel(df), use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(chart_sla_funnel(df), use_container_width=True)
             with col2:
                 st.markdown("##### ⏱️ Ticket Aging Analysis")
-                st.plotly_chart(chart_aging_analysis(df), use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(chart_aging_analysis(df), use_container_width=True)
 
             col3, col4 = st.columns(2)
             with col3:
                 st.markdown("##### 🕐 Peak Escalation Times")
-                st.plotly_chart(chart_time_heatmap(df), use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(chart_time_heatmap(df), use_container_width=True)
             with col4:
                 st.markdown("##### 🔄 Recurrence Patterns")
-                st.plotly_chart(chart_recurrence_patterns(df), use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(chart_recurrence_patterns(df), use_container_width=True)
 
         except ImportError:
-            st.plotly_chart(chart_recurrence_risk(df), use_container_width=True)
-            st.plotly_chart(chart_resolution_distribution(df), use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(chart_recurrence_risk(df), use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(chart_resolution_distribution(df), use_container_width=True)
 
     # ===== TAB 5: SIMILARITY =====
     with tabs[4]:
@@ -6984,7 +7024,8 @@ def render_deep_analysis(df):
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                         height=350
                     )
-                    st.plotly_chart(fig_dist, use_container_width=True)
+                    with st.spinner("Generating visualization..."):
+                        st.plotly_chart(fig_dist, use_container_width=True)
 
             with sim_tabs[1]:
                 # Score distribution
@@ -7023,7 +7064,8 @@ def render_deep_analysis(df):
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                             height=350
                         )
-                        st.plotly_chart(fig_score, use_container_width=True)
+                        with st.spinner("Generating visualization..."):
+                            st.plotly_chart(fig_score, use_container_width=True)
 
                         # Score by category
                         if 'AI_Category' in df.columns:
@@ -7047,7 +7089,8 @@ def render_deep_analysis(df):
                                 height=max(300, len(cat_scores) * 35),
                                 margin=dict(l=10, r=80)
                             )
-                            st.plotly_chart(fig_cat, use_container_width=True)
+                            with st.spinner("Generating visualization..."):
+                                st.plotly_chart(fig_cat, use_container_width=True)
                 else:
                     st.info("Similarity score data not available. Run the analysis pipeline to generate Best_Match_Similarity.")
 
@@ -7073,7 +7116,8 @@ def render_deep_analysis(df):
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                             height=350
                         )
-                        st.plotly_chart(fig_pie, use_container_width=True)
+                        with st.spinner("Generating visualization..."):
+                            st.plotly_chart(fig_pie, use_container_width=True)
 
                     with col2:
                         # Consistency by category
@@ -7098,7 +7142,8 @@ def render_deep_analysis(df):
                                 margin=dict(l=10, r=60),
                                 xaxis=dict(range=[0, 110])
                             )
-                            st.plotly_chart(fig_bar, use_container_width=True)
+                            with st.spinner("Generating visualization..."):
+                                st.plotly_chart(fig_bar, use_container_width=True)
 
                     # Inconsistent tickets table
                     inconsistent = df[df['Resolution_Consistency'].str.contains('Inconsistent|Different', case=False, na=False)]
@@ -7158,7 +7203,8 @@ def render_deep_analysis(df):
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                             height=max(400, len(heatmap_data) * 30)
                         )
-                        st.plotly_chart(fig_heat, use_container_width=True)
+                        with st.spinner("Generating visualization..."):
+                            st.plotly_chart(fig_heat, use_container_width=True)
                     else:
                         st.info("Origin column not found for heatmap. Showing coverage table instead.")
 
@@ -7195,7 +7241,8 @@ def render_deep_analysis(df):
                 # Recurrence vs Lesson Completion Quadrant
                 fig_recurrence = chart_recurrence_vs_lessons(df)
                 if fig_recurrence:
-                    st.plotly_chart(fig_recurrence, use_container_width=True)
+                    with st.spinner("Generating visualization..."):
+                        st.plotly_chart(fig_recurrence, use_container_width=True)
                 else:
                     st.info("Insufficient data for recurrence analysis")
 
@@ -7318,7 +7365,8 @@ def render_deep_analysis(df):
                 xaxis=dict(range=[0, 110], gridcolor='rgba(255,255,255,0.1)', tickfont=dict(color='#94a3b8'), title='Score'),
                 yaxis=dict(tickfont=dict(color='#e2e8f0', size=10))
             )
-            st.plotly_chart(fig_scorecard, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_scorecard, use_container_width=True)
 
             # Row 3: At-Risk Categories and Recommendations
             st.markdown("#### ⚠️ Categories Needing Attention")
@@ -7452,7 +7500,8 @@ def render_deep_analysis(df):
                             height=max(300, len(eff_df) * 35),
                             margin=dict(l=10, r=80, t=60, b=30)
                         )
-                        st.plotly_chart(fig_eff, use_container_width=True)
+                        with st.spinner("Generating visualization..."):
+                            st.plotly_chart(fig_eff, use_container_width=True)
 
                     with col2:
                         # Metrics summary
@@ -7670,7 +7719,8 @@ def render_benchmarking_monitoring(df):
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 height=350
             )
-            st.plotly_chart(fig_timeline, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_timeline, use_container_width=True)
         else:
             st.warning("Date column not found for alert analysis")
 
@@ -7718,7 +7768,8 @@ def render_benchmarking_monitoring(df):
                 xaxis_tickangle=-45,
                 yaxis_title="Percentage (%)"
             )
-            st.plotly_chart(fig_drift, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_drift, use_container_width=True)
 
             # Drift metrics
             st.markdown("#### 📊 Drift Analysis")
@@ -7784,21 +7835,25 @@ def render_advanced_insights(df):
         col1, col2 = st.columns(2)
         
         with col1:
-            st.plotly_chart(chart_sla_funnel(df), use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(chart_sla_funnel(df), use_container_width=True)
         
         with col2:
-            st.plotly_chart(chart_aging_analysis(df), use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(chart_aging_analysis(df), use_container_width=True)
         
         st.markdown("---")
         st.markdown("### Time Pattern Analysis")
         st.markdown("*Identify peak escalation times and shift handoff issues*")
-        st.plotly_chart(chart_time_heatmap(df), use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(chart_time_heatmap(df), use_container_width=True)
     
     with tabs[1]:
         st.markdown("### Engineer Efficiency Quadrant")
         st.markdown("*Speed vs Quality: Identify top performers and those needing support*")
         
-        st.plotly_chart(chart_engineer_quadrant(df), use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(chart_engineer_quadrant(df), use_container_width=True)
         
         # Quadrant legend explanation
         col1, col2, col3, col4 = st.columns(4)
@@ -7838,13 +7893,15 @@ def render_advanced_insights(df):
         st.markdown("---")
         st.markdown("### Resolution Consistency")
         st.markdown("*Categories with high variability may indicate process gaps or training needs*")
-        st.plotly_chart(chart_resolution_consistency(df), use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(chart_resolution_consistency(df), use_container_width=True)
     
     with tabs[2]:
         st.markdown("### Cost Avoidance Waterfall")
         st.markdown("*Path from current costs to achievable target through strategic interventions*")
         
-        st.plotly_chart(chart_cost_waterfall(df), use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(chart_cost_waterfall(df), use_container_width=True)
         
         # Cost insights
         st.markdown("---")
@@ -7892,7 +7949,8 @@ def render_advanced_insights(df):
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            st.plotly_chart(chart_health_gauge(df), use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(chart_health_gauge(df), use_container_width=True)
         
         with col2:
             # Health score breakdown
@@ -7914,7 +7972,8 @@ def render_advanced_insights(df):
         st.markdown("---")
         st.markdown("### Category to Recurrence Flow")
         st.markdown("*Which categories are driving high-risk outcomes?*")
-        st.plotly_chart(chart_recurrence_patterns(df), use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(chart_recurrence_patterns(df), use_container_width=True)
 
 
 def render_dashboard(df):

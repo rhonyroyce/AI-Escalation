@@ -391,7 +391,8 @@ with col_chart:
     )
     fig.update_layout(margin=dict(l=10, r=10, t=40, b=70))
 
-    st.plotly_chart(fig, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig, use_container_width=True)
 
 with col_heat:
     st.markdown("**Dimension Scorecard**")

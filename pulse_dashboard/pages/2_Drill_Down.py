@@ -579,14 +579,16 @@ def _click_project_detail(click_df, label, drill_df, full_df, target_score):
     with c1:
         # Radar: plots this project's 8 dimension scores as a filled polygon
         fig_radar = chart_radar(row)
-        st.plotly_chart(fig_radar, use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(fig_radar, use_container_width=True)
     with c2:
         # Trend: plots the project's Total Score across all available weeks.
         # Only shown if more than one week of history exists.
         proj_history = full_df[full_df['Project'] == project_name]
         if len(proj_history) > 1:
             fig_trend = chart_project_trend(full_df, project_name, target_score)
-            st.plotly_chart(fig_trend, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_trend, use_container_width=True)
         else:
             st.info("Only one week of data \u2014 no trend available.")
 
@@ -660,7 +662,8 @@ def _click_detail_panel(click_df, label):
         c1, c2 = st.columns([1, 1])
         with c1:
             fig_radar = chart_radar(row)
-            st.plotly_chart(fig_radar, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_radar, use_container_width=True)
         with c2:
             # Build a comparison table: dimension score vs portfolio average
             comp_html = '<div class="matrix-container"><table class="matrix-table"><thead><tr>'
@@ -806,11 +809,13 @@ with tab1:
                 with dc1:
                     # Distribution histogram: how scores are distributed for this dimension
                     fig_dist = chart_dimension_distribution(drill_df, label)
-                    st.plotly_chart(fig_dist, use_container_width=True)
+                    with st.spinner("Generating visualization..."):
+                        st.plotly_chart(fig_dist, use_container_width=True)
                 with dc2:
                     # Bar chart: average score for this dimension across regions
                     fig_bar = chart_dimension_by_region(drill_df, label, dim_color)
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    with st.spinner("Generating visualization..."):
+                        st.plotly_chart(fig_bar, use_container_width=True)
                 # Show projects that scored 0 or 1 on this dimension (need attention)
                 low = drill_df[drill_df[label] <= 1]
                 if not low.empty:
@@ -854,7 +859,8 @@ with tab3:
     # to pulse status.  Not click-interactive, but includes a dimension
     # deep-dive selector below.
     fig = chart_sankey(drill_df)
-    st.plotly_chart(fig, use_container_width=True, key="sankey")
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig, use_container_width=True, key="sankey")
     st.caption("Flow: Scoring Dimensions \u2192 Score Level \u2192 Pulse Status")
 
     # Dimension breakdown below Sankey: user selects a dimension to analyze
@@ -869,12 +875,14 @@ with tab3:
     with sc1:
         # Distribution: histogram of scores for the selected dimension
         fig_dist = chart_dimension_distribution(drill_df, dim_selected)
-        st.plotly_chart(fig_dist, use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(fig_dist, use_container_width=True)
     with sc2:
         # Regional breakdown: bar chart of average score per region
         dim_color = DIMENSION_COLORS.get(dim_selected, '#2563eb')
         fig_bar = chart_dimension_by_region(drill_df, dim_selected, dim_color)
-        st.plotly_chart(fig_bar, use_container_width=True)
+        with st.spinner("Generating visualization..."):
+            st.plotly_chart(fig_bar, use_container_width=True)
 
     # Projects scoring 0-1 on this dimension (critical attention needed)
     low_scorers = drill_df[drill_df[dim_selected] <= 1]
@@ -977,14 +985,16 @@ if selected_project != 'All Projects':
         with c1:
             # Radar: 8-dimension polygon for this project
             fig_radar = chart_radar(proj_row)
-            st.plotly_chart(fig_radar, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_radar, use_container_width=True)
         with c2:
             # Trend: multi-week Total Score line for this project.
             # Uses the full unfiltered dataset to get complete history.
             proj_history = df[df['Project'] == selected_project]
             if len(proj_history) > 1:
                 fig_trend = chart_project_trend(df, selected_project, target)
-                st.plotly_chart(fig_trend, use_container_width=True)
+                with st.spinner("Generating visualization..."):
+                    st.plotly_chart(fig_trend, use_container_width=True)
             else:
                 st.info("Only one week of data \u2014 no trend available.")
 
@@ -1035,7 +1045,8 @@ elif selected_area != 'All Areas':
 
     # Horizontal bar chart: compare projects within this area by avg pulse
     fig_comp = _comparison_bar_chart(drill_df, 'Project', f'Projects in {selected_area}')
-    st.plotly_chart(fig_comp, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig_comp, use_container_width=True)
 
     # Dimension heatmap: rows = projects, columns = dimensions
     st.markdown("**Project \u00d7 Dimension Scores**")
@@ -1069,7 +1080,8 @@ elif selected_region != 'All Regions':
 
     # Horizontal bar chart: compare areas within this region
     fig_comp = _comparison_bar_chart(drill_df, 'Area', f'Areas in {selected_region}')
-    st.plotly_chart(fig_comp, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig_comp, use_container_width=True)
 
     # Dimension heatmap: rows = areas, columns = dimensions
     st.markdown("**Area \u00d7 Dimension Scores**")
@@ -1091,7 +1103,8 @@ else:
 
     # Horizontal bar chart: compare regions by average pulse
     fig_comp = _comparison_bar_chart(drill_df, 'Region', 'Average Pulse by Region')
-    st.plotly_chart(fig_comp, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig_comp, use_container_width=True)
 
     # Dimension heatmap: rows = regions, columns = dimensions
     st.markdown("**Region \u00d7 Dimension Scores**")

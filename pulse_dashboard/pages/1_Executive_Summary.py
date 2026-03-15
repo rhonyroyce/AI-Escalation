@@ -319,14 +319,16 @@ with col1:
     # Bullet chart: a horizontal gauge showing avg_pulse relative to
     # target (good) and stretch (exceptional) thresholds
     fig_bullet = chart_variance_bullet(avg_pulse, target, stretch)
-    st.plotly_chart(fig_bullet, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig_bullet, use_container_width=True)
 
 with col2:
     # Trend + forecast: plots weekly average pulse over time with a
     # dashed linear forecast extending into future weeks.
     # Uses the FULL dataset (df) so the time series is complete.
     fig_trend = chart_trend_forecast(df, target)
-    st.plotly_chart(fig_trend, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig_trend, use_container_width=True)
 
 # ============================================================================
 # INSIGHT CALLOUT
@@ -354,11 +356,13 @@ col1, col2 = st.columns(2)
 
 with col1:
     fig_waterfall = chart_waterfall_decomposition(filtered_df)
-    st.plotly_chart(fig_waterfall, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig_waterfall, use_container_width=True)
 
 with col2:
     fig_pareto = chart_pareto(filtered_df, target)
-    st.plotly_chart(fig_pareto, use_container_width=True)
+    with st.spinner("Generating visualization..."):
+        st.plotly_chart(fig_pareto, use_container_width=True)
 
 # ============================================================================
 # RECOMMENDATIONS TABLE

@@ -198,7 +198,8 @@ if selected_project:
             # polygon on a spider-web axis.  It gives a quick visual "shape"
             # for the project's strengths and weaknesses.
             fig_radar = chart_radar(latest_row)
-            st.plotly_chart(fig_radar, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_radar, use_container_width=True)
 
         with col2:
             # Trend chart plots Total Score over all available Year/Week pairs
@@ -206,7 +207,8 @@ if selected_project:
             # score (typically 17).  This uses the unfiltered ``proj_history``
             # so the full trajectory is visible.
             fig_trend = chart_project_trend(proj_history, selected_project, target)
-            st.plotly_chart(fig_trend, use_container_width=True)
+            with st.spinner("Generating visualization..."):
+                st.plotly_chart(fig_trend, use_container_width=True)
 
         # ── Text Fields (Narrative Columns) ──
         # Display each narrative text column as a collapsible expander.
