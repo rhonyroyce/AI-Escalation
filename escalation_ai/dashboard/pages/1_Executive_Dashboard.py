@@ -56,6 +56,9 @@ from escalation_ai.dashboard.esc_bridge import (
 # KPI cards, category breakdowns, severity distributions, and trend charts.
 from escalation_ai.dashboard.streamlit_app import render_excel_dashboard
 
+# Import executive summary SCR components
+from escalation_ai.dashboard.charts.exec_summary import render_exec_kpis, render_scr_narrative
+
 # --- Step 1: Session state initialization (idempotent) ---
 init_escalation_state()
 
@@ -85,6 +88,9 @@ if df is not None:
         # Clear after displaying so it doesn't persist across reruns
         st.session_state.cross_nav_context = None
 
+    render_exec_kpis(df)
+    render_scr_narrative(df)
+    st.markdown("---")
     render_excel_dashboard(df)
 
     # --- Export button ---
