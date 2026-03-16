@@ -83,6 +83,13 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
+from shared_theme import render_page_help
+render_page_help(
+    "Executive Summary",
+    "A McKinsey-style Situation-Complication-Resolution view of project health across all regions.",
+    ["KPI cards show current-week snapshot", "Waterfall chart shows week-over-week changes", "Pareto chart identifies top risk drivers"],
+)
+
 # `df` is the FULL unfiltered dataset (used for WoW comparisons and trends).
 # `filtered_df` is the subset matching the sidebar selections.
 df = st.session_state.df

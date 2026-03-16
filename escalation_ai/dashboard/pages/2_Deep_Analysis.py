@@ -60,6 +60,9 @@ inject_escalation_css()
 # Excel-style categorical filters) to keep the sidebar focused.
 df = esc_load_and_filter(page_name="Deep Analysis")
 
+from shared_theme import render_page_help
+render_page_help("Deep Analysis", "Detailed breakdowns by category, root cause, LOB, and geographic distribution. 20+ chart views.")
+
 # --- Step 4: Render if data is available ---
 if df is not None:
     render_deep_analysis(df)

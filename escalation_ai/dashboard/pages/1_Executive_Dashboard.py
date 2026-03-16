@@ -66,6 +66,9 @@ inject_escalation_css()
 # page_name="Executive Dashboard" enables the full Excel-style filter set.
 df = esc_load_and_filter(page_name="Executive Dashboard")
 
+from shared_theme import render_page_help
+render_page_help("Executive Dashboard", "High-level view of escalation volume, severity distribution, and strategic friction scores.")
+
 # --- Step 4: Render the page content if data was loaded successfully ---
 # esc_load_and_filter returns None when no data file is found; in that case
 # the bridge already displayed an error message, so we simply skip rendering.

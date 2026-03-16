@@ -89,6 +89,9 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
+from shared_theme import render_page_help
+render_page_help("Trends", "Time-series view of Pulse scores. Use the date range filter to focus on specific periods.")
+
 # `df` is the FULL unfiltered dataset -- used for the trend chart and
 # sparklines so the complete time series is always visible.
 df = st.session_state.df

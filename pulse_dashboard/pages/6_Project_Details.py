@@ -92,6 +92,9 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
+from shared_theme import render_page_help
+render_page_help("Project Details", "Single-project deep dive showing all 8 dimension scores, history, and commentary.")
+
 # Full (unfiltered) DataFrame -- used to show historical trend data for a
 # project even if the current sidebar filters only select a single week.
 df = st.session_state.df

@@ -64,6 +64,9 @@ inject_escalation_css()
 # page_name="Financial Intelligence" shows only the date-range filter.
 df = esc_load_and_filter(page_name="Financial Intelligence")
 
+from shared_theme import render_page_help
+render_page_help("Financial Intelligence", "Cost impact analysis of escalations using the price catalog. Shows financial exposure by category.")
+
 # --- Step 4: Render if data is available ---
 if df is not None:
     render_financial_analysis(df)

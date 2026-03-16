@@ -104,6 +104,9 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
+from shared_theme import render_page_help
+render_page_help("AI Insights", "LLM-generated analysis of patterns and anomalies. Requires Ollama server for live generation.")
+
 # Keep a reference to the *unfiltered* full DataFrame.  This is used later
 # when we need cross-filter context (e.g. semantic search indexes all data).
 df = st.session_state.df

@@ -89,3 +89,15 @@ def inject_shared_css():
     }}
     </style>
     """, unsafe_allow_html=True)
+
+
+def render_page_help(title: str, description: str, tips: list[str] = None):
+    """Render a collapsible help section at the top of a page."""
+    with st.expander(f"\u2139\ufe0f About this page: {title}", expanded=False):
+        st.markdown(
+            f"<p style='color:#94a3b8;font-size:0.9rem;'>{description}</p>",
+            unsafe_allow_html=True,
+        )
+        if tips:
+            for tip in tips:
+                st.markdown(f"- {tip}")

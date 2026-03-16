@@ -116,6 +116,9 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
+from shared_theme import render_page_help
+render_page_help("Drill Down", "Click any project or region to explore detailed health metrics and trends.")
+
 # `df` is the FULL unfiltered dataset (used for project trend history).
 # `target` is the portfolio pulse target score from sidebar config.
 # `selected_regions` is the list of region filters chosen in the sidebar.
