@@ -384,8 +384,32 @@ def esc_load_and_filter(page_name: str = "Executive Dashboard") -> pd.DataFrame:
     # ---- Step 3: Show data freshness badge ---------------------------------
     render_data_freshness(df)
 
-    # ---- Step 4: Return the filtered DataFrame to the page shim ----------
+    # ---- Step 4: Cross-dashboard navigation link to Pulse -----------------
+    render_cross_nav_to_pulse()
+
+    # ---- Step 5: Return the filtered DataFrame to the page shim ----------
     return df
+
+
+def render_cross_nav_to_pulse():
+    """Show a sidebar link back to the Pulse dashboard.
+
+    When escalation data is loaded, this renders a small navigation hint in
+    the sidebar so users can quickly switch to the Project Pulse view.
+    Only shown when Pulse data is also available (i.e. ``df`` exists in
+    session state from the Pulse data loader).
+    """
+    if st.session_state.get('df') is not None:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown(
+            '<div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);'
+            'border-radius:8px;padding:10px 14px;text-align:center;">'
+            '<span style="font-size:0.75rem;color:#94a3b8;">📊 '
+            '<a href="/" style="color:#3b82f6;text-decoration:none;font-weight:600;">'
+            'Switch to Project Pulse →</a></span>'
+            '</div>',
+            unsafe_allow_html=True
+        )
 
 
 def render_data_freshness(df: pd.DataFrame, date_col: str = 'tickets_data_issue_datetime'):

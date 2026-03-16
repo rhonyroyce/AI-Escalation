@@ -41,6 +41,8 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
+import streamlit as st
+
 # Import the three bridge helpers that every page shim needs:
 #   - init_escalation_state : sets session-state defaults (idempotent)
 #   - inject_escalation_css : injects the shared CSS <style> block
@@ -68,4 +70,16 @@ df = esc_load_and_filter(page_name="Executive Dashboard")
 # esc_load_and_filter returns None when no data file is found; in that case
 # the bridge already displayed an error message, so we simply skip rendering.
 if df is not None:
+    # ---- Cross-dashboard navigation context from Pulse ----
+    # When the user clicks "View in Escalation AI Dashboard" from Pulse's
+    # Project Details page, the cross_nav_context session key carries the
+    # originating project/area/PM so we can show a contextual banner.
+    if st.session_state.get('cross_nav_context'):
+        ctx = st.session_state.cross_nav_context
+        if ctx.get('source') == 'pulse' or ctx.get('project'):
+            label = ctx.get('project') or ctx.get('market') or ctx.get('area') or 'All'
+            st.info(f"📍 Navigated from Pulse — showing data for: **{label}**")
+        # Clear after displaying so it doesn't persist across reruns
+        st.session_state.cross_nav_context = None
+
     render_excel_dashboard(df)
