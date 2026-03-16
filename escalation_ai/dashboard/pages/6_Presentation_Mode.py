@@ -83,3 +83,12 @@ render_page_help("Presentation Mode", "Full-screen slide deck view for leadershi
 # --- Step 4: Render if data is available ---
 if df is not None:
     render_presentation_mode(df)
+
+    # --- Export button ---
+    from export_utils import render_export_button
+    summary = f"<p>Tickets: {len(df):,}</p>"
+    if 'Financial_Impact' in df.columns:
+        summary += f"<p>Total financial impact: ${df['Financial_Impact'].sum():,.0f}</p>"
+    if 'Strategic_Friction_Score' in df.columns:
+        summary += f"<p>Avg friction score: {df['Strategic_Friction_Score'].mean():.2f}</p>"
+    render_export_button("Presentation Mode", summary)

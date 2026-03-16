@@ -70,3 +70,17 @@ render_page_help("Financial Intelligence", "Cost impact analysis of escalations 
 # --- Step 4: Render if data is available ---
 if df is not None:
     render_financial_analysis(df)
+
+    # --- Export button ---
+    from export_utils import render_export_button
+    summary = f"<p>Tickets analyzed: {len(df):,}</p>"
+    if 'Financial_Impact' in df.columns:
+        total_impact = df['Financial_Impact'].sum()
+        avg_impact = df['Financial_Impact'].mean()
+        summary += f"<p>Total financial impact: ${total_impact:,.0f}</p>"
+        summary += f"<p>Average per ticket: ${avg_impact:,.0f}</p>"
+        if 'AI_Category' in df.columns:
+            by_cat = df.groupby('AI_Category')['Financial_Impact'].sum().sort_values(ascending=False).head(5)
+            rows = ''.join(f'<tr><td>{cat}</td><td>${val:,.0f}</td></tr>' for cat, val in by_cat.items())
+            summary += f"<h3>Top Cost Categories</h3><table><tr><th>Category</th><th>Impact</th></tr>{rows}</table>"
+    render_export_button("Financial Intelligence", summary)

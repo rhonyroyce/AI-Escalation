@@ -63,3 +63,11 @@ render_page_help("Benchmarking & Monitoring", "Compare current escalation metric
 # --- Step 4: Render if data is available ---
 if df is not None:
     render_benchmarking_monitoring(df)
+
+    # --- Export button ---
+    from export_utils import render_export_button
+    summary = f"<p>Tickets monitored: {len(df):,}</p>"
+    if 'Strategic_Friction_Score' in df.columns:
+        summary += f"<p>Avg friction score: {df['Strategic_Friction_Score'].mean():.2f}</p>"
+        summary += f"<p>Max friction score: {df['Strategic_Friction_Score'].max():.2f}</p>"
+    render_export_button("Benchmarking and Monitoring", summary)

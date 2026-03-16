@@ -44,6 +44,8 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
+import streamlit as st
+
 # Import bridge helpers (shared across all page shims)
 from escalation_ai.dashboard.esc_bridge import (
     init_escalation_state, inject_escalation_css, esc_load_and_filter,
@@ -72,3 +74,10 @@ render_page_help("Planning & Actions", "Action item tracker and strategic recomm
 # --- Step 4: Render if data is available ---
 if df is not None:
     render_planning_actions(df)
+
+    # --- Export button ---
+    from export_utils import render_export_button
+    action_items = st.session_state.get('action_items', [])
+    summary = f"<p>Tickets in scope: {len(df):,}</p>"
+    summary += f"<p>Action items tracked: {len(action_items)}</p>"
+    render_export_button("Planning and Actions", summary)

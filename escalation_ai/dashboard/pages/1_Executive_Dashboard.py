@@ -86,3 +86,13 @@ if df is not None:
         st.session_state.cross_nav_context = None
 
     render_excel_dashboard(df)
+
+    # --- Export button ---
+    from export_utils import render_export_button
+    summary = f"<p>Total tickets: {len(df):,}</p>"
+    summary += f"<p>Categories: {df['AI_Category'].nunique() if 'AI_Category' in df.columns else 'N/A'}</p>"
+    if 'Financial_Impact' in df.columns:
+        summary += f"<p>Total financial impact: ${df['Financial_Impact'].sum():,.0f}</p>"
+    if 'Strategic_Friction_Score' in df.columns:
+        summary += f"<p>Avg friction score: {df['Strategic_Friction_Score'].mean():.2f}</p>"
+    render_export_button("Executive Dashboard", summary)

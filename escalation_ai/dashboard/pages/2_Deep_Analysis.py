@@ -66,3 +66,12 @@ render_page_help("Deep Analysis", "Detailed breakdowns by category, root cause, 
 # --- Step 4: Render if data is available ---
 if df is not None:
     render_deep_analysis(df)
+
+    # --- Export button ---
+    from export_utils import render_export_button
+    summary = f"<p>Tickets analyzed: {len(df):,}</p>"
+    if 'AI_Category' in df.columns:
+        top_cats = df['AI_Category'].value_counts().head(5)
+        rows = ''.join(f'<tr><td>{cat}</td><td>{cnt}</td></tr>' for cat, cnt in top_cats.items())
+        summary += f"<h3>Top Categories</h3><table><tr><th>Category</th><th>Count</th></tr>{rows}</table>"
+    render_export_button("Deep Analysis", summary)
