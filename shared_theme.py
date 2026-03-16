@@ -87,6 +87,25 @@ def inject_shared_css():
         letter-spacing: 1px;
         margin-top: 8px;
     }}
+
+    /* Responsive breakpoints */
+    @media (max-width: 1024px) {{
+        .stApp {{ font-size: 0.9rem; }}
+        .shared-kpi .value {{ font-size: 2rem; }}
+        .exec-kpi-value {{ font-size: 3rem; }}
+        .main-header {{ font-size: 2rem; }}
+    }}
+
+    @media (max-width: 768px) {{
+        .stApp {{ font-size: 0.85rem; }}
+        .shared-kpi .value {{ font-size: 1.5rem; }}
+        .shared-kpi {{ padding: 16px; }}
+        .stPlotlyChart {{ min-height: 300px !important; }}
+        [data-testid="stPlotlyChart"] {{
+            min-height: 280px;
+            max-height: 350px;
+        }}
+    }}
     </style>
     """, unsafe_allow_html=True)
 
