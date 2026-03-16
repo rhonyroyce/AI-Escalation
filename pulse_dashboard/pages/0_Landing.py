@@ -12,6 +12,9 @@ project_root = Path(__file__).parent.parent.parent
 
 
 def render_landing():
+    from shared_theme import render_breadcrumb
+    render_breadcrumb("Project Pulse", "Home")
+
     # Header
     st.markdown("""
     <div style="text-align:center;padding:40px 0 20px 0;">

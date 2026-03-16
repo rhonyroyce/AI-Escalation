@@ -77,7 +77,8 @@ inject_escalation_css()
 # page_name="Presentation Mode" shows only the date-range filter.
 df = esc_load_and_filter(page_name="Presentation Mode")
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Escalation AI", "Presentation Mode")
 render_page_help("Presentation Mode", "Full-screen slide deck view for leadership presentations. Use arrow keys to navigate.")
 
 # --- Step 4: Render if data is available ---

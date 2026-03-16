@@ -83,7 +83,8 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Project Pulse", "Executive Summary")
 render_page_help(
     "Executive Summary",
     "A McKinsey-style Situation-Complication-Resolution view of project health across all regions.",

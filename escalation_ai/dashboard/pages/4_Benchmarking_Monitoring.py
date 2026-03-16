@@ -57,7 +57,8 @@ inject_escalation_css()
 # page_name="Benchmarking & Monitoring" shows only the date-range filter.
 df = esc_load_and_filter(page_name="Benchmarking & Monitoring")
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Escalation AI", "Benchmarking & Monitoring")
 render_page_help("Benchmarking & Monitoring", "Compare current escalation metrics against historical benchmarks and industry targets.")
 
 # --- Step 4: Render if data is available ---

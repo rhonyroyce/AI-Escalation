@@ -106,7 +106,8 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Project Pulse", "Rankings")
 render_page_help("Rankings", "Comparative view ranking projects by Total Score, individual dimensions, or improvement rate.")
 
 # Full unfiltered DataFrame -- used for multi-week aggregations, trend

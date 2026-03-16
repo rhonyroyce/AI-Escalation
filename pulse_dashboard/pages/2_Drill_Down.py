@@ -116,7 +116,8 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Project Pulse", "Drill Down")
 render_page_help("Drill Down", "Click any project or region to explore detailed health metrics and trends.")
 
 # `df` is the FULL unfiltered dataset (used for project trend history).

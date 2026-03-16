@@ -92,7 +92,8 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Project Pulse", "Project Details")
 render_page_help("Project Details", "Single-project deep dive showing all 8 dimension scores, history, and commentary.")
 
 # Full (unfiltered) DataFrame -- used to show historical trend data for a

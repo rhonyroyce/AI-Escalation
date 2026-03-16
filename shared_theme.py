@@ -91,6 +91,24 @@ def inject_shared_css():
     """, unsafe_allow_html=True)
 
 
+def render_breadcrumb(dashboard: str, page: str, context: str = None):
+    """Render a breadcrumb trail at the top of the page."""
+    parts = [f'<span style="color:#64748b;">CSE Platform</span>']
+    parts.append(f'<span style="color:#64748b;"> › </span>')
+    parts.append(f'<span style="color:#94a3b8;">{dashboard}</span>')
+    parts.append(f'<span style="color:#64748b;"> › </span>')
+    parts.append(f'<span style="color:#e2e8f0;font-weight:600;">{page}</span>')
+    if context:
+        parts.append(f'<span style="color:#64748b;"> › </span>')
+        parts.append(f'<span style="color:#3b82f6;">{context}</span>')
+
+    st.markdown(
+        f'<div style="font-size:0.75rem;padding:8px 0 16px 0;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:16px;">'
+        f'{"".join(parts)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_page_help(title: str, description: str, tips: list[str] = None):
     """Render a collapsible help section at the top of a page."""
     with st.expander(f"\u2139\ufe0f About this page: {title}", expanded=False):

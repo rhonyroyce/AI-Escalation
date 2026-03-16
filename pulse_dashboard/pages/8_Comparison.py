@@ -23,7 +23,8 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Project Pulse", "Comparison")
 render_page_help("Comparison", "Side-by-side comparison of two or more projects across all dimensions.")
 
 df = st.session_state.df

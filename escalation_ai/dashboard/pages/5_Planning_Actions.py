@@ -68,7 +68,8 @@ inject_escalation_css()
 # page_name="Planning & Actions" shows only the date-range filter.
 df = esc_load_and_filter(page_name="Planning & Actions")
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Escalation AI", "Planning & Actions")
 render_page_help("Planning & Actions", "Action item tracker and strategic recommendations generated from escalation patterns.")
 
 # --- Step 4: Render if data is available ---

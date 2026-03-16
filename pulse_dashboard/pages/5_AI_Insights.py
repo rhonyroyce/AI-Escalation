@@ -104,7 +104,8 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Project Pulse", "AI Insights")
 render_page_help("AI Insights", "LLM-generated analysis of patterns and anomalies. Requires Ollama server for live generation.")
 
 # Keep a reference to the *unfiltered* full DataFrame.  This is used later

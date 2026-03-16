@@ -92,7 +92,8 @@ if filtered_df is None or filtered_df.empty:
     st.warning("No data loaded or no data matches filters.")
     st.stop()
 
-from shared_theme import render_page_help
+from shared_theme import render_page_help, render_breadcrumb
+render_breadcrumb("Project Pulse", "Prioritization")
 render_page_help("Prioritization", "Projects ranked by urgency. Red-zone projects appear first with recommended actions.")
 
 # Target pulse score: used to compute the "Impact" gap for each project
