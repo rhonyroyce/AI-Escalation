@@ -381,13 +381,28 @@ def esc_load_and_filter(page_name: str = "Executive Dashboard") -> pd.DataFrame:
                 st.warning(f"Date filter error: {type(e).__name__}: {e}")
 
 
-    # ---- Step 3: Show data freshness badge ---------------------------------
+    # ---- Step 3: Push filter state to shared context -----------------------
+    from shared_filters import update_context, render_active_filters
+
+    # Push date range to shared context if the user has selected both bounds
+    if 'esc_date_range' in st.session_state:
+        dr = st.session_state.esc_date_range
+        if hasattr(dr, '__len__') and len(dr) == 2:
+            update_context(date_start=dr[0], date_end=dr[1], source='escalation')
+
+    # Push severity filter to shared context (Executive Dashboard only)
+    if 'excel_sev_filter' in st.session_state:
+        update_context(severity=st.session_state.excel_sev_filter, source='escalation')
+
+    render_active_filters()
+
+    # ---- Step 4: Show data freshness badge ---------------------------------
     render_data_freshness(df)
 
-    # ---- Step 4: Cross-dashboard navigation link to Pulse -----------------
+    # ---- Step 5: Cross-dashboard navigation link to Pulse -----------------
     render_cross_nav_to_pulse()
 
-    # ---- Step 5: Return the filtered DataFrame to the page shim ----------
+    # ---- Step 6: Return the filtered DataFrame to the page shim ----------
     return df
 
 

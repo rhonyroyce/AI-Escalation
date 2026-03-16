@@ -334,4 +334,9 @@ def render_sidebar() -> pd.DataFrame | None:
     st.session_state['selected_regions'] = selected_regions
     st.session_state['filtered_df'] = filtered
 
+    # Push region filter to shared cross-dashboard context
+    from shared_filters import update_context, render_active_filters
+    update_context(regions=selected_regions, source='pulse')
+    render_active_filters()
+
     return filtered

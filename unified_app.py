@@ -157,6 +157,7 @@ PULSE_DEFAULTS = {
     'selected_drill': None,
     'esc_data_available': None,
     'cross_nav_context': None,
+    'shared_filter_context': None,
 }
 for key, default in PULSE_DEFAULTS.items():
     # Guard: only set a default if the key is truly absent.  This preserves
