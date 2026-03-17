@@ -86,6 +86,43 @@ st.set_page_config(
 )
 
 # ============================================================================
+# PRINT MODE -- clean white layout for PDF screenshots / exec distribution
+# ============================================================================
+query_params = st.query_params
+print_mode = query_params.get('print', 'false').lower() == 'true'
+
+if print_mode:
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] { display: none !important; }
+    .stApp { background: #ffffff !important; color: #333333 !important; }
+    .shared-kpi .value, .kpi-value, .exec-kpi-value, .main-header, .exec-title {
+        -webkit-text-fill-color: #1a1a2e !important;
+        color: #1a1a2e !important;
+    }
+    .shared-kpi .label, .kpi-label, .sub-header {
+        color: #666666 !important;
+    }
+    .shared-kpi, .kpi-container, .exec-kpi, .glass-card, .exec-card, .strategy-card {
+        background: #f8f9fa !important;
+        border: 1px solid #dee2e6 !important;
+    }
+    [data-testid="stExpander"] details { open: true; }
+    @media print {
+        [data-testid="stSidebar"] { display: none !important; }
+        .stApp { background: white !important; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    from datetime import datetime
+    st.markdown(f"""
+    <div style="text-align:right;color:#999;font-size:0.7rem;padding:8px;">
+        Exported from CSE Intelligence Platform &mdash; {datetime.now().strftime('%B %d, %Y')}
+    </div>
+    """, unsafe_allow_html=True)
+
+# ============================================================================
 # CSS -- inject both Pulse and Escalation custom stylesheets
 # ============================================================================
 # Each dashboard was originally a standalone app with its own dark-theme CSS.
@@ -469,5 +506,16 @@ with st.sidebar:
             st.page_link(page, label=page.title, icon=page.icon)
 
     st.markdown("---")
+
+    # Print mode toggle
+    current_params = st.query_params
+    if 'print' in current_params:
+        if st.button("Exit Print Mode"):
+            st.query_params.clear()
+            st.rerun()
+    else:
+        if st.button("Print Mode", icon="🖨️"):
+            st.query_params['print'] = 'true'
+            st.rerun()
 
 pg.run()
