@@ -219,8 +219,8 @@ def esc_load_and_filter(page_name: str = "Executive Dashboard") -> pd.DataFrame:
         'Financial_Impact': 'Estimated financial impact',
         'AI_Confidence': 'AI classification confidence',
         'AI_Sub_Category': 'AI sub-classification',
-        'Recurrence_Probability': 'Predicted recurrence likelihood',
-        'Predicted_Resolution_Hours': 'Predicted resolution time',
+        'AI_Recurrence_Probability': 'Predicted recurrence likelihood',
+        'Predicted_Resolution_Days': 'Predicted resolution time',
     }
 
     missing_required = [col for col in REQUIRED_COLS if col not in df.columns]

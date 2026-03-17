@@ -1026,15 +1026,15 @@ class EscalationPipeline:
         on tickets that have known resolution times and then predicts the
         expected resolution hours for all tickets.
 
-        Adds ``AI_Predicted_Resolution_Hours`` column.
+        Adds ``Predicted_Resolution_Days`` column.
         """
         print_banner("PHASE 6: RESOLUTION TIME PREDICTION", "─")
         print_status("Phase 6", "Training resolution time model...", "⏱️")
         self.df = apply_resolution_time_prediction(self.df)
 
-        if 'AI_Predicted_Resolution_Hours' in self.df.columns:
-            avg_pred = self.df['AI_Predicted_Resolution_Hours'].mean()
-            print_status("Phase 6", f"Average predicted resolution: {avg_pred:.1f} hours", "✅")
+        if 'Predicted_Resolution_Days' in self.df.columns:
+            avg_pred = self.df['Predicted_Resolution_Days'].mean()
+            print_status("Phase 6", f"Average predicted resolution: {avg_pred:.1f} days", "✅")
 
     def generate_executive_summary(self) -> str:
         """Phase 7: Generate an AI-written executive summary.

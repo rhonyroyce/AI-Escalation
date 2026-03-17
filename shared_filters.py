@@ -26,7 +26,7 @@ from typing import Optional
 
 def get_shared_context() -> dict:
     """Get the current shared filter context, initializing if needed."""
-    if 'shared_filter_context' not in st.session_state:
+    if not st.session_state.get('shared_filter_context'):
         st.session_state.shared_filter_context = {
             'regions': [],
             'date_start': None,

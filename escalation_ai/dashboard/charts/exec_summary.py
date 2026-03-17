@@ -52,8 +52,8 @@ def render_exec_kpis(df: pd.DataFrame):
             </div>""", unsafe_allow_html=True)
 
     with cols[4]:
-        if 'Recurrence_Probability' in df.columns:
-            high_recur = len(df[df['Recurrence_Probability'] > 0.7])
+        if 'AI_Recurrence_Probability' in df.columns:
+            high_recur = len(df[df['AI_Recurrence_Probability'] > 0.7])
             st.markdown(f"""
             <div class="shared-kpi" style="border-left-color:#8b5cf6;">
                 <div class="value" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);
