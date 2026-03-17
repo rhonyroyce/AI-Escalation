@@ -134,7 +134,7 @@ def _render_engineers_tab(df):
 
 
 def _render_distributions_tab(df):
-    """Render the Distributions tab with resolution and recurrence charts."""
+    """Render the Distributions tab with resolution, recurrence charts, and SHAP explainability."""
     from escalation_ai.dashboard.streamlit_app import (
         chart_resolution_distribution, chart_recurrence_risk,
     )
@@ -144,6 +144,14 @@ def _render_distributions_tab(df):
         render_chart_with_insight('resolution_distribution', chart_resolution_distribution(df), df)
     with col2:
         render_chart_with_insight('recurrence_risk', chart_recurrence_risk(df), df)
+
+    # SHAP Prediction Explainability
+    st.markdown("---")
+    try:
+        from escalation_ai.dashboard.charts.prediction_explainer import render_prediction_explainer
+        render_prediction_explainer(df)
+    except ImportError:
+        st.info("Install SHAP for prediction explainability: `pip install shap`")
 
 
 def _render_financial_tab(df):
