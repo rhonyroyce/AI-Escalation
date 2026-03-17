@@ -567,7 +567,7 @@ def classify_rows(df: pd.DataFrame, ai, show_progress: bool = True) -> pd.DataFr
 
     # Write classification results back to the DataFrame
     df['AI_Category'] = cats
-    df['AI_Confidence'] = scores
+    df['AI_Confidence'] = [max(0.0, min(1.0, s)) for s in scores]
 
     # ------------------------------------------------------------------
     # Sub-category assignment: a second pass that refines each main
